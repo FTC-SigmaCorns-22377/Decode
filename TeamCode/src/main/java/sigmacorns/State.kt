@@ -7,5 +7,4 @@ data class State (
     val driveTrainAcceleration: Float,
     val intakeFlapPosition: Float,
     val intakeRollerPower: Float
-
 )
