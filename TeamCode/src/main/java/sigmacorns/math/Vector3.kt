@@ -13,6 +13,13 @@ class Vector3(
 ) {
     constructor(x: Number, y: Number, z: Number): this(x.toDouble(), y.toDouble(), z.toDouble())
 
+    val xy: Vector2
+        get() = Vector2(x,y)
+    val yz: Vector2
+        get() = Vector2(y,z)
+    val xz: Vector2
+        get() = Vector2(x,z)
+
     companion object {
         val ZERO = Vector3(0.0, 0.0, 0.0)
 

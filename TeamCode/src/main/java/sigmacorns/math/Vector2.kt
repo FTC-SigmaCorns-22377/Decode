@@ -53,6 +53,8 @@ class Vector2(
     fun magnitude(): Double = sqrt(this dot this)
 
     fun normalized(): Vector2 = this/magnitude()
+
+    fun withZ(z: Number) = Vector3(x,y,z)
 }
 
 operator fun Number.times(rhs: Vector2): Vector2 {
