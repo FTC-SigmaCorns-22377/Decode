@@ -27,6 +27,14 @@ android {
     }
 }
 
+repositories {
+    mavenCentral()
+}
+
+project.ext.jomlVersion = "1.10.8"
+
 dependencies {
     implementation project(':FtcRobotController')
+
+    implementation "org.joml:joml:${jomlVersion}"
 }
