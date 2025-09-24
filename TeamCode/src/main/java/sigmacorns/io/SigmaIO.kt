@@ -1,5 +1,7 @@
 package sigmacorns.io
 
+import sigmacorns.math.Pose2d
+
 interface SigmaIO {
 
     // drive motors
@@ -21,8 +23,10 @@ interface SigmaIO {
     velocity(drive base)
      */
 
-    fun position(): Array<Double>
-    fun velocity(): Array<Double>
-    fun flywheelVelocity(): Array<Double>
+    fun position(): Pose2d
+    fun velocity(): Pose2d
+    fun flywheelVelocity(): Double
+
+    fun update()
 
 }
