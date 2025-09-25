@@ -17,9 +17,8 @@ class RerunTest {
             12.0
         )
 
-        val rr = RerunLogging()
-        val connection = rr.connect("sim", "rerun+http://127.0.0.1:9876/proxy")
-        rr.logState(connection,state.toNativeArray())
-        rr.destroy(connection)
+        RerunLogging.connect("sim", "rerun+http://127.0.0.1:9876/proxy").use {
+            it.logState(state)
+        }
     }
 }

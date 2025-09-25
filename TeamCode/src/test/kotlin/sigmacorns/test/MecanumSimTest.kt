@@ -31,8 +31,7 @@ class MecanumSimTest {
         val io = SimIO()
         val model = RobotModel()
 
-        val rr = RerunLogging()
-        val connection = rr.connect("mecanumTestCircleOpenLoop", "rerun+http://127.0.0.1:9876/proxy")
+        val rr = RerunLogging.connect("mecanumTestCircleOpenLoop", "rerun+http://127.0.0.1:9876/proxy")
 
         val state = State(
             0.0,
@@ -57,9 +56,9 @@ class MecanumSimTest {
 
             io.update()
             state.update(io)
-            rr.logState(connection,state.toNativeArray())
+            rr.logState(state)
         }
 
-        rr.destroy(connection)
+        rr.close()
     }
 }
