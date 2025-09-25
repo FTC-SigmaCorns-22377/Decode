@@ -3,9 +3,9 @@ package sigmacorns.sim
 import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
 
-const val MECANUM_DT: Double = 0.01
+const val MECANUM_DT: Double = 0.001
 
-class SimRobot {
+class RobotModel {
     var drivetrainState = MecanumDynamics.MecanumState(
         Pose2d(),
         Pose2d()
@@ -14,7 +14,7 @@ class SimRobot {
     val bareMotorTopSpeed = 617.84
     val bareMotorStallTorque = 0.187
     val gearRatio = 13.7
-    private val drivetrain = MecanumDynamics(
+    val drivetrain = MecanumDynamics(
         0.048,
         0.4,
         bareMotorTopSpeed/gearRatio,
