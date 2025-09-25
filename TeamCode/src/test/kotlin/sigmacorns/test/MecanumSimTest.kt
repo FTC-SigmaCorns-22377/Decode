@@ -39,6 +39,7 @@ class MecanumSimTest {
             Pose2d(0.0,0.0,0.0),
             Pose2d(0.0,0.0,0.0),
             0.0,
+            0.0,
             0.0
         )
 

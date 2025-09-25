@@ -14,7 +14,8 @@ class RerunTest {
             Pose2d(5.0,6.0,7.0),
             Pose2d(8.0,9.0,10.0),
             11.0,
-            12.0
+            12.0,
+            13.0
         )
 
         RerunLogging.connect("sim", "rerun+http://127.0.0.1:9876/proxy").use {

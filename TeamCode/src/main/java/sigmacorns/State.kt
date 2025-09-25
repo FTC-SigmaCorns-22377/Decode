@@ -2,8 +2,6 @@ package sigmacorns
 
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
-import kotlin.time.ComparableTimeMark
-import kotlin.time.TimeSource
 
 data class State (
     var flywheelSpeed: Double,
@@ -11,9 +9,9 @@ data class State (
     var driveTrainVelocity: Pose2d,
     var driveTrainAcceleration: Pose2d,
     var intakeFlapPosition: Double,
-    var intakeRollerPower: Double
+    var intakeRollerPower: Double,
+    var timestamp: Double
 ) {
-    var lastUpdateTime: ComparableTimeMark? = null
     fun update(io: SigmaIO) {
         flywheelSpeed = io.flywheelVelocity()
         driveTrainPosition = io.position()
@@ -21,13 +19,15 @@ data class State (
         val lastVel = driveTrainVelocity
         driveTrainVelocity = io.velocity()
 
-        val t = TimeSource.Monotonic.markNow()
-        val dt = t - (lastUpdateTime ?: t)
-        lastUpdateTime = t
+        val lastTime = timestamp
 
-        driveTrainAcceleration = (driveTrainVelocity - lastVel)/(dt.inWholeMicroseconds.toDouble() / 1_000_000.0)
+        timestamp = io.time()
+        val dt = timestamp - lastTime
+
+        driveTrainAcceleration = (driveTrainVelocity - lastVel)/dt
 
         intakeRollerPower = io.intake
+
     }
 
     fun toNativeArray(): FloatArray {
@@ -37,7 +37,8 @@ data class State (
             driveTrainVelocity.v.x, driveTrainVelocity.v.y, driveTrainVelocity.rot,
             driveTrainAcceleration.v.x, driveTrainAcceleration.v.y, driveTrainAcceleration.rot,
             intakeFlapPosition,
-            intakeRollerPower
+            intakeRollerPower,
+            timestamp
         )
 
         return FloatArray(l.size) {

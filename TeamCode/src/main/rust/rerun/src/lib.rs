@@ -95,6 +95,11 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_logState(
     // let arot = values[9]; // unused
     let intake_flap = values[10];
     let intake_roller = values[11];
+
+    let timestamp = values[12];
+    
+    rec.set_time("state time", std::time::Duration::from_secs_f32(timestamp));
+
     // --- Log values to Rerun ---
 
     rec.log("robot/flywheel_speed", &rerun::Scalars::single(flywheel_speed)).unwrap();
