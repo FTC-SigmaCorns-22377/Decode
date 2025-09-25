@@ -11,11 +11,10 @@ interface SigmaIO {
     var driveBR: Double
 
     //shooter
-    var flyWheel: Double
-    var guidingArm: Double //servo, the rest are motors
-
+    var flyWheel0: Double
+    var flyWheel1: Double
     //intake
-    var intakeMotor: Double // might just be human fed and we wont end up needing this
+    var intake: Double // might just be human fed and we wont end up needing this
 
 
     /* function to get robo position
@@ -28,5 +27,4 @@ interface SigmaIO {
     fun flywheelVelocity(): Double
 
     fun update()
-
 }
