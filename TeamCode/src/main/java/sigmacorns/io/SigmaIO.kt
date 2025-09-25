@@ -27,4 +27,11 @@ interface SigmaIO {
     fun flywheelVelocity(): Double
 
     fun update()
+
+    /**
+     * Function to track the passage of time
+     *
+     * @return time passed since the start of the opmode in seconds
+     */
+    fun time(): Double
 }

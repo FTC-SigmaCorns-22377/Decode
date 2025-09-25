@@ -9,6 +9,9 @@ import com.qualcomm.robotcore.hardware.CRServo
 import com.qualcomm.robotcore.hardware.ColorRangeSensor
 import com.qualcomm.robotcore.hardware.DcMotorSimple
 import com.qualcomm.robotcore.hardware.HardwareMap
+import sigmacorns.math.Pose2d
+import kotlin.time.ComparableTimeMark
+import kotlin.time.TimeSource
 
 // import odometry from some library
 class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
@@ -37,15 +40,15 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var flyWheel1: Double = 0.0
     override var intake: Double = 0.0
 
-    override fun position(): Array<Double> {
+    override fun position(): Pose2d {
         TODO("Not yet implemented")
     }
 
-    override fun velocity(): Array<Double> {
+    override fun velocity(): Pose2d {
         TODO("Not yet implemented")
     }
 
-    override fun flywheelVelocity(): Array<Double> {
+    override fun flywheelVelocity(): Double {
         TODO("Not yet implemented")
     }
 
@@ -60,6 +63,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flyWheelMotor0?.power = flyWheel0
         flyWheelMotor1?.power = flyWheel1
         intakeMotor?.power = intake
+    }
+
+    val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
+    override fun time(): Double {
+        val duration = TimeSource.Monotonic.markNow() - startTime
+
+        return duration.inWholeMicroseconds.toDouble() / 1_000_000.0
     }
 
     init {
@@ -101,8 +111,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
 
     }
-
-
 
 }
 
