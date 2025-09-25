@@ -6,27 +6,18 @@ import sigmacorns.math.Pose2d
 /**
  * Model of the dynamics of a Mecanum drivetrain
  *
- * @param r wheel radius (m)
- * @param l manhattan distance to wheel (m)
- * @param motorTopSpeed top speed of the motor (rad/s)
- * @param motorStallTorque stall torque of the motor (Nm)
- * @param weight weight of the robot (kg)
- * @param rotInertia rotational inertia of the robot about the wheelbase center (kg m^2)
+ * @param p the parameters of the model
+ * @see MecanumParameters
  */
-class MecanumDynamics(
-    val r: Double,
-    val l: Double,
-    val motorTopSpeed: Double,
-    val motorStallTorque: Double,
-    val weight: Double,
-    val rotInertia: Double,
-) {
+class MecanumDynamics(val p: MecanumParameters) {
+    val l = p.lx+p.ly
+
     private val forward = Matrix4d(
         1.0, 1.0, 1.0, 1.0,
         -1.0, 1.0, -1.0, 1.0,
         -1.0 / l, -1.0 / l, 1.0 / l, 1.0 / l,
         0.0, 0.0, 0.0, 0.0
-    ).scale(r/4.0).transpose()
+    ).scale(p.wheelRadius/4.0).transpose()
 
     private val inverse = Matrix4d(
         1.0, -1.0, -l, 0.0,
@@ -35,7 +26,7 @@ class MecanumDynamics(
         1.0, 1.0, l, 0.0,
     )
         .transpose()
-        .scale(1.0 / r)
+        .scale(1.0 / p.wheelRadius)
 
     /**
      * Mecanum Forward Kinematics
@@ -62,17 +53,6 @@ class MecanumDynamics(
     }
 
     /**
-     * The state of a mecanum drivetrain
-     *
-     * @param vel the velocity of the drivetrain. units: `Pose2d(m/s, m/s, rad/s)`
-     * @param pos the position of the drivetrain. units: `Pose2d(m, m, rad)`
-     */
-    class MecanumState(
-        val vel: Pose2d,
-        val pos: Pose2d
-    )
-
-    /**
      * Gives the derivative of the state of the drivetrain
      *
      * @param u the array of motor powers ∈ [-1,1] ordered `[FL,BL,BR,FR]`
@@ -93,7 +73,7 @@ class MecanumDynamics(
         val motorPowers = Vector4d(u[0],u[1],u[2],u[3])
 
         // magnitude of the force produced by each wheel
-        val forces = (Vector4d(motorTopSpeed).mul(motorPowers) - wheelVels)*motorStallTorque/r
+        val forces = (Vector4d(p.freeSpeed).mul(motorPowers) - wheelVels)*p.stallTorque/p.wheelRadius
 
         // robot relative forces/torques
         val robotTwist = mecanumForwardKinematics(forces)
@@ -102,8 +82,8 @@ class MecanumDynamics(
         val acc = robotTwist.copy().also {
             it.v = Matrix2d().rotate(it.rot)*it.v
 
-            it.v /= weight
-            it.rot /= rotInertia
+            it.v /= p.weight
+            it.rot /= p.rotInertia
         }
 
         return doubleArrayOf(
