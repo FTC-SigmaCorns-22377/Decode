@@ -30,7 +30,7 @@ data class State (
 
     }
 
-    fun toNativeArray(): FloatArray {
+    fun toFloatArray(): FloatArray {
         val l = listOf(
             flywheelSpeed,
             driveTrainPosition.v.x, driveTrainPosition.v.y, driveTrainPosition.rot,

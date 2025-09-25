@@ -35,7 +35,7 @@ class RerunLogging private constructor(
     }
 
     fun logState(state: State) {
-        logState(ptr,state.toNativeArray())
+        logState(ptr,state.toFloatArray())
     }
 
     override fun close() {
