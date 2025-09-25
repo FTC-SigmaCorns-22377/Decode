@@ -21,31 +21,30 @@ class MecanumDynamics(
     val weight: Double,
     val rotInertia: Double,
 ) {
+    private val forward = Matrix4d(
+        1.0, 1.0, 1.0, 1.0,
+        -1.0, 1.0, -1.0, 1.0,
+        -1.0 / l, -1.0 / l, 1.0 / l, 1.0 / l,
+        0.0, 0.0, 0.0, 0.0
+    ).scale(r/4.0).transpose()
+
+    private val inverse = Matrix4d(
+        1.0, -1.0, -l, 0.0,
+        1.0, 1.0, -l, 0.0,
+        1.0, -1.0, l, 0.0,
+        1.0, 1.0, l, 0.0,
+    )
+        .transpose()
+        .scale(1.0 / r)
+
     fun mecanumForwardKinematics(wheelVels: Vector4d): Pose2d {
-        val A = Matrix4d(
-            1.0, 1.0, 1.0, 1.0,
-            -1.0, 1.0, -1.0, 1.0,
-            -1.0 / l, -1.0 / l, 1.0 / l, 1.0 / l,
-            0.0, 0.0, 0.0, 0.0
-        ).scale(r/4.0).transpose()
-
-        val v = A * wheelVels
-
+        val v = forward * wheelVels
 
         return Pose2d(v.x,v.y,v.z)
     }
 
     fun mecanumInverseKinematics(robotVel: Pose2d): Vector4d {
-        val Ainv = Matrix4d(
-            1.0, -1.0, -l, 0.0,
-            1.0, 1.0, -l, 0.0,
-            1.0, -1.0, l, 0.0,
-            1.0, 1.0, l, 0.0,
-        )
-            .transpose()
-            .scale(1.0 / r)
-
-        return Ainv*Vector4d(robotVel.v.x,robotVel.v.y,robotVel.rot, 0.0)
+        return inverse*Vector4d(robotVel.v.x,robotVel.v.y,robotVel.rot, 0.0)
     }
 
     class MecanumState(
@@ -61,9 +60,10 @@ class MecanumDynamics(
 
         val wheelVels = mecanumInverseKinematics(vel)
 
+        val motorPowers = Vector4d(u[0],u[1],u[2],u[3])
 
         // magnitude of the force produced by each wheel
-        val forces = (Vector4d(motorTopSpeed) - wheelVels)*motorStallTorque/r
+        val forces = (Vector4d(motorTopSpeed).mul(motorPowers) - wheelVels)*motorStallTorque/r
 
         // robot relative forces/torques
         val robotTwist = mecanumForwardKinematics(forces)
@@ -90,9 +90,6 @@ class MecanumDynamics(
         val x0 = doubleArrayOf(x.vel.v.x, x.vel.v.y, x.vel.rot, x.pos.v.x, x.pos.v.y, x.pos.rot)
 
         val xf = rk4Integrate(tf,dt,x0) { this.dx(u,it) }
-
-        println("dx ${this.dx(u,x0).contentToString()}")
-        println("xf ${xf.contentToString()}")
 
         return MecanumState(
             Pose2d(xf[0],xf[1],xf[2]),
