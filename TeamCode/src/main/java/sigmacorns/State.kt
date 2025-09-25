@@ -27,7 +27,7 @@ data class State (
 
         driveTrainAcceleration = (driveTrainVelocity - lastVel)/(dt.inWholeMicroseconds.toDouble() / 1_000_000.0)
 
-        intakeRollerPower = io.intakeMotor
+        intakeRollerPower = io.intake
     }
 
     fun toNativeArray(): FloatArray {
