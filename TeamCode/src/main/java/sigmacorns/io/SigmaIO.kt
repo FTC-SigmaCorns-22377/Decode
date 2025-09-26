@@ -1,6 +1,7 @@
 package sigmacorns.io
 
 import sigmacorns.math.Pose2d
+import kotlin.time.Duration
 
 interface SigmaIO {
 
@@ -29,9 +30,7 @@ interface SigmaIO {
     fun update()
 
     /**
-     * Function to track the passage of time
-     *
-     * @return time passed since the start of the opmode in seconds
+     * @return time passed since the start of the opmode
      */
-    fun time(): Double
+    fun time(): Duration
 }
