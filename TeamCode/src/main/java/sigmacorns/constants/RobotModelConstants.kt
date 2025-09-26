@@ -31,6 +31,6 @@ val drivetrainParameters = MecanumParameters(
     0.2,
     0.2,
     0.048,
-    10.0,
-    0.0870966
+    15.0,
+    0.870966
 )

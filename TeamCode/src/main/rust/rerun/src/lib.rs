@@ -1,7 +1,7 @@
 use jni::{
     objects::{JClass, JFloatArray, JString}, sys::jlong, JNIEnv
 };
-use rerun::{Arrows3D, RecordingStream, RecordingStreamBuilder, Vec3D};
+use rerun::{Arrows3D, LineStrip3D, LineStrips3D, RecordingStream, RecordingStreamBuilder, Vec3D};
 
 pub fn string_from_jni(env: &mut JNIEnv, v: &JString) -> Result<String, jni::errors::Error> {
     Ok(env.get_string(v)?.into())
@@ -89,7 +89,7 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_logState(
     let prot = values[3];
     let vx = values[4];
     let vy = values[5];
-    // let vrot = values[6]; // unused
+    let vrot = values[6];
     let ax = values[7];
     let ay = values[8];
     // let arot = values[9]; // unused
@@ -105,6 +105,14 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_logState(
     rec.log("robot/flywheel_speed", &rerun::Scalars::single(flywheel_speed)).unwrap();
     rec.log("robot/intake_flap", &rerun::Scalars::single(intake_flap)).unwrap();
     rec.log("robot/intake_roller", &rerun::Scalars::single(intake_roller)).unwrap();
+
+    rec.log("robot/px", &rerun::Scalars::single(px)).unwrap();
+    rec.log("robot/py", &rerun::Scalars::single(py)).unwrap();
+    rec.log("robot/theta", &rerun::Scalars::single(prot)).unwrap();
+
+    rec.log("robot/vx", &rerun::Scalars::single(vx)).unwrap();
+    rec.log("robot/vy", &rerun::Scalars::single(vy)).unwrap();
+    rec.log("robot/omega", &rerun::Scalars::single(vrot)).unwrap();
 
     // Pose arrow (direction from rotation)
     let pose_vectors = vec![Vec3D::new(prot.cos(), prot.sin(), 0.0)];
@@ -123,4 +131,44 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_logState(
     let acc_origins = vec![Vec3D::new(px, py, 0.0)];
     let acc_arrows = Arrows3D::from_vectors(acc_vectors).with_origins(acc_origins);
     rec.log("robot/acceleration", &acc_arrows).expect("log acceleration");
+}
+
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logInputs(
+    env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    data: JFloatArray,
+) {
+    let rec = connection_from_ptr(connection);
+
+    // Copy Java double[] into a Rust Vec<f64>
+    let values: Vec<f32> = vec_from_java_float_arr(&env, data).unwrap();
+
+    rec.log("inputs/FL", &rerun::Scalars::single(values[0])).unwrap();
+    rec.log("inputs/BL", &rerun::Scalars::single(values[1])).unwrap();
+    rec.log("inputs/BR", &rerun::Scalars::single(values[2])).unwrap();
+    rec.log("inputs/FR", &rerun::Scalars::single(values[3])).unwrap();
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logLineStrip3D(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    data: JFloatArray,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = string_from_jni(&mut env, &name).unwrap();
+
+    // Copy Java double[] into a Rust Vec<f64>
+    let values: Vec<f32> = vec_from_java_float_arr(&env, data).unwrap();
+
+    let strip = LineStrips3D::new([values.chunks(3).map(|it| [it[0], it[1], it[2]]).collect::<Vec<[f32; 3]>>()]);
+
+    rec.log(name.as_str(), &strip).unwrap();
 }

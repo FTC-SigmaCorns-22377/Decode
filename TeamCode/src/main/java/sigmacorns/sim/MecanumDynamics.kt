@@ -2,6 +2,10 @@ package sigmacorns.sim
 
 import org.joml.*
 import sigmacorns.math.Pose2d
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Model of the dynamics of a Mecanum drivetrain
@@ -10,16 +14,17 @@ import sigmacorns.math.Pose2d
  * @see MecanumParameters
  */
 class MecanumDynamics(val p: MecanumParameters) {
-    val l = p.lx+p.ly
+    val l = (p.lx+p.ly)
+    val l2 = Vector2d(p.lx,p.ly).length()
 
-    private val forward = Matrix4d(
+    private val forwardVel = Matrix4d(
         1.0, 1.0, 1.0, 1.0,
         -1.0, 1.0, -1.0, 1.0,
         -1.0 / l, -1.0 / l, 1.0 / l, 1.0 / l,
         0.0, 0.0, 0.0, 0.0
     ).scale(p.wheelRadius/4.0).transpose()
 
-    private val inverse = Matrix4d(
+    private val inverseVel = Matrix4d(
         1.0, -1.0, -l, 0.0,
         1.0, 1.0, -l, 0.0,
         1.0, -1.0, l, 0.0,
@@ -28,6 +33,26 @@ class MecanumDynamics(val p: MecanumParameters) {
         .transpose()
         .scale(1.0 / p.wheelRadius)
 
+    private val forwardAcc = Matrix4d(
+        1.0, 1.0, 1.0, 1.0,
+        -1.0, 1.0, -1.0, 1.0,
+        -l2, -l2, l2, l2,
+        0.0, 0.0, 0.0, 0.0
+    )
+        .scale((1.0/p.wheelRadius)/sqrt(2.0))
+        .scale(1.0/p.weight, 1.0/p.weight, 1.0/p.rotInertia)
+        .transpose()
+
+    private val inverseAcc = Matrix4d(
+        1.0, -1.0, -1.0/l2, 0.0,
+        1.0, 1.0, -1.0/l2, 0.0,
+        1.0, -1.0, 1.0/l2, 0.0,
+        1.0, 1.0, 1.0/l2, 0.0,
+    )
+        .transpose()
+        .scale(p.wheelRadius*sqrt(2.0)/4.0)
+        .scale(1.0/p.weight, 1.0/p.weight, 1.0/p.rotInertia)
+
     /**
      * Mecanum Forward Kinematics
      *
@@ -35,8 +60,8 @@ class MecanumDynamics(val p: MecanumParameters) {
      *
      * @return the robot-relative velocity resulting from the provided `wheelVels` as `Pose2d(m/s, m/s, rad/s)`
      */
-    fun mecanumForwardKinematics(wheelVels: Vector4d): Pose2d {
-        val v = forward * wheelVels
+    fun mecanumForwardVelKinematics(wheelVels: Vector4d): Pose2d {
+        val v = forwardVel * wheelVels
 
         return Pose2d(v.x,v.y,v.z)
     }
@@ -48,9 +73,17 @@ class MecanumDynamics(val p: MecanumParameters) {
      *
      * @return a vector of wheel velocities in rad/s ordered `[FL,BL,BR,FR]` that will result in the desired `robotVel`.
      */
-    fun mecanumInverseKinematics(robotVel: Pose2d): Vector4d {
-        return inverse*Vector4d(robotVel.v.x,robotVel.v.y,robotVel.rot, 0.0)
+    fun mecanumInverseVelKinematics(robotVel: Pose2d): Vector4d {
+        return inverseVel*Vector4d(robotVel.v.x,robotVel.v.y,robotVel.rot, 0.0)
     }
+
+    fun mecanumForwardAccKinematics(wheelTorques: Vector4d): Pose2d =
+        (forwardAcc * wheelTorques).let {
+            Pose2d(it.x,it.y,it.z)
+        }
+
+    fun mecanumInverseAccKinematics(acc: Pose2d): Vector4d =
+        inverseAcc * Vector4d(acc.v.x, acc.v.y, acc.rot, 0.0)
 
     /**
      * Gives the derivative of the state of the drivetrain
@@ -64,27 +97,23 @@ class MecanumDynamics(val p: MecanumParameters) {
      */
     private fun dx(u: DoubleArray, x: DoubleArray): DoubleArray {
         // robot relative velocity
+        val pos = Pose2d(x[3], x[4], x[5])
         val vel = Pose2d(x[0],x[1],x[2]).also {
-            it.v = Matrix2d().rotate(-it.rot)*it.v
+            it.v = Matrix2d().rotate(-pos.rot)*it.v
         }
 
-        val wheelVels = mecanumInverseKinematics(vel)
+        val wheelVels = mecanumInverseVelKinematics(vel)
 
         val motorPowers = Vector4d(u[0],u[1],u[2],u[3])
 
-        // magnitude of the force produced by each wheel
-        val forces = (Vector4d(p.freeSpeed).mul(motorPowers) - wheelVels)*p.stallTorque/p.wheelRadius
+        // torques produced by each wheel motor
+        val torques = (motorPowers - wheelVels/Vector4d(p.freeSpeed))*p.stallTorque
 
-        // robot relative forces/torques
-        val robotTwist = mecanumForwardKinematics(forces)
+        // robot relative accelerations
+        val acc = mecanumForwardAccKinematics(torques)
 
-        // field relative acceleration
-        val acc = robotTwist.copy().also {
-            it.v = Matrix2d().rotate(it.rot)*it.v
-
-            it.v /= p.weight
-            it.rot /= p.rotInertia
-        }
+        // make acc field relative
+        acc.v = Matrix2d().rotate(pos.rot)*acc.v
 
         return doubleArrayOf(
             acc.v.x,
@@ -94,6 +123,40 @@ class MecanumDynamics(val p: MecanumParameters) {
             x[1], // dy = vy
             x[2] // dtheta = omega
         )
+    }
+
+
+    fun dx2(u: DoubleArray, x: DoubleArray): DoubleArray {
+        val vx = x[0] * cos(-x[5]) - x[1] * sin(-x[5])
+        val vy = x[0] * sin(-x[5]) + x[1] * cos(-x[5])
+
+        val motorVels = doubleArrayOf(
+            (vx - vy - (p.lx + p.ly) * x[2]) / p.wheelRadius,
+            (vx + vy - (p.lx + p.ly) * x[2]) / p.wheelRadius,
+            (vx - vy + (p.lx + p.ly) * x[2]) / p.wheelRadius,
+            (vx + vy + (p.lx + p.ly) * x[2]) / p.wheelRadius
+        )
+
+        val fs = DoubleArray(4) { i ->
+            p.stallTorque * (u[i] - motorVels[i]/p.freeSpeed) / p.wheelRadius
+        }
+
+        val dV = doubleArrayOf(
+            (fs[0] + fs[1] + fs[2] + fs[3]) / p.weight,
+            (-fs[0] + fs[1] - fs[2] + fs[3]) / p.weight,
+            (-fs[0] - fs[1] + fs[2] + fs[3]) * hypot(p.lx,p.ly) / p.rotInertia
+        )
+
+        val dx = doubleArrayOf(
+            dV[0] * cos(x[5]) - dV[1] * sin(x[5]),
+            dV[0] * sin(x[5]) + dV[1] * cos(x[5]),
+            dV[2],
+            x[0],
+            x[1],
+            x[2]
+        )
+
+        return dx
     }
 
     /**

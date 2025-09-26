@@ -9,8 +9,8 @@ import sigmacorns.math.Pose2d
  * @param pos the position of the drivetrain. units: `Pose2d(m, m, rad)`
  */
 data class MecanumState(
-    val vel: Pose2d,
-    val pos: Pose2d
+    var vel: Pose2d,
+    var pos: Pose2d
 ) {
     constructor(data: DoubleArray): this(
         Pose2d(data[0],data[1],data[2]),

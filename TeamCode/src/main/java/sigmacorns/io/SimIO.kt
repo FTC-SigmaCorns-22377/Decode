@@ -34,5 +34,9 @@ class SimIO : SigmaIO {
         t += SIM_UPDATE_TIME
     }
 
+    override fun setPosition(p: Pose2d) {
+        robot.drivetrainState.pos = p
+    }
+
     override fun time() = t
 }

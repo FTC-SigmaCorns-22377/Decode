@@ -4,7 +4,7 @@ import sigmacorns.constants.drivetrainParameters
 import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
 
-const val MECANUM_DT: Double = 0.001
+const val MECANUM_DT: Double = 0.0005
 
 /**
  * A virtual model of the robot dynamics used for simulation

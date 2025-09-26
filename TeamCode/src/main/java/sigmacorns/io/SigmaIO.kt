@@ -29,6 +29,8 @@ interface SigmaIO {
 
     fun update()
 
+    fun setPosition(p: Pose2d)
+
     /**
      * @return time passed since the start of the opmode
      */

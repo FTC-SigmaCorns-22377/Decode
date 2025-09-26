@@ -66,6 +66,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         intakeMotor?.power = intake
     }
 
+    override fun setPosition(p: Pose2d) {
+        TODO("Not yet implemented")
+    }
+
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
     override fun time(): Duration {
         val duration = TimeSource.Monotonic.markNow() - startTime

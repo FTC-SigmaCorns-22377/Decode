@@ -49,7 +49,50 @@ class MecanumSimTest {
 
             val v = Vector2d(cos(angle),sin(angle))
 
-            val powers = model.drivetrain.mecanumInverseKinematics(Pose2d(v, 0.0))
+            val powers = model.drivetrain.mecanumInverseVelKinematics(Pose2d(v, 0.0))
+
+            io.driveFL = powers[0]
+            io.driveBL = powers[1]
+            io.driveBR = powers[2]
+            io.driveFR = powers[3]
+
+            io.update()
+            state.update(io)
+            rr.logState(state)
+        }
+
+        rr.close()
+    }
+
+    @Test
+    fun testSpin() {
+        val io = SimIO()
+        val model = RobotModel()
+
+        val rr = RerunLogging.connect("mecanumTestSpin", "rerun+http://127.0.0.1:9876/proxy")
+
+        val state = State(
+            0.0,
+            Pose2d(0.0,0.0,0.0),
+            Pose2d(0.0,0.0,0.0),
+            Pose2d(0.0,0.0,0.0),
+            0.0,
+            0.0,
+            0.seconds
+        )
+
+        for (i in 0..100) {
+
+            val v = Vector2d(0.0,0.0)
+
+            var spin = 0.0
+            if (i<30) {
+                spin = 1.0
+            } else if (i>70) {
+                spin = -1.0
+            }
+
+            val powers = model.drivetrain.mecanumInverseVelKinematics(Pose2d(v, spin))
 
             io.driveFL = powers[0]
             io.driveBL = powers[1]

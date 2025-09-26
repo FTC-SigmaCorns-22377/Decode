@@ -22,6 +22,16 @@ android {
         jvmTarget = '1.8'
     }
 
+    testOptions {
+        compileOptions {
+            sourceCompatibility JavaVersion.VERSION_11
+            targetCompatibility JavaVersion.VERSION_11
+        }
+        kotlinOptions {
+            jvmTarget = '11'
+        }
+    }
+
     packagingOptions {
         jniLibs.useLegacyPackaging true
     }
@@ -41,6 +51,7 @@ cargo {
 
 repositories {
     mavenCentral()
+    mavenLocal()
 }
 
 project.ext.jomlVersion = "1.10.8"
@@ -50,12 +61,16 @@ dependencies {
 
     implementation "org.joml:joml:${jomlVersion}"
 
+    implementation "dev.nullftc:common:1.1-SNAPSHOT"
+
     testImplementation platform("org.junit:junit-bom:5.13.4")
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testImplementation "org.jetbrains.kotlinx:kandy-lets-plot:0.8.0"
 }
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
     systemProperty "projectDir", project.projectDir.absolutePath
+    systemProperty "choreoDir", "$project.projectDir.absolutePath/choreo"
 }
