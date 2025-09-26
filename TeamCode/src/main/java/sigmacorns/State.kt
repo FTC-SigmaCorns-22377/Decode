@@ -2,6 +2,8 @@ package sigmacorns
 
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
+import kotlin.time.Duration
+import kotlin.time.DurationUnit
 
 data class State (
     var flywheelSpeed: Double,
@@ -10,7 +12,7 @@ data class State (
     var driveTrainAcceleration: Pose2d,
     var intakeFlapPosition: Double,
     var intakeRollerPower: Double,
-    var timestamp: Double
+    var timestamp: Duration
 ) {
     fun update(io: SigmaIO) {
         flywheelSpeed = io.flywheelVelocity()
@@ -24,23 +26,26 @@ data class State (
         timestamp = io.time()
         val dt = timestamp - lastTime
 
-        driveTrainAcceleration = (driveTrainVelocity - lastVel)/dt
+        driveTrainAcceleration = (driveTrainVelocity - lastVel)/dt.toDouble(DurationUnit.SECONDS)
 
         intakeRollerPower = io.intake
 
     }
 
-    fun toFloatArray(): FloatArray {
-        val l = listOf(
+    fun toDoubleArray(): DoubleArray {
+        return doubleArrayOf(
             flywheelSpeed,
             driveTrainPosition.v.x, driveTrainPosition.v.y, driveTrainPosition.rot,
             driveTrainVelocity.v.x, driveTrainVelocity.v.y, driveTrainVelocity.rot,
             driveTrainAcceleration.v.x, driveTrainAcceleration.v.y, driveTrainAcceleration.rot,
             intakeFlapPosition,
             intakeRollerPower,
-            timestamp
+            timestamp.toDouble(DurationUnit.SECONDS)
         )
+    }
 
+    fun toFloatArray(): FloatArray {
+        val l = toDoubleArray()
         return FloatArray(l.size) {
             l[it].toFloat()
         }

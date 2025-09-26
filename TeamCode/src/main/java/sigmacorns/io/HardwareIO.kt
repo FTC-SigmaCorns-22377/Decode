@@ -11,6 +11,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple
 import com.qualcomm.robotcore.hardware.HardwareMap
 import sigmacorns.math.Pose2d
 import kotlin.time.ComparableTimeMark
+import kotlin.time.Duration
 import kotlin.time.TimeSource
 
 // import odometry from some library
@@ -66,10 +67,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
-    override fun time(): Double {
+    override fun time(): Duration {
         val duration = TimeSource.Monotonic.markNow() - startTime
 
-        return duration.inWholeMicroseconds.toDouble() / 1_000_000.0
+        return duration
     }
 
     init {

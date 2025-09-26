@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import sigmacorns.State
 import sigmacorns.io.RerunLogging
 import sigmacorns.math.Pose2d
+import kotlin.time.Duration.Companion.seconds
 
 class RerunTest {
     @Test
@@ -15,7 +16,7 @@ class RerunTest {
             Pose2d(8.0,9.0,10.0),
             11.0,
             12.0,
-            13.0
+            13.seconds
         )
 
         RerunLogging.connect("sim", "rerun+http://127.0.0.1:9876/proxy").use {

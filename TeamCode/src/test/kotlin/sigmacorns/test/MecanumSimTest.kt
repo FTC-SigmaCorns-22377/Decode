@@ -10,6 +10,7 @@ import sigmacorns.sim.RobotModel
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.time.Duration.Companion.seconds
 
 class MecanumSimTest {
     @Test
@@ -40,7 +41,7 @@ class MecanumSimTest {
             Pose2d(0.0,0.0,0.0),
             0.0,
             0.0,
-            0.0
+            0.seconds
         )
 
         for (i in 0..100) {

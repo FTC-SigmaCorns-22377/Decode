@@ -2,13 +2,16 @@ package sigmacorns.io
 
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.RobotModel
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 
-const val UPDATE_TIME = 0.05
+val SIM_UPDATE_TIME = 5.milliseconds
 
 class SimIO : SigmaIO {
-    private val robot = RobotModel()
+    val robot = RobotModel()
 
-    private var t = 0.0
+    private var t = 0.seconds
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -27,8 +30,8 @@ class SimIO : SigmaIO {
     }
 
     override fun update() {
-        robot.advanceSim(UPDATE_TIME,this)
-        t += UPDATE_TIME
+        robot.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS),this)
+        t += SIM_UPDATE_TIME
     }
 
     override fun time() = t
