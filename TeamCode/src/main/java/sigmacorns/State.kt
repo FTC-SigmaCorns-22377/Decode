@@ -3,6 +3,7 @@ package sigmacorns
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
 data class State (
@@ -14,6 +15,18 @@ data class State (
     var intakeRollerPower: Double,
     var timestamp: Duration
 ) {
+    constructor(io: SigmaIO): this(
+        0.0,
+        Pose2d(),
+        Pose2d(),
+        Pose2d(),
+        0.0,
+        0.0,
+        0.seconds
+    ) {
+        update(io)
+    }
+
     fun update(io: SigmaIO) {
         flywheelSpeed = io.flywheelVelocity()
         driveTrainPosition = io.position()

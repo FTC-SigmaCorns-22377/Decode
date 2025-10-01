@@ -26,7 +26,7 @@ class SimIO : SigmaIO {
     override fun velocity(): Pose2d = robot.drivetrainState.vel
 
     override fun flywheelVelocity(): Double {
-        return 0.0
+        return robot.flywheelState.omega
     }
 
     override fun update() {

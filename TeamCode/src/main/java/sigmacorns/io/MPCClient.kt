@@ -113,7 +113,7 @@ class MPCClient(
     private val RESPONSE_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (1 + N * NU)
 
     private var x0: DoubleArray? = null
-    private var V: Double = parameters.vRef.toDouble()
+    private var V: Double = parameters.motor.vRef
     private var path: List<Contour>? = null
 
     private var lastU: DoubleArray = DoubleArray(NU)
@@ -163,8 +163,8 @@ class MPCClient(
         buf.putLong(time) // timestamp
 
         val p = parameters.toArray()
-        p[0] *= V/parameters.vRef.toDouble()
-        p[1] *= V/parameters.vRef.toDouble()
+        p[0] *= V/parameters.motor.vRef
+        p[1] *= V/parameters.motor.vRef
 
         // Payload
         putArray(buf, target.toArray())

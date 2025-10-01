@@ -2,9 +2,6 @@ package sigmacorns.sim
 
 import org.joml.*
 import sigmacorns.math.Pose2d
-import kotlin.math.cos
-import kotlin.math.hypot
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -116,7 +113,12 @@ class MecanumDynamics(val p: MecanumParameters) {
         val motorPowers = Vector4d(u[0],u[1],u[2],u[3])
 
         // torques produced by each wheel motor
-        val torques = (motorPowers - wheelVels/Vector4d(p.freeSpeed))*p.stallTorque
+        val torques = Vector4d(
+            p.motor.torque(motorPowers.x, wheelVels.x),
+            p.motor.torque(motorPowers.y, wheelVels.y),
+            p.motor.torque(motorPowers.z, wheelVels.z),
+            p.motor.torque(motorPowers.w, wheelVels.w),
+        )
 
         // robot relative accelerations
         val acc = mecanumForwardAccKinematics(torques)
@@ -132,40 +134,6 @@ class MecanumDynamics(val p: MecanumParameters) {
             x[1], // dy = vy
             x[2] // dtheta = omega
         )
-    }
-
-
-    fun dx2(u: DoubleArray, x: DoubleArray): DoubleArray {
-        val vx = x[0] * cos(-x[5]) - x[1] * sin(-x[5])
-        val vy = x[0] * sin(-x[5]) + x[1] * cos(-x[5])
-
-        val motorVels = doubleArrayOf(
-            (vx - vy - (p.lx + p.ly) * x[2]) / p.wheelRadius,
-            (vx + vy - (p.lx + p.ly) * x[2]) / p.wheelRadius,
-            (vx - vy + (p.lx + p.ly) * x[2]) / p.wheelRadius,
-            (vx + vy + (p.lx + p.ly) * x[2]) / p.wheelRadius
-        )
-
-        val fs = DoubleArray(4) { i ->
-            p.stallTorque * (u[i] - motorVels[i]/p.freeSpeed) / p.wheelRadius
-        }
-
-        val dV = doubleArrayOf(
-            (fs[0] + fs[1] + fs[2] + fs[3]) / p.weight,
-            (-fs[0] + fs[1] - fs[2] + fs[3]) / p.weight,
-            (-fs[0] - fs[1] + fs[2] + fs[3]) * hypot(p.lx,p.ly) / p.rotInertia
-        )
-
-        val dx = doubleArrayOf(
-            dV[0] * cos(x[5]) - dV[1] * sin(x[5]),
-            dV[0] * sin(x[5]) + dV[1] * cos(x[5]),
-            dV[2],
-            x[0],
-            x[1],
-            x[2]
-        )
-
-        return dx
     }
 
     /**
