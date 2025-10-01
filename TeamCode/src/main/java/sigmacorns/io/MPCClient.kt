@@ -5,6 +5,7 @@ import dev.nullftc.choreolib.trajectory.Trajectory
 import org.joml.Vector2d
 import org.joml.minus
 import sigmacorns.math.Pose2d
+import sigmacorns.sim.MecanumDynamics
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.MecanumState
 import java.net.InetSocketAddress
@@ -23,6 +24,7 @@ import kotlin.math.withSign
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
+import kotlin.time.DurationUnit
 
 data class Contour(
     var pos: Pose2d,
@@ -242,5 +244,16 @@ class MPCClient(
         lastU = res
 
         return res
+    }
+
+    fun getPredictedEvolution(): List<Pose2d> {
+        val model = MecanumDynamics(parameters)
+
+        val xs = mutableListOf(MecanumState(x0!!))
+        for(i in 0..N-1) {
+            xs += model.integrate(DT.toDouble(DurationUnit.SECONDS),0.001, latestU.sliceArray(i*NU..(i+1)*NU-1), xs.last())
+        }
+
+        return xs.map { it.pos }
     }
 }

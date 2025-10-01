@@ -54,6 +54,8 @@ class MPCBenchmarkTest(io: SigmaIO): SigmaOpMode(io) {
                 mpc.update(MecanumState(state.driveTrainVelocity,state.driveTrainPosition),12.0,t)
                 val u  = mpc.getU(t)
 
+                rr.logLineStrip("predictedPath",mpc.getPredictedEvolution().map { it.v })
+
                 sim.driveFL = u[0]
                 sim.driveBL = u[1]
                 sim.driveBR = u[2]
