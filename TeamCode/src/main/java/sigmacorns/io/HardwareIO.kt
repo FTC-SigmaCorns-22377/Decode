@@ -13,6 +13,10 @@ import sigmacorns.math.Pose2d
 import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.TimeSource
+import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
+import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
+import org.firstinspires.ftc.robotcore.external.navigation.Pose2D
 
 // import odometry from some library
 class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
@@ -32,6 +36,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limeLight")
     val imu: IMU? = hardwareMap.tryGet(IMU::class.java,"imu")
+
+    //odometry
+    var pinpoint0: GoBildaPinpointDriver? = null
+    var pinpoint1: GoBildaPinpointDriver? = null
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -53,6 +61,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         TODO("Not yet implemented")
     }
 
+    override fun setPosition(p: Pose2d) {
+        TODO("Not yet implemented")
+    }
+
     override fun update() {
         //updating power values of driveMotors
         driveFLMotor.power = driveFL
@@ -66,15 +78,17 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         intakeMotor?.power = intake
     }
 
-    override fun setPosition(p: Pose2d) {
-        TODO("Not yet implemented")
-    }
+
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
     override fun time(): Duration {
         val duration = TimeSource.Monotonic.markNow() - startTime
 
         return duration
+    }
+
+    override fun configurePinpoint() {
+        TODO("Not yet implemented")
     }
 
     init {
@@ -107,7 +121,39 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flyWheelMotor1?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
 
-        //do pinpoint odometry stuff here once thomas imports the lib
+        //getting reference to odometry pods
+        pinpoint0 = hardwareMap.get<GoBildaPinpointDriver?>(GoBildaPinpointDriver::class.java,"pinpoint0")
+        pinpoint1 = hardwareMap.get<GoBildaPinpointDriver?>(GoBildaPinpointDriver::class.java,"pinpoint1")
+
+        // configuring pinpoint
+        configurePinpoint()
+        //setting the position of the odo pods
+        pinpoint0!!.setPosition(Pose2D(DistanceUnit.METER, 0.0, 0.0, AngleUnit.RADIANS, 0.0))
+        pinpoint1!!.setPosition(Pose2D(DistanceUnit.METER, 0.0, 0.0, AngleUnit.RADIANS, 0.0))
+
+        fun configurePinpoint() {
+            //setting encoder resolution
+            pinpoint0!!.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
+            pinpoint1!!.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
+
+            //setting the directions of the ododmetry pods
+
+            pinpoint0!!.setEncoderDirections(
+                GoBildaPinpointDriver.EncoderDirection.FORWARD,
+                GoBildaPinpointDriver.EncoderDirection.FORWARD
+            )
+
+            pinpoint1!!.setEncoderDirections(
+                GoBildaPinpointDriver.EncoderDirection.FORWARD,
+                GoBildaPinpointDriver.EncoderDirection.FORWARD
+            )
+
+            //resetting the positions for the IMU
+            pinpoint0!!.resetPosAndIMU()
+            pinpoint1!!.resetPosAndIMU()
+        }
+
+
 
 
 

@@ -35,4 +35,5 @@ interface SigmaIO {
      * @return time passed since the start of the opmode
      */
     fun time(): Duration
+    fun configurePinpoint()
 }
