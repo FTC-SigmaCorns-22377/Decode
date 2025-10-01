@@ -49,6 +49,36 @@ cargo {
     cargoCommand = new File(homePath, ".cargo/bin/cargo")
 }
 
+def desktopCopyTargets = [
+    "cargoBuildLinux-x86-64"      : ["desktop/linux-x86-64", "librerun.so"],
+    "cargoBuildWin32-x86-64-msvc" : ["desktop/win32-x86-64-msvc", "librerun.dll"],
+    "cargoBuildDarwin"            : ["desktop/darwin", "librerun.dylib"],
+]
+
+tasks.whenTaskAdded { task ->
+    def copySpec = desktopCopyTargets[task.name]
+    if (copySpec != null) {
+        task.doLast {
+            def (String relativeDir, String fileName) = copySpec
+            def builtLib = file("$buildDir/rustJniLibs/${relativeDir}/${fileName}")
+            if (!builtLib.exists()) {
+                logger.warn("Expected rerun library not found at ${builtLib.path}")
+                return
+            }
+
+            def targetDir = file("${projectDir}/src/test/jniLibs")
+            if (!targetDir.exists()) {
+                targetDir.mkdirs()
+            }
+
+            copy {
+                from builtLib
+                into targetDir
+            }
+        }
+    }
+}
+
 repositories {
     mavenCentral()
     mavenLocal()
