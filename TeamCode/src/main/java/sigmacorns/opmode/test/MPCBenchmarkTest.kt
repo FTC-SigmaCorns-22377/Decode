@@ -23,11 +23,11 @@ class MPCBenchmarkTest(io: SigmaIO): SigmaOpMode(io) {
     override fun runOpMode() {
         waitForStart()
 
-        val contours = ContourLoader.load(Choreo().loadTrajectory<MecanumSample>("New Path (1)").get())
+        val contours = ContourLoader.load(Choreo().loadTrajectory<MecanumSample>("New Path (5)").get())
 
-        val mpc = MPCClient(drivetrainParameters, if(LIMELIGHT_CONNECTED) Network.LIMELIGHT else Network.SIM_MPC, sampleLookahead = 2)
+        val mpc = MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2)
 
-        RerunLogging.connect("MPCBenchmarkTest","rerun+http://127.0.0.1:9876/proxy").use { rr ->
+        RerunLogging.connect("MPCBenchmarkTest",rerunIP()).use { rr ->
             val sim = SimIO()
 
             mpc.setTarget(contours)

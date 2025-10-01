@@ -3,6 +3,7 @@ package sigmacorns.test
 import org.joml.Vector2d
 import org.junit.jupiter.api.Test
 import sigmacorns.State
+import sigmacorns.constants.Network
 import sigmacorns.io.RerunLogging
 import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
@@ -32,7 +33,7 @@ class MecanumSimTest {
         val io = SimIO()
         val model = RobotModel()
 
-        val rr = RerunLogging.connect("mecanumTestCircleOpenLoop", "rerun+http://127.0.0.1:9876/proxy")
+        val rr = RerunLogging.connect("mecanumTestCircleOpenLoop", Network.SIM_RERUN)
 
         val state = State(
             0.0,
