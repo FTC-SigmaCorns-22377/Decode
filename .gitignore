@@ -6,6 +6,9 @@
 
 !libs/*.aar
 
+# Local jniLibs
+TeamCode/src/test/jniLibs
+
 # Files for the ART/Dalvik VM
 *.dex
 

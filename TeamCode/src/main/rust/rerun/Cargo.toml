@@ -1,0 +1,11 @@
+[package]
+name = "rerun"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+jni = "0.21.1"
+rerun = "0.25.1"
+
+[lib]
+crate-type = ["cdylib"]

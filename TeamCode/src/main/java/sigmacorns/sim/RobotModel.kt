@@ -1,0 +1,40 @@
+package sigmacorns.sim
+
+import sigmacorns.constants.drivetrainParameters
+import sigmacorns.io.SimIO
+import sigmacorns.math.Pose2d
+
+const val MECANUM_DT: Double = 0.0005
+
+/**
+ * A virtual model of the robot dynamics used for simulation
+ */
+class RobotModel {
+
+    /**
+     * Current state of the mecanum drivetrain.
+     * @see MecanumDynamics.MecanumState
+     */
+    var drivetrainState = MecanumState(
+        Pose2d(),
+        Pose2d()
+    )
+
+    // dynamics of the drivetrain
+    val drivetrain = MecanumDynamics(drivetrainParameters)
+
+    /**
+     * Advances the simulation
+     * @param t the time to advance the simulation by (s)
+     */
+    fun advanceSim(t: Double, io: SimIO) {
+        val wheelMotorUs = doubleArrayOf(
+            io.driveFL,
+            io.driveBL,
+            io.driveBR,
+            io.driveFR
+        )
+
+        drivetrainState = drivetrain.integrate(t,MECANUM_DT, wheelMotorUs, drivetrainState)
+    }
+}
