@@ -13,7 +13,8 @@ class Teleop(io: SigmaIO): SigmaOpMode(io) {
         val FR = hardwareMap.get<DcMotor>(DcMotor::class.java, "FR")
         val BL = hardwareMap.get<DcMotor>(DcMotor::class.java, "BL")
         val BR = hardwareMap.get<DcMotor>(DcMotor::class.java, "BR")
-        val flywheel = hardwareMap.get<DcMotor>(DcMotor::class.java, "FlyWheel")
+        val flywheel = hardwareMap.get<DcMotor>(DcMotor::class.java, "flyWheel0")
+        val intake = hardwareMap.get<DcMotor>(DcMotor::class.java,"intake")
 
         FL.setDirection(DcMotorSimple.Direction.REVERSE)
 
@@ -34,12 +35,20 @@ class Teleop(io: SigmaIO): SigmaOpMode(io) {
 
             val isAPressed = gamepad1.a
             val isBPressed = gamepad1.b
+            val isXPressed = gamepad1.x
+            val isYPressed = gamepad1.y
             if (isAPressed)
                 flywheel.setPower(0.5)
             else if (isBPressed)
                 flywheel.setPower(0.25)
             else
                 flywheel.setPower(0.0)
+            if (isXPressed)
+                intake.setPower(0.5)
+            else if (isYPressed)
+                intake.setPower(-1.0)
+            else
+                intake.setPower(0.0)
 
 
         }
