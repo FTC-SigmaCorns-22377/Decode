@@ -17,4 +17,10 @@ data class Pose2d(
 
     operator fun times(rhs: Number) = Pose2d(v * rhs.toDouble(), rot * rhs.toDouble())
     operator fun div(rhs: Number) = Pose2d(v / rhs.toDouble(), rot / rhs.toDouble())
+
+    fun componentMul(rhs: Pose2d)  = Pose2d(
+        v.x * rhs.v.x,
+        v.y * rhs.v.y,
+        rot * rhs.rot
+    )
 }

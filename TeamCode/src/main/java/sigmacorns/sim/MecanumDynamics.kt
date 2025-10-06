@@ -86,6 +86,15 @@ class MecanumDynamics(val p: MecanumParameters) {
         inverseAcc * Vector4d(acc.v.x, acc.v.y, acc.rot, 0.0)
 
     /**
+     * Gives the maximum speed for the drivetrain
+     */
+    fun maxSpeed() = Pose2d(
+            p.freeSpeed * p.wheelRadius,
+            p.freeSpeed * p.wheelRadius,
+            p.freeSpeed * p.wheelRadius / l)
+
+
+    /**
      * Gives the derivative of the state of the drivetrain
      *
      * @param u the array of motor powers ∈ [-1,1] ordered `[FL,BL,BR,FR]`
