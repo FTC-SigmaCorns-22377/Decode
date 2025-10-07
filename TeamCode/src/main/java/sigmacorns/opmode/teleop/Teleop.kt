@@ -28,7 +28,7 @@ class Teleop(io: SigmaIO): SigmaOpMode(io) {
             val maxSpeed = mecanumDynamics.maxSpeed()
             val robotVelocities = maxSpeed.componentMul(robotPower)
             val wheelVelocities = mecanumDynamics.mecanumInverseVelKinematics(robotVelocities)
-            val wheelPowers = wheelVelocities * (1.0/mecanumDynamics.p.freeSpeed)
+            val wheelPowers = wheelVelocities * (1.0/mecanumDynamics.p.motor.freeSpeed)
             io.driveFL = wheelPowers[0]
             io.driveBL = wheelPowers[1]
             io.driveBR = wheelPowers[2]

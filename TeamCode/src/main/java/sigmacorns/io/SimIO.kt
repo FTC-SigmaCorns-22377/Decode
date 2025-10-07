@@ -1,6 +1,8 @@
 package sigmacorns.io
 
+import org.joml.Vector3d
 import sigmacorns.math.Pose2d
+//import sigmacorns.sim.ProjectileSnapshot
 import sigmacorns.sim.RobotModel
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -39,4 +41,28 @@ class SimIO : SigmaIO {
     }
 
     override fun time() = t
+
+    override fun configurePinpoint() {
+
+    }
+
+//    fun launchBall() {
+//        robot.launchBall()
+//    }
+//
+//    fun projectiles(): List<ProjectileSnapshot> = robot.projectileSnapshots()
+//
+//    fun logProjectiles(rr: RerunLogging, prefix: String = "balls") {
+//        projectiles().forEach { projectile ->
+//            if (projectile.path.isNotEmpty()) {
+//                val path = if (projectile.path.size == 1) {
+//                    val point = projectile.path.first()
+//                    listOf(point, Vector3d(point))
+//                } else {
+//                    projectile.path
+//                }
+//                rr.logLineStrip("$prefix/ball-${projectile.id}", path)
+//            }
+//        }
+//    }
 }

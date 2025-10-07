@@ -86,9 +86,9 @@ class MecanumDynamics(val p: MecanumParameters) {
      * Gives the maximum speed for the drivetrain
      */
     fun maxSpeed() = Pose2d(
-            p.freeSpeed * p.wheelRadius,
-            p.freeSpeed * p.wheelRadius,
-            p.freeSpeed * p.wheelRadius / l)
+            p.motor.freeSpeed * p.wheelRadius,
+            p.motor.freeSpeed * p.wheelRadius,
+            p.motor.freeSpeed * p.wheelRadius / l)
 
 
     /**

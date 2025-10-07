@@ -7,6 +7,8 @@ import sigmacorns.constants.flywheelParameters
 import sigmacorns.io.SimIO
 import kotlin.time.Duration.Companion.seconds
 
+private val flywheelFreeSpeed = flywheelParameters.motor.freeSpeed
+
 class FlywheelSimTest {
 
     @Test
@@ -18,17 +20,15 @@ class FlywheelSimTest {
 
         val state = State(io)
 
-        while(io.time() < 3.seconds) {
+        while (io.time() < 3.seconds) {
             io.update()
             state.update(io)
-
         }
 
         val omega = io.flywheelVelocity()
-        val freeSpeed = flywheelParameters.motor.freeSpeed
 
-        assertTrue(omega > 0.75 * freeSpeed, "flywheel should spin up near free speed, but was $omega rad/s")
-        assertTrue(omega < freeSpeed * 1.01, "flywheel should not exceed free speed significantly, but was $omega rad/s")
+        assertTrue(omega > 0.75 * flywheelFreeSpeed, "flywheel should spin up near free speed, but was $omega rad/s")
+        assertTrue(omega < flywheelFreeSpeed * 1.01, "flywheel should not exceed free speed significantly, but was $omega rad/s")
     }
 
     @Test
@@ -62,6 +62,6 @@ class FlywheelSimTest {
         }
 
         val reversed = io.flywheelVelocity()
-        assertTrue(reversed < -200.0, "flywheel should spin in reverse under negative power")
+        assertTrue(reversed < -0.95 * flywheelFreeSpeed, "flywheel should spin in reverse under negative power, but was $reversed rad/s")
     }
 }
