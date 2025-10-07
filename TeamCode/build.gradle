@@ -79,9 +79,20 @@ tasks.whenTaskAdded { task ->
     }
 }
 
+Properties local = new Properties()
+local.load(project.rootProject.file('local.properties').newDataInputStream())
+
 repositories {
     mavenCentral()
-    mavenLocal()
+
+    maven {
+        name = "choreolib"
+        url = uri("https://maven.pkg.github.com/NullFTC/choreolib")
+        credentials {
+            username = local.getProperty('username')
+            password = local.getProperty('apiKey')
+        }
+    }
 }
 
 project.ext.jomlVersion = "1.10.8"
@@ -91,7 +102,9 @@ dependencies {
 
     implementation "org.joml:joml:${jomlVersion}"
 
-    implementation "dev.nullftc:common:1.1-SNAPSHOT"
+    implementation("dev.nullftc:common:1.2-SNAPSHOT") {
+        exclude group: "com.google.code.gson", module: "gson"
+    }
 
     testImplementation platform("org.junit:junit-bom:5.13.4")
     testImplementation "org.junit.jupiter:junit-jupiter"
