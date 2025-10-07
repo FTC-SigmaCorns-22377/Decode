@@ -3,6 +3,7 @@ package sigmacorns.constants
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
+import kotlin.math.PI
 
 // specs of a goBilda motor without a gearbox (Modern Robotics 12v DC motor)
 // from https://motors.vex.com/other-motors/modern-robotics-12vdc
@@ -46,6 +47,31 @@ val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio,bareMotorS
  */
 val flywheelParameters = FlywheelParameters(
     flywheelMotor,
-    0.0025,
+    0.025,
     0.0001,
 )
+
+/**
+ * Default launch angle of the projectile measured from the floor plane.
+ */
+const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0
+
+/**
+ * Launch angle expressed in radians for convenience when simulating trajectories.
+ */
+val BALL_LAUNCH_ANGLE_RADIANS = DEFAULT_BALL_LAUNCH_ANGLE_DEGREES * (PI / 180.0)
+
+/**
+ * Approximated linear scale factor converting flywheel angular velocity to muzzle speed (m/s per rad/s).
+ */
+const val BALL_EXIT_SPEED_PER_RADIAN = 0.025
+
+/**
+ * Approximate release height of the launcher exit from the floor in meters.
+ */
+const val BALL_LAUNCH_HEIGHT_METERS = 0.12
+
+/**
+ * Magnitude of gravitational acceleration applied to launched projectiles in the simulator.
+ */
+const val BALL_GRAVITY_MAGNITUDE = 9.81
