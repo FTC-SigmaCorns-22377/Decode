@@ -12,8 +12,7 @@ interface SigmaIO {
     var driveBR: Double
 
     //shooter
-    var flyWheel0: Double
-    var flyWheel1: Double
+    var shooter: Double
     //intake
     var intake: Double // might just be human fed and we wont end up needing this
 

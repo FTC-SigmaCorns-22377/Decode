@@ -17,7 +17,7 @@ abstract class SigmaOpMode(
         providedIO ?: HardwareIO(hardwareMap)
     }
 
-    var SIM: Boolean = io is SimIO
+    var SIM: Boolean = false
     var LIMELIGHT_CONNECTED: Boolean = true
 
     private val internalState by lazy { OpModeReflection(this) }

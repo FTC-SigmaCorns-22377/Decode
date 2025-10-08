@@ -67,10 +67,7 @@ class RobotModel {
 
         drivetrainState = drivetrain.integrate(t,MECANUM_DT, wheelMotorUs, drivetrainState)
 
-        val flywheelInputs = doubleArrayOf(
-            io.flyWheel0,
-            io.flyWheel1
-        )
+        val flywheelInputs = doubleArrayOf(io.shooter)
         flywheelState = flywheel.integrate(t, FLYWHEEL_DT, flywheelInputs, flywheelState)
 
         integrateProjectiles(t)

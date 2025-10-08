@@ -27,10 +27,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveBRMotor: DcMotor = hardwareMap.tryGet(DcMotor::class.java,"driveBR") as DcMotor
 
     //shooter
-    private val flyWheelMotor0: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"flyWheel0")
-    private val flyWheelMotor1: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"flyWheel1")
+    private val flyWheelMotor0: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"shooter")
     //intake
-    private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intake")
+    private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
 
     //sensors
     private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
@@ -38,15 +37,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     val imu: IMU? = hardwareMap.tryGet(IMU::class.java,"imu")
 
     //odometry
-    var pinpoint0: GoBildaPinpointDriver? = null
-    var pinpoint1: GoBildaPinpointDriver? = null
+    var pinpoint: GoBildaPinpointDriver? = hardwareMap.tryGet(GoBildaPinpointDriver::class.java,"pinpoint")
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
     override var driveFR: Double = 0.0
     override var driveBR: Double = 0.0
-    override var flyWheel0: Double = 0.0
-    override var flyWheel1: Double = 0.0
+    override var shooter: Double = 0.0
     override var intake: Double = 0.0
 
     override fun position(): Pose2d {
@@ -62,7 +59,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun setPosition(p: Pose2d) {
-        TODO("Not yet implemented")
+        pinpoint?.position = Pose2D(DistanceUnit.METER,p.v.x,p.v.y, AngleUnit.RADIANS,p.rot)
     }
 
     override fun update() {
@@ -73,12 +70,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBRMotor.power = driveBR
 
         //updating power values of auxilery motors
-        flyWheelMotor0?.power = flyWheel0
-        flyWheelMotor1?.power = flyWheel1
+        flyWheelMotor0?.power = shooter
         intakeMotor?.power = intake
     }
-
-
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
     override fun time(): Duration {
@@ -88,19 +82,28 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun configurePinpoint() {
-        TODO("Not yet implemented")
+        //setting encoder resolution
+        pinpoint?.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
+
+        //setting the directions of the ododmetry pods
+        pinpoint?.setEncoderDirections(
+            GoBildaPinpointDriver.EncoderDirection.FORWARD,
+            GoBildaPinpointDriver.EncoderDirection.FORWARD
+        )
+
+        //resetting the positions for the IMU
+        pinpoint?.resetPosAndIMU()
     }
 
     init {
         //drive motor direction declarations
-        driveFLMotor.direction = DcMotorSimple.Direction.FORWARD
-        driveFRMotor.direction = DcMotorSimple.Direction.REVERSE
+        driveFLMotor.direction = DcMotorSimple.Direction.REVERSE
+        driveFRMotor.direction = DcMotorSimple.Direction.FORWARD
         driveBLMotor.direction = DcMotorSimple.Direction.REVERSE
         driveBRMotor.direction = DcMotorSimple.Direction.FORWARD
 
         //flywheel and intake motors(auxilery) direction declarations
         flyWheelMotor0?.direction = DcMotorSimple.Direction.FORWARD
-        flyWheelMotor1?.direction = DcMotorSimple.Direction.REVERSE
         intakeMotor?.direction = DcMotorSimple.Direction.FORWARD
 
         //declaring driveMode's for drive motors( which will be run without encoder for now)
@@ -113,54 +116,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         //stoping and resetting the encoders for the auxilery motors( stop and reset)
         flyWheelMotor0?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
-        flyWheelMotor1?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
 
         //declaring the driveMode's for auxilery motors(which will be run without encoder for now)
         flyWheelMotor0?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
-        flyWheelMotor1?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
-
-        //getting reference to odometry pods
-        pinpoint0 = hardwareMap.get<GoBildaPinpointDriver?>(GoBildaPinpointDriver::class.java,"pinpoint0")
-        pinpoint1 = hardwareMap.get<GoBildaPinpointDriver?>(GoBildaPinpointDriver::class.java,"pinpoint1")
 
         // configuring pinpoint
         configurePinpoint()
-        //setting the position of the odo pods
-        pinpoint0!!.setPosition(Pose2D(DistanceUnit.METER, 0.0, 0.0, AngleUnit.RADIANS, 0.0))
-        pinpoint1!!.setPosition(Pose2D(DistanceUnit.METER, 0.0, 0.0, AngleUnit.RADIANS, 0.0))
-
-        fun configurePinpoint() {
-            //setting encoder resolution
-            pinpoint0!!.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
-            pinpoint1!!.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
-
-            //setting the directions of the ododmetry pods
-
-            pinpoint0!!.setEncoderDirections(
-                GoBildaPinpointDriver.EncoderDirection.FORWARD,
-                GoBildaPinpointDriver.EncoderDirection.FORWARD
-            )
-
-            pinpoint1!!.setEncoderDirections(
-                GoBildaPinpointDriver.EncoderDirection.FORWARD,
-                GoBildaPinpointDriver.EncoderDirection.FORWARD
-            )
-
-            //resetting the positions for the IMU
-            pinpoint0!!.resetPosAndIMU()
-            pinpoint1!!.resetPosAndIMU()
-        }
-
-
-
-
-
-
-
-
-
     }
 
 }
