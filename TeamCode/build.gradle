@@ -43,7 +43,7 @@ def homePath = System.properties['user.home']
 cargo {
     module  = "src/main/rust/rerun"
     libname = "rerun"
-    targets = ["arm", "linux-x86-64", "win32-x86-64-msvc", "darwin"]
+    targets = ["arm64", "linux-x86-64", "win32-x86-64-msvc", "darwin"]
 
     rustcCommand = new File(homePath, ".cargo/bin/rustc")
     cargoCommand = new File(homePath, ".cargo/bin/cargo")
