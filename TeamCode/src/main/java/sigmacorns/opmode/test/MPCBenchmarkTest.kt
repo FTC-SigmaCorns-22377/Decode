@@ -19,11 +19,11 @@ import sigmacorns.sim.MecanumState
 import kotlin.time.Duration.Companion.seconds
 
 @TeleOp
-class MPCBenchmarkTest(io: SigmaIO): SigmaOpMode(io) {
+class MPCBenchmarkTest(): SigmaOpMode() {
     override fun runOpMode() {
         waitForStart()
 
-        val contours = ContourLoader.load(Choreo().loadTrajectory<MecanumSample>("New Path (5)").get())
+        val contours = ContourLoader.load(Choreo().loadTrajectory<MecanumSample>("forward").get())
 
         val mpc = MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2)
 

@@ -14,22 +14,20 @@ abstract class SigmaOpMode(
     private val providedIO: SigmaIO? = null
 ): LinearOpMode() {
     val io: SigmaIO by lazy {
-        providedIO ?: HardwareIO(hardwareMap)
+        providedIO ?: hardwareMap?.let { HardwareIO(it) } ?: SimIO()
     }
-
-    var SIM: Boolean = false
-    var LIMELIGHT_CONNECTED: Boolean = true
 
     private val internalState by lazy { OpModeReflection(this) }
 
     fun solverIP() = if (LIMELIGHT_CONNECTED) Network.LIMELIGHT else Network.SIM_MPC
     fun rerunIP() = if (SIM) Network.SIM_RERUN else Network.ROBOT_RERUN
 
-    fun ioLoop(f: (State) -> Boolean) {
+    fun ioLoop(f: (State, Duration) -> Boolean) {
         val state = State(io)
         while (opModeIsActive()) {
+            val tOld = state.timestamp
             state.update(io)
-            if(f(state)) return
+            if(f(state, state.timestamp-tOld)) return
             io.update()
         }
     }
@@ -63,5 +61,8 @@ abstract class SigmaOpMode(
     companion object {
         private val SIM_DEFAULT_INIT_DURATION: Duration = 1.seconds
         private val SIM_WAIT_INTERVAL: Duration = 10.milliseconds
+
+        var SIM: Boolean = false
+        var LIMELIGHT_CONNECTED: Boolean = false
     }
 }
