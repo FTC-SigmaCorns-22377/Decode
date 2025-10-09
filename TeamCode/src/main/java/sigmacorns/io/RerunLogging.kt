@@ -12,6 +12,7 @@ class RerunLogging private constructor(
     }
 
     private external fun connect(name: String, url: String): Long
+    private external fun checkConnection(connection: Long, timeout: Double): Boolean
     private external fun save(name: String, path: String): Long
     private external fun destroy(rec: Long)
     private external fun logState(connection: Long, data: FloatArray)
@@ -42,13 +43,43 @@ class RerunLogging private constructor(
     )
 
     private var ptr: Long = 0
+    private var connectionWarningLogged = false
+
+    var isConnected: Boolean = false
+        private set
+
+    private fun logConnectionUnavailable(message: String? = null) {
+        if (connectionWarningLogged) {
+            return
+        }
+
+        val details = message ?: "RerunLogging[$name]: rerun logging disabled (no active connection)."
+        System.err.println(details)
+        connectionWarningLogged = true
+    }
+
+    private inline fun withConnection(block: (Long) -> Unit) {
+        val handle = ptr
+        if (!isConnected) {
+            logConnectionUnavailable()
+            return
+        }
+
+        block(handle)
+    }
 
     companion object {
         fun connect(name: String, url: String): RerunLogging {
             val rr = RerunLogging(name)
             rr.ptr = rr.connect(name, url)
-
-            require(rr.ptr != 0L)
+            if (rr.ptr == 0L) {
+                rr.logConnectionUnavailable(
+                    "RerunLogging[${rr.name}]: failed to connect to $url; rerun logging disabled.",
+                )
+                rr.isConnected = false
+            } else {
+                rr.isConnected = rr.checkConnection(rr.ptr, 3.0)
+            }
             return rr
         }
 
@@ -56,39 +87,51 @@ class RerunLogging private constructor(
             val rr = RerunLogging(name)
             rr.ptr = rr.save(name, path)
 
-            require(rr.ptr != 0L)
+            rr.isConnected = rr.ptr != 0L
             return rr
         }
     }
 
     fun logState(state: State) {
-        logState(ptr,state.toFloatArray())
+        withConnection { handle ->
+            logState(handle, state.toFloatArray())
+        }
     }
 
     fun logLineStrip(name: String, points: List<Vector3d>) {
-        logLineStrip3D(ptr,name, FloatArray(points.size*3) {
-            val i = it/3
-            val d = if(it%3==0)
+        val payload = FloatArray(points.size * 3) {
+            val i = it / 3
+            val d = if (it % 3 == 0) {
                 points[i].x
-            else if(it%3==1)
+            } else if (it % 3 == 1) {
                 points[i].y
-            else
+            } else {
                 points[i].z
+            }
             d.toFloat()
-        })
+        }
+
+        withConnection { handle ->
+            logLineStrip3D(handle, name, payload)
+        }
     }
 
     fun logLineStrip(name: String, points: List<Vector2d>, z: Number = 0f) {
-        logLineStrip3D(ptr,name, FloatArray(points.size*3) {
-            val i = it/3
-            val d = if(it%3==0)
+        val payload = FloatArray(points.size * 3) {
+            val i = it / 3
+            val d = if (it % 3 == 0) {
                 points[i].x
-            else if(it%3==1)
+            } else if (it % 3 == 1) {
                 points[i].y
-            else
+            } else {
                 z.toFloat()
+            }
             d.toFloat()
-        })
+        }
+
+        withConnection { handle ->
+            logLineStrip3D(handle, name, payload)
+        }
     }
 
     fun logImage(
@@ -103,7 +146,9 @@ class RerunLogging private constructor(
             "Expected ${expectedSize}B for ${format.name} image ($width x $height), but received ${pixels.size}B"
         }
 
-        logImage(ptr, name, width, height, format.ordinal, pixels)
+        withConnection { handle ->
+            logImage(handle, name, width, height, format.ordinal, pixels)
+        }
     }
 
     fun logImageMesh(
@@ -113,7 +158,6 @@ class RerunLogging private constructor(
         format: RerunImageFormat,
         pixels: ByteArray,
     ) {
-        require(ptr != 0L)
         require(width > 0 && height > 0) { "Image dimensions must be positive" }
 
         val expectedSize = width.toLong() * height.toLong() * format.channels
@@ -121,7 +165,9 @@ class RerunLogging private constructor(
             "Expected ${expectedSize}B for ${format.name} image ($width x $height), but received ${pixels.size}B"
         }
 
-        logImageMesh(ptr, name, width, height, format.ordinal, pixels)
+        withConnection { handle ->
+            logImageMesh(handle, name, width, height, format.ordinal, pixels)
+        }
     }
 
     fun logTransform(
@@ -130,18 +176,22 @@ class RerunLogging private constructor(
         quaternion: FloatArray,
         scale: FloatArray = floatArrayOf(1f, 1f, 1f),
     ) {
-        require(ptr != 0L)
         require(translation.size == 3) { "Translation must contain exactly 3 floats" }
         require(quaternion.size == 4) { "Quaternion must contain exactly 4 floats" }
         require(scale.size == 3) { "Scale must contain exactly 3 floats" }
 
-        logTransform(ptr, name, translation, quaternion, scale)
+        withConnection { handle ->
+            logTransform(handle, name, translation, quaternion, scale)
+        }
     }
 
     override fun close() {
-        require(ptr != 0L)
+        val handle = ptr
+        if (handle == 0L) {
+            return
+        }
 
-        destroy(ptr)
+        destroy(handle)
         ptr = 0
     }
 }

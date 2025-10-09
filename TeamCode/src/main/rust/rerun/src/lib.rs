@@ -1,9 +1,9 @@
+use std::time::{Duration, Instant};
+
 use jni::{
-    JNIEnv,
-    objects::{JByteArray, JClass, JFloatArray, JString},
-    sys::{jint, jlong},
+    objects::{JByteArray, JClass, JFloatArray, JString}, sys::{jboolean, jdouble, jint, jlong, JNI_FALSE, JNI_TRUE}, JNIEnv
 };
-use rerun::{components::RotationQuat, datatypes::{ChannelDatatype, ColorModel, Quaternion as RerunQuaternion}};
+use rerun::{components::RotationQuat, datatypes::{ChannelDatatype, ColorModel, Quaternion as RerunQuaternion}, external::re_grpc_client::write::ClientConnectionState};
 use rerun::{
     Arrows3D, LineStrip3D, LineStrips3D, Mesh3D, RecordingStream, RecordingStreamBuilder,
     Rotation3D, Vec3D,
@@ -148,13 +148,29 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_connect(
     name: JString,
     url: JString,
 ) -> jlong {
-    let name = string_from_jni(&mut env, &name).unwrap();
-    let url = string_from_jni(&mut env, &url).unwrap();
+    let name = match string_from_jni(&mut env, &name) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("rerun connect JNI failed to read name: {err}");
+            return 0;
+        }
+    };
 
-    RecordingStreamBuilder::new(name)
-        .connect_grpc_opts(url)
-        .map(|it| Box::into_raw(Box::new(it)) as jlong)
-        .unwrap()
+    let url = match string_from_jni(&mut env, &url) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("rerun connect JNI failed to read url: {err}");
+            return 0;
+        }
+    };
+
+    match RecordingStreamBuilder::new(name.clone()).connect_grpc_opts(url.clone()) {
+        Ok(stream) => Box::into_raw(Box::new(stream)) as jlong,
+        Err(err) => {
+            eprintln!("rerun connect failed for {name} -> {url}: {err}");
+            0
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -182,6 +198,49 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_destroy(
     let rec = unsafe { Box::from_raw(rec as *mut RecordingStream) };
     rec.memory();
     drop(rec);
+}
+
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_checkConnection(
+    _env: JNIEnv,
+    _class: JClass,
+    rec: jlong,
+    timeout: jdouble
+) -> jboolean {
+    let rec = connection_from_ptr(rec);
+
+    let (tx,rx) = std::sync::mpsc::channel();
+
+    loop {
+        let tx = tx.clone();
+        rec.inspect_sink(move |sink| {
+            sink
+                .as_any()
+                .downcast_ref::<rerun::sink::GrpcSink>()
+                .map(|grpc_sink| {
+                    tx.send(grpc_sink.status()).ok()
+                });
+
+        });
+
+        if let Ok(status) = rx.recv_timeout(Duration::from_secs(1)) {
+            match status {
+                ClientConnectionState::Connecting { started } => {
+                    if Instant::now() - started > Duration::from_secs_f64(timeout) {
+                        return JNI_FALSE
+                    }
+                },
+                ClientConnectionState::Connected => return JNI_TRUE,
+                ClientConnectionState::Disconnected(_) => return JNI_FALSE,
+            }
+        } else {
+            return JNI_FALSE;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
 }
 
 #[unsafe(no_mangle)]
