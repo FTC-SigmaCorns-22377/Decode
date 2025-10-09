@@ -117,3 +117,46 @@ tasks.withType(Test).configureEach {
     systemProperty "projectDir", project.projectDir.absolutePath
     systemProperty "choreoDir", "$project.projectDir.absolutePath/choreo"
 }
+
+tasks.register("syncChoreo") {
+    group = "deployment"
+    description = "Syncs TeamCode/choreo contents to /sdcard/FIRST/choreo when the remote directory exists"
+
+    doLast {
+        def adb = android.adbExecutable
+        if (adb == null || !adb.exists()) {
+            throw new GradleException("adb executable not found. Ensure the Android SDK is configured.")
+        }
+
+        def remoteDir = "/sdcard/FIRST/choreo"
+        def localDir = file("choreo")
+
+        if (!localDir.exists()) {
+            logger.lifecycle("Local choreo directory ${localDir} not found; nothing to upload.")
+            return
+        }
+
+        def checkResult = project.exec {
+            executable adb.absolutePath
+            args "shell", "if [ -d ${remoteDir} ]; then exit 0; else exit 1; fi"
+            ignoreExitValue = true
+        }
+
+        if (checkResult.exitValue != 0) {
+            logger.lifecycle("Remote choreo directory ${remoteDir} not present; skipping sync.")
+            return
+        }
+
+        project.exec {
+            executable adb.absolutePath
+            args "shell", "if [ -d ${remoteDir} ]; then rm -rf ${remoteDir} && mkdir -p ${remoteDir}; fi"
+        }
+
+        project.exec {
+            executable adb.absolutePath
+            args "push", "${localDir.absolutePath}/.", remoteDir
+        }
+
+        logger.lifecycle("Synced choreo assets to ${remoteDir}")
+    }
+}
