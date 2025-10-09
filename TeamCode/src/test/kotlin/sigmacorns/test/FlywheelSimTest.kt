@@ -15,8 +15,7 @@ class FlywheelSimTest {
     fun spinUpApproachesSteadyState() {
         val io = SimIO()
 
-        io.flyWheel0 = 1.0
-        io.flyWheel1 = 1.0
+        io.shooter = 1.0
 
         val state = State(io)
 
@@ -35,8 +34,7 @@ class FlywheelSimTest {
     fun flywheelRespondsToPowerChanges() {
         val io = SimIO()
 
-        io.flyWheel0 = 1.0
-        io.flyWheel1 = 1.0
+        io.shooter = 1.0
 
         repeat(400) {
             io.update()
@@ -44,8 +42,7 @@ class FlywheelSimTest {
 
         val peak = io.flywheelVelocity()
 
-        io.flyWheel0 = 0.0
-        io.flyWheel1 = 0.0
+        io.shooter = 0.0
 
         repeat(200) {
             io.update()
@@ -54,8 +51,7 @@ class FlywheelSimTest {
         val coast = io.flywheelVelocity()
         assertTrue(coast in 0.0..peak, "flywheel should coast down when unpowered")
 
-        io.flyWheel0 = -1.0
-        io.flyWheel1 = -1.0
+        io.shooter = -1.0
 
         repeat(400) {
             io.update()
