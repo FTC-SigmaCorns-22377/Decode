@@ -1,5 +1,6 @@
 package sigmacorns.opmode.test
 
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.joml.Vector2d
 import sigmacorns.State
 import sigmacorns.constants.Network
@@ -16,6 +17,7 @@ import sigmacorns.sim.MecanumState
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+@TeleOp(group = "test")
 class MPCSingleContourTest(io: SigmaIO): SigmaOpMode(io) {
     override fun runOpMode() {
         val contours = listOf(

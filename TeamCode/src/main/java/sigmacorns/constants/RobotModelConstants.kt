@@ -23,7 +23,7 @@ private val bareMotorStallTorque = 0.187
  * Gear ratio used with a Modern Robotics 12v DC motor.
  * See goBilda website for values
  */
-val driveGearRatio = 13.7
+val driveGearRatio = 19.2
 
 val driveMotor = LinearDcMotor(bareMotorTopSpeed/driveGearRatio,bareMotorStallTorque*driveGearRatio)
 
@@ -35,7 +35,7 @@ val drivetrainParameters = MecanumParameters(
     0.2,
     0.2,
     0.048,
-    15.0,
+    10.0,
     0.870966
 )
 

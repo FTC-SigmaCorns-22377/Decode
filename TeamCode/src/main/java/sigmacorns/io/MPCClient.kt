@@ -97,9 +97,9 @@ class MPCClient(
     val parameters: MecanumParameters,
     SOLVER_IP: String = "172.29.0.1",
     SOLVER_PORT: Int = 5000,
-    ROBOT_PORT: Int = 5001,
+    ROBOT_PORT: Int = 22377,
     val sampleLookahead: Int = 3,
-) {
+): AutoCloseable {
     val N: Int = 7
     val NX: Int = 6
     val NU: Int = 4
@@ -255,5 +255,9 @@ class MPCClient(
         }
 
         return xs.map { it.pos }
+    }
+
+    override fun close() {
+        channel.close()
     }
 }

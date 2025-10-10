@@ -78,7 +78,8 @@ class RerunLogging private constructor(
                 )
                 rr.isConnected = false
             } else {
-                rr.isConnected = rr.checkConnection(rr.ptr, 3.0)
+                rr.isConnected = true
+                //rr.isConnected = rr.checkConnection(rr.ptr, 3.0)
             }
             return rr
         }

@@ -1,6 +1,6 @@
 {
  "name":"base",
- "version":2,
+ "version":1,
  "type":"Mecanum",
  "variables":{
   "expressions":{},
@@ -28,12 +28,12 @@
    }
   },
   "mass":{
-   "exp":"10 kg",
-   "val":10.0
+   "exp":"15 kg",
+   "val":15.0
   },
   "inertia":{
-   "exp":"6 kg m ^ 2",
-   "val":6.0
+   "exp":"0.9 kg m ^ 2",
+   "val":0.9
   },
   "gearing":{
    "exp":"13.7",
@@ -70,10 +70,6 @@
    }
   },
   "differentialTrackWidth":{
-   "exp":"22 in",
-   "val":0.5588
-  },
-  "mecanumRollerAngle":{
    "exp":"22 in",
    "val":0.5588
   }

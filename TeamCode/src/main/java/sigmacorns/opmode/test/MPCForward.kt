@@ -5,32 +5,25 @@ import dev.nullftc.choreolib.Choreo
 import dev.nullftc.choreolib.sample.MecanumSample
 import org.joml.Vector2d
 import sigmacorns.State
-import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.io.ContourLoader
 import sigmacorns.io.MPCClient
 import sigmacorns.io.RerunLogging
-import sigmacorns.io.SIM_UPDATE_TIME
-import sigmacorns.io.SigmaIO
-import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MecanumState
-import java.io.File
 import kotlin.time.Duration.Companion.seconds
 
 @TeleOp(group = "test")
-class MPCBenchmarkTest(): SigmaOpMode() {
+class MPCForward: SigmaOpMode() {
     override fun runOpMode() {
         waitForStart()
 
-        val contours = ContourLoader.load(Choreo().loadTrajectory<MecanumSample>("first shoot").get())
+        val contours = ContourLoader.load(Choreo().loadTrajectory<MecanumSample>("forward").get())
 
-        val mpc = MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2)
+        val mpc = MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 4)
 
-        RerunLogging.save("MPCBenchmarkTest", "/sdcard/FIRST/MPCBenchmarkTest.rrd").use { rr ->
-            val sim = SimIO()
-
+        RerunLogging.save("MPCBenchmarkTest", "/sdcard/FIRST/MPCForward.rrd").use { rr ->
             mpc.setTarget(contours)
 
             println(contours.map { it.toString() })
@@ -45,27 +38,26 @@ class MPCBenchmarkTest(): SigmaOpMode() {
                 0.seconds
             )
 
-            sim.setPosition(state.driveTrainPosition)
+            io.setPosition(state.driveTrainPosition)
 
             rr.logState(state)
             rr.logLineStrip("benchmarkPath",contours.map { it.pos.v })
 
-            while (sim.time() < 8.seconds) {
-                val t = sim.time()
-                mpc.update(MecanumState(state.driveTrainVelocity,state.driveTrainPosition),12.0,t)
+            while (io.time() < 8.seconds) {
+                val t = io.time()
+                mpc.update(MecanumState(state.driveTrainVelocity, state.driveTrainPosition),12.0,t)
                 val u  = mpc.getU(t)
 
                 rr.logLineStrip("predictedPath",mpc.getPredictedEvolution().map { it.v })
 
-                sim.driveFL = u[0]
-                sim.driveBL = u[1]
-                sim.driveBR = u[2]
-                sim.driveFR = u[3]
+                io.driveFL = u[0]
+                io.driveBL = u[1]
+                io.driveBR = u[2]
+                io.driveFR = u[3]
 
-                sim.update()
-                Thread.sleep(SIM_UPDATE_TIME.inWholeMilliseconds)
+                io.update()
 
-                state.update(sim)
+                state.update(io)
 
                 rr.logState(state)
 

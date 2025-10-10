@@ -6,6 +6,7 @@ import sigmacorns.constants.Network
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.io.SimIO
+import java.io.File
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -21,6 +22,8 @@ abstract class SigmaOpMode(
 
     fun solverIP() = if (LIMELIGHT_CONNECTED) Network.LIMELIGHT else Network.SIM_MPC
     fun rerunIP() = if (SIM) Network.SIM_RERUN else Network.ROBOT_RERUN
+
+    fun rerunLocation() = if (SIM) File(System.getProperty("user.dir")!!,"rerun") else File("/sdcard/FIRST/rerun")
 
     fun ioLoop(f: (State, Duration) -> Boolean) {
         val state = State(io)

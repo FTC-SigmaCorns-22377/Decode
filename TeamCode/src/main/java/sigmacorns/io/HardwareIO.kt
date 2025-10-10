@@ -14,9 +14,12 @@ import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.TimeSource
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
+import com.qualcomm.robotcore.hardware.DcMotorEx
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
-import org.firstinspires.ftc.robotcore.external.navigation.Pose2D
+import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
+
+typealias FTCPose2d = org.firstinspires.ftc.robotcore.external.navigation.Pose2D
 
 // import odometry from some library
 class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
@@ -27,7 +30,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveBRMotor: DcMotor = hardwareMap.tryGet(DcMotor::class.java,"driveBR") as DcMotor
 
     //shooter
-    private val flyWheelMotor0: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"shooter")
+    private val flyWheelMotor0: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
 
@@ -46,20 +49,39 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var shooter: Double = 0.0
     override var intake: Double = 0.0
 
+    private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
+            getX(DistanceUnit.METER),
+            getY(DistanceUnit.METER),
+            getHeading(AngleUnit.RADIANS)
+    )
+
+    private fun Pose2d.toFtcPose2d(): FTCPose2d = FTCPose2d(
+        DistanceUnit.METER,
+        v.x,
+        v.y,
+        AngleUnit.RADIANS,
+        rot
+    )
+
     override fun position(): Pose2d {
-        TODO("Not yet implemented")
+        return pinpoint?.position?.toPose2d() ?: Pose2d()
     }
 
     override fun velocity(): Pose2d {
-        TODO("Not yet implemented")
+        if (pinpoint == null ) return Pose2d()
+        return Pose2d(
+            pinpoint!!.getVelX(DistanceUnit.METER),
+            pinpoint!!.getVelY(DistanceUnit.METER),
+            pinpoint!!.getHeadingVelocity(UnnormalizedAngleUnit.RADIANS)
+        )
     }
 
     override fun flywheelVelocity(): Double {
-        TODO("Not yet implemented")
+        return flyWheelMotor0?.getVelocity(AngleUnit.RADIANS) ?: 0.0
     }
 
     override fun setPosition(p: Pose2d) {
-        pinpoint?.position = Pose2D(DistanceUnit.METER,p.v.x,p.v.y, AngleUnit.RADIANS,p.rot)
+        pinpoint?.position = p.toFtcPose2d()
     }
 
     override fun update() {
@@ -72,6 +94,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //updating power values of auxilery motors
         flyWheelMotor0?.power = shooter
         intakeMotor?.power = intake
+
+        pinpoint?.update()
     }
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
@@ -85,9 +109,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //setting encoder resolution
         pinpoint?.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
 
+        pinpoint?.setOffsets(11.25,2.75, DistanceUnit.CM)
+
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(
-            GoBildaPinpointDriver.EncoderDirection.FORWARD,
+            GoBildaPinpointDriver.EncoderDirection.REVERSED,
             GoBildaPinpointDriver.EncoderDirection.FORWARD
         )
 
@@ -127,5 +153,3 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
 }
-
-
