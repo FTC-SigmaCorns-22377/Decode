@@ -24,10 +24,10 @@ typealias FTCPose2d = org.firstinspires.ftc.robotcore.external.navigation.Pose2D
 // import odometry from some library
 class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //drive motor declarations
-    private val driveFLMotor: DcMotor = hardwareMap.tryGet(DcMotor::class.java,"driveFL") as DcMotor
-    private val driveBLMotor: DcMotor = hardwareMap.tryGet(DcMotor::class.java, "driveBL") as DcMotor
-    private val driveFRMotor: DcMotor = hardwareMap.tryGet(DcMotor::class.java, "driveFR") as DcMotor
-    private val driveBRMotor: DcMotor = hardwareMap.tryGet(DcMotor::class.java,"driveBR") as DcMotor
+    private val driveFLMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveFL")
+    private val driveBLMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveBL")
+    private val driveFRMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveFR")
+    private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
 
     //shooter
     private val flyWheelMotor0: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
