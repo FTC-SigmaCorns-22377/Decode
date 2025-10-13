@@ -16,7 +16,8 @@ class RerunLogging private constructor(
     private external fun save(name: String, path: String): Long
     private external fun destroy(rec: Long)
     private external fun logState(connection: Long, data: FloatArray)
-    private external fun logInput(connection: Long, data: FloatArray)
+    private external fun logInputs(connection: Long, data: FloatArray)
+    //private external fun logDouble(connection: Long, name: String, value: Double)
     private external fun logLineStrip3D(connection: Long, name: String, data: FloatArray)
     private external fun logImage(
         connection: Long,
@@ -78,8 +79,7 @@ class RerunLogging private constructor(
                 )
                 rr.isConnected = false
             } else {
-                rr.isConnected = true
-                //rr.isConnected = rr.checkConnection(rr.ptr, 3.0)
+                rr.isConnected = rr.checkConnection(rr.ptr, 3.0)
             }
             return rr
         }
@@ -96,6 +96,20 @@ class RerunLogging private constructor(
     fun logState(state: State) {
         withConnection { handle ->
             logState(handle, state.toFloatArray())
+        }
+    }
+
+    fun logInputs(io: SigmaIO) {
+        withConnection { handle ->
+            logInputs(handle, floatArrayOf(
+                io.driveFL.toFloat(), io.driveBL.toFloat(), io.driveBR.toFloat(), io.driveFR.toFloat()
+            ))
+        }
+    }
+
+    fun logScalar(name: String, value: Number) {
+        withConnection { handle ->
+            //logDouble(handle,name, value.toDouble())
         }
     }
 

@@ -109,7 +109,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //setting encoder resolution
         pinpoint?.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
 
-        pinpoint?.setOffsets(11.25,2.75, DistanceUnit.CM)
+        pinpoint?.setOffsets(9.5,-9.5, DistanceUnit.CM)
 
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(

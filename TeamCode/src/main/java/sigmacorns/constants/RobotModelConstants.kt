@@ -35,8 +35,8 @@ val drivetrainParameters = MecanumParameters(
     0.2,
     0.2,
     0.048,
-    10.0,
-    0.870966
+    15.0,
+    0.5
 )
 
 val flywheelGearRatio = 13.7

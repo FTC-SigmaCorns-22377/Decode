@@ -345,6 +345,21 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_logInputs(
 
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logScalar(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    value: jdouble,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = string_from_jni(&mut env, &name).unwrap();
+
+    rec.log(name.as_str(), &rerun::Scalars::single(value)).unwrap();
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
 pub extern "C" fn Java_sigmacorns_io_RerunLogging_logLineStrip3D(
     mut env: JNIEnv,
     _class: JClass,

@@ -18,10 +18,10 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @TeleOp(group = "test")
-class MPCSingleContourTest(io: SigmaIO): SigmaOpMode(io) {
+class MPCSingleContourTest(): SigmaOpMode() {
     override fun runOpMode() {
         val contours = listOf(
-            Contour(Pose2d(0.0,0.0,0.0), Pose2d(0.5,0.0,0.0),0.0,100.0)
+            Contour(Pose2d(0.0,0.0,0.0), Pose2d(0.5,0.0,0.0),0.0,1.0, Vector2d(0.0,0.0))
         )
 
         val mpc = MPCClient(
@@ -29,9 +29,9 @@ class MPCSingleContourTest(io: SigmaIO): SigmaOpMode(io) {
             if (LIMELIGHT_CONNECTED) Network.LIMELIGHT else Network.SIM_MPC
         )
 
-        RerunLogging.connect("MPCBenchmarkTest","rerun+http://127.0.0.1:9876/proxy").use { rr ->
-            val sim = SimIO()
+        val voltageSensor = hardwareMap.voltageSensor.iterator().next()
 
+        RerunLogging.save("MPCSingleContourTest","/sdcard/FIRST/MPCSingleContourTest.rrd").use { rr ->
             mpc.setTarget(contours)
 
             val state = State(
@@ -44,26 +44,38 @@ class MPCSingleContourTest(io: SigmaIO): SigmaOpMode(io) {
                 0.seconds
             )
 
-            sim.setPosition(state.driveTrainPosition)
+            io.setPosition(state.driveTrainPosition)
 
-            while (sim.time() < 5.seconds) {
-                val t = sim.time()
-                mpc.update(MecanumState(state.driveTrainVelocity,state.driveTrainPosition),12.0,t)
+            waitForStart()
+
+            while (opModeIsActive() ) {
+                val t = io.time()
+
+                println("t=$t")
+                mpc.update(MecanumState(state.driveTrainVelocity,state.driveTrainPosition),voltageSensor.voltage,t)
                 val u  = mpc.getU(t)
 
-                sim.driveFL = u[0]
-                sim.driveBL = u[1]
-                sim.driveBR = u[2]
-                sim.driveFR = u[3]
+                io.driveFL = u[0]
+                io.driveBL = u[1]
+                io.driveBR = u[2]
+                io.driveFR = u[3]
 
-                sim.update()
-                Thread.sleep(SIM_UPDATE_TIME.inWholeMilliseconds)
+                io.update()
 
-                state.update(sim)
+                state.update(io)
 
                 rr.logState(state)
-
+                rr.logInputs(io)
             }
+
+            io.driveFL = 0.0
+            io.driveBL = 0.0
+            io.driveBR = 0.0
+            io.driveFR = 0.0
+
+            io.update()
+
+            mpc.close()
         }
     }
 }

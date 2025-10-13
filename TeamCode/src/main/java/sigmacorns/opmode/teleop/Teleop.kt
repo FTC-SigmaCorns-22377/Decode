@@ -14,22 +14,20 @@ import sigmacorns.sim.MecanumDynamics
 @TeleOp
 class Teleop(): SigmaOpMode() {
 
-    var spinUpToggle = 0
     val mecanumDynamics = MecanumDynamics(drivetrainParameters)
-    var dShooterPower = io.shooter - spinUpToggle
-//    var shooterExpectedPower = 0
+    var spinUpToggle = 0
 
     @Throws(InterruptedException::class)
     override fun runOpMode() {
 
+        val voltageSensor = hardwareMap.voltageSensor.iterator().next()
         waitForStart()
 
-        io.driveFR = 1.0
-        io.update()
-        sleep(1000)
-
         while (opModeIsActive()) {
-            io.update()
+            val voltage = voltageSensor.voltage
+
+            val dVoltage = 12 / voltage
+
             telemetry.addLine("SigmusPrime Ready to Go")
             telemetry.addLine("DriveFl Power ${io.driveFL}")
             telemetry.addLine("DriveFR Power ${io.driveFR}")
@@ -52,14 +50,7 @@ class Teleop(): SigmaOpMode() {
             )
             telemetry.update()
 
-            val voltage = hardwareMap.voltageSensor.iterator().next().voltage
-            val dVoltage = 12 / voltage
-
-            val robotPower = Pose2d(
-                -gamepad1.left_stick_y.toDouble(),
-                -gamepad1.left_stick_x.toDouble(),
-                -gamepad1.right_stick_x.toDouble()
-            )
+            val robotPower = Pose2d(-gamepad1.left_stick_y.toDouble(), -gamepad1.left_stick_x.toDouble(), -gamepad1.right_stick_x.toDouble())
             val maxSpeed = mecanumDynamics.maxSpeed()
             val robotVelocities = maxSpeed.componentMul(robotPower)
             val wheelVelocities = mecanumDynamics.mecanumInverseVelKinematics(robotVelocities)
@@ -87,31 +78,30 @@ class Teleop(): SigmaOpMode() {
             io.intake = gamepad1.left_trigger.toDouble() * dVoltage
 
             if (gamepad1.left_bumper) { //ejecting the ball
-                io.shooter = 0.4 * dVoltage
-                io.intake = 1.0 * dVoltage
+                io.shooter = 1.0 * dVoltage
+                io.intake = -1.0 * dVoltage
             }
             if (gamepad1.left_trigger > 0.1 * dVoltage && gamepad1.right_trigger < 0.1 * dVoltage){ //intaking
-                    io.shooter = -1.0 * dVoltage
+                io.shooter = 0.4 * dVoltage
             }
 
             //presets
-            if (gamepad1.dpad_up) {
+            if (gamepad1.dpadUpWasPressed()) {
                 spinUpToggle = if (spinUpToggle == 1) 0 else 1
-            } else if (gamepad1.dpad_down){
+            } else if (gamepad1.dpadDownWasPressed()){
                 spinUpToggle = if (spinUpToggle == 2) 0 else 2
             }
+
+            val spinUpClose = 0.6
+            val spinUpFar = 0.79
+
             if (spinUpToggle == 1 ) {
-                io.shooter = -0.7 * dVoltage
+                io.shooter = -spinUpClose * dVoltage
             } else if (spinUpToggle == 2 ){
-                io.shooter = -1.0 * dVoltage
+                io.shooter = -spinUpFar * dVoltage
             }
 
-//            if (0.05 > dShooterPower && dShooterPower < -0.05) {
-//                //shooter can shoot
-//            } else {
-//                //shooter can't shoot
-//            }
-
+            io.update()
         }
     }
 }
