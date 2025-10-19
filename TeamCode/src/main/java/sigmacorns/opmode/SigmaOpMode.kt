@@ -66,6 +66,6 @@ abstract class SigmaOpMode(
         private val SIM_WAIT_INTERVAL: Duration = 10.milliseconds
 
         var SIM: Boolean = false
-        var LIMELIGHT_CONNECTED: Boolean = false
+        var LIMELIGHT_CONNECTED: Boolean = true
     }
 }
