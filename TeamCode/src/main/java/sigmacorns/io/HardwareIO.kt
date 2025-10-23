@@ -33,6 +33,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val flyWheelMotor0: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
+//turret
+    private val turretMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"turret")
+    private val turretServo: Servo = hardwareMap.get(Servo::class.java,"turretAngle")
+    //spindexer
+    private val spindexerMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"spindexer")
+    //breakServo
+    private val breakServo: Servo = hardwareMap.get(Servo::class.java,"breakPower")
 
     //sensors
     private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
@@ -48,6 +55,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var driveBR: Double = 0.0
     override var shooter: Double = 0.0
     override var intake: Double = 0.0
+    override var turret: Double = 0.0
+    override var turretAngle: Double = 0.0
+    override var spindexer: Double = 0.0
+    override var breakPower: Double = 0.0
 
     private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
             getX(DistanceUnit.METER),
@@ -91,9 +102,15 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBLMotor.power = driveBL
         driveBRMotor.power = driveBR
 
+
         //updating power values of auxilery motors
         flyWheelMotor0?.power = shooter
         intakeMotor?.power = intake
+        turretMotor.power = turret
+        spindexerMotor.power = spindexer
+        //updating the positions of all the servos
+        turretServo.position = turretAngle
+        breakServo.position = breakPower
 
         pinpoint?.update()
     }

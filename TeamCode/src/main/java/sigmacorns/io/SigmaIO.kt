@@ -11,16 +11,24 @@ interface SigmaIO {
     var driveFR: Double
     var driveBR: Double
 
-    //shooter
+    //shooter power
     var shooter: Double
     //intake
     var intake: Double // might just be human fed and we wont end up needing this
-
-
+    //turret power
+    var turret: Double // The motor that rotates the turrent to keep it lined up with the goal
+    //turretservo value
+    var turretAngle: Double // the value that controls the angle of the turret is shooting at
+    //spindexer power
+    var spindexer: Double //the tick value of how much we need the spindexer to move in order to get to cycle to the next ball in the spindexer
+    //break servo
+    var breakPower: Double //the value that contols the position of the servo to engage or disengage the servo
     /* function to get robo position
     position( drive base)
     velocity(drive base)
      */
+
+
 
     fun position(): Pose2d
     fun velocity(): Pose2d
