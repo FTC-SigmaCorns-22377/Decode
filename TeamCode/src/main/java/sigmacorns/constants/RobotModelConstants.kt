@@ -75,3 +75,9 @@ const val BALL_LAUNCH_HEIGHT_METERS = 0.12
  * Magnitude of gravitational acceleration applied to launched projectiles in the simulator.
  */
 const val BALL_GRAVITY_MAGNITUDE = 9.81
+
+/**
+ * Time it takes for a ball to come from the spindexer to launch.
+ */
+
+const val TIME_LAG_LAUNCH = 0.00
