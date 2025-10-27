@@ -6,6 +6,8 @@ import org.joml.minus
 import sigmacorns.constants.FieldZones.artifactRadius
 import sigmacorns.constants.FieldZones.goalPosition
 import sigmacorns.constants.TIME_LAG_LAUNCH
+import kotlin.math.atan
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -22,5 +24,16 @@ fun aimingshooterconstantturretAngle(state: State): Double {
     val denominator = (denominatorPartTwo)*(denominatorPartOne)
     val finalSubstitution = numerator/denominator
     return sqrt(finalSubstitution)
+
+}
+
+fun aimingshooterconstantvelocity(state: State, ballVelocity: Double): Double{
+    val directionVector = goalPosition - (Vector3d(state.driveTrainPosition.v, 0.0) - (Vector3d(state.driveTrainVelocity.v, 0.0).mul(TIME_LAG_LAUNCH)))
+    val driveTrain2dVector = Vector2d(directionVector.x, directionVector.y)
+    val insidesqrt = ballVelocity.pow(4) - (9.81)*(9.81*(driveTrain2dVector.length().pow(2) + 2*ballVelocity.pow(2)*(directionVector.z())))
+    val numerator = ballVelocity.pow(2) + insidesqrt.pow(0.5)
+    val denominator = (9.81) * driveTrain2dVector.length()
+    val driveTrainAngle = atan2(numerator, denominator)
+    return driveTrainAngle
 
 }
