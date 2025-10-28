@@ -4,6 +4,8 @@ import dev.nullftc.choreolib.sample.MecanumSample
 import dev.nullftc.choreolib.trajectory.Trajectory
 import org.joml.Vector2d
 import org.joml.minus
+import org.joml.plus
+import org.joml.times
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
 import sigmacorns.sim.MecanumDynamics
@@ -20,9 +22,12 @@ import java.nio.channels.Selector
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sign
+import kotlin.math.sin
 import kotlin.math.withSign
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -41,79 +46,95 @@ data class Contour(
     fun toArray(): DoubleArray = doubleArrayOf(pos.v.x,pos.v.y,pos.rot,vel.v.x,vel.v.y,vel.rot,tangent,r,a.x,a.y)
 }
 
-object ContourLoader {
-    fun load(traj: Trajectory<MecanumSample>): List<Contour> {
-        val samples = traj.samples
-
-        val wpts = mutableListOf<Contour>()
-        var lastTheta = samples.first().heading
-
-        for (s in samples) {
-            val p = Vector2d(s.x, s.y)
-            val v = Vector2d(s.vx, s.vy)
-            val a = Vector2d(s.ax, s.ay)
-
-            var cross = v[0] * a[1] - v[1] * a[0]
-            if (abs(cross) < 0.01) {
-                cross = 0.01.withSign(cross)
-            }
-
-            var r = hypot(v[0], v[1]).pow(3) / cross
-
-            if (abs(r) > 1000) {
-                r = 1000.0.withSign(r)
-            }
-            if (abs(r) < 0.05) {
-                r = 0.05.withSign(r)
-            }
-
-            var theta = s.heading
-
-            // Unwrap heading so it's continuous
-            while (theta - lastTheta > PI) {
-                theta -= PI * 2.0
-            }
-            while (theta - lastTheta < -PI) {
-                theta += PI * 2.0
-            }
-
-            lastTheta = theta
-
-            wpts.add(
-                Contour(
-                    Pose2d(
-                        p,
-                        theta,
-                    ),
-                    Pose2d(
-                        v,
-                        s.omega
-                    ),
-                    atan2(v[1], v[0]),
-                    -r,
-                    Vector2d(s.ax,s.ay)
-                )
-            )
-        }
-
-        return wpts
-    }
-}
-
 class MPCClient(
     val parameters: MecanumParameters,
     SOLVER_IP: String = "172.29.0.1",
     SOLVER_PORT: Int = 5000,
     ROBOT_PORT: Int = 22377,
     val sampleLookahead: Int = 0,
-    val preIntegrate: Duration = 40.milliseconds
+    val preIntegrate: Duration = 30.milliseconds
 ): AutoCloseable {
-    val N: Int = 7
-    val NX: Int = 6
-    val NU: Int = 4
-    val NT: Int = 10
-    val NP: Int = 7
-    val DT: Duration = 40.milliseconds
+
+    companion object {
+        val N: Int = 7
+        val NX: Int = 6
+        val NU: Int = 4
+        val NT: Int = 10
+        val NP: Int = 7
+        val DT: Duration = 40.milliseconds
+
+        val horizon = DT*N
+
+        fun load(traj: Trajectory<MecanumSample>): List<Contour> {
+            if (traj.samples.isEmpty()) return emptyList()
+
+            val samples = traj.samples
+
+            val wpts = mutableListOf<Contour>()
+            var lastTheta = samples.first().heading
+
+            for ((i,s) in samples.withIndex()) {
+                val p = Vector2d(s.x, s.y)
+                val v = Vector2d(s.vx, s.vy)
+                val a = Vector2d(s.ax, s.ay)
+
+                var cross = v[0] * a[1] - v[1] * a[0]
+                if (abs(cross) < 0.01) {
+                    cross = 0.01.withSign(cross)
+                }
+
+                var r = hypot(v[0], v[1]).pow(3) / cross
+
+                if (abs(r) > 1000) {
+                    r = 1000.0.withSign(r)
+                }
+                if (abs(r) < 0.05) {
+                    r = 0.05.withSign(r)
+                }
+
+                var theta = s.heading
+
+                // Unwrap heading so it's continuous
+                while (theta - lastTheta > PI) {
+                    theta -= PI * 2.0
+                }
+                while (theta - lastTheta < -PI) {
+                    theta += PI * 2.0
+                }
+
+                lastTheta = theta
+
+                // use average acceleration over the time horizon instead of the instantaneous acceleration
+                val endHorizonSample = traj.sampleAt(s.timestamp + horizon.toDouble(DurationUnit.SECONDS)) ?: traj.getFinalSample()!!
+
+                var ax = (endHorizonSample.vx - s.vx)/(endHorizonSample.timestamp-s.timestamp)
+                var ay = (endHorizonSample.vy - s.vy)/(endHorizonSample.timestamp-s.timestamp)
+
+                if(s == traj.getFinalSample()) {
+                    ax = 0.0
+                    ay = 0.0
+                }
+
+                wpts.add(
+                    Contour(
+                        Pose2d(
+                            p,
+                            theta,
+                        ),
+                        Pose2d(
+                            v,
+                            s.omega
+                        ),
+                        atan2(v[1], v[0]),
+                        -r,
+                        Vector2d(ax,ay)
+                    )
+                )
+            }
+
+            return wpts
+        }
+    }
 
     val model = MecanumDynamics(parameters)
 
@@ -123,9 +144,11 @@ class MPCClient(
     var predictedEvolution: List<MecanumState> = emptyList()
         private set
 
+    var path: List<Contour>? = null
+        private set
+
     private var sentTargetContours: MutableList<Pair<Long, Contour>> = mutableListOf()
     private var curTime = 0.seconds
-
 
     private val HEADER_SIZE: Int = 4 + 2 + 2 + 4 + 8
     private val DOUBLE_SIZE: Int = 8
@@ -134,7 +157,6 @@ class MPCClient(
 
     private var x0: MecanumState? = null
     private var V: Double = parameters.motor.vRef
-    private var path: List<Contour>? = null
 
     private var latestU: DoubleArray = DoubleArray(N*NU)
     private var latestUTime = 0L
@@ -151,8 +173,35 @@ class MPCClient(
         channel.register(selector, SelectionKey.OP_READ)
     }
 
+    fun contourErr(contour: Contour, p: Vector2d): Pair<Double, Double> {
+        val cx = contour.pos.v[0] + contour.r * sin(contour.tangent)
+        val cy = contour.pos.v[1] - contour.r * cos(contour.tangent)
+
+        val dx = p[0] - cx
+        val dy = p[1] - cy
+
+        val drx = cos(-contour.tangent) * dx - sin(-contour.tangent) * dy
+        val dry = sin(-contour.tangent) * dx + cos(-contour.tangent) * dy
+
+        val progress = contour.r * (sign(contour.r) * (Math.PI / 2.0) - atan2(dry, drx))
+        val err = abs(contour.r) - hypot(dx, dy)
+
+        return Pair(progress, err)
+    }
+
     private fun findContour(path: List<Contour>, state: DoubleArray): Contour {
         val p = Vector2d(state[3],state[4])
+
+        // select the contour with the lowest normal error
+//        val i = path.windowed(2, partialWindows = true).withIndex().minBy { (i,it) ->
+//            val last = it.size == 1
+//            // only consider the part of the arc before the start of the next arc
+//            val maxProgress = if(last) Double.MAX_VALUE else contourErr(it[0],it[1].pos.v).first
+//            val err = contourErr(it[0], p)
+//
+//            if((err.first <= maxProgress) && (err.first >= 0 || i == 0) || last) abs(err.second) else Double.MAX_VALUE
+//        }.index
+//        println("I=$i")
 
         val i = path.withIndex().minBy { (p-it.value.pos.v).lengthSquared() }.index
 
@@ -254,6 +303,8 @@ class MPCClient(
     private fun getArray(buf: ByteBuffer, arr: DoubleArray) {
         for (i in arr.indices) arr[i] = buf.getDouble()
     }
+
+    fun setTarget(traj: Trajectory<MecanumSample>) = setTarget(load(traj))
 
     fun setTarget(path: List<Contour>) {
         this.path = path
