@@ -13,7 +13,6 @@ import sigmacorns.sim.MecanumDynamics
 
 @TeleOp
 class Teleop(): SigmaOpMode() {
-
     val mecanumDynamics = MecanumDynamics(drivetrainParameters)
     var spinUpToggle = 0
 
