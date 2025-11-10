@@ -18,6 +18,9 @@ import com.qualcomm.robotcore.hardware.DcMotorEx
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
+import org.joml.Vector2d
+import kotlin.math.cos
+import kotlin.math.sin
 
 typealias FTCPose2d = org.firstinspires.ftc.robotcore.external.navigation.Pose2D
 
@@ -33,10 +36,17 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val flyWheelMotor0: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
+//turret
+    private val turretMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"turret")
+    private val turretServo: Servo = hardwareMap.get(Servo::class.java,"turretAngle")
+    //spindexer
+    private val spindexerMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"spindexer")
+    //breakServo
+    private val breakServo: Servo = hardwareMap.get(Servo::class.java,"breakPower")
 
     //sensors
     private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
-    val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limeLight")
+    val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
     val imu: IMU? = hardwareMap.tryGet(IMU::class.java,"imu")
 
     //odometry
@@ -48,6 +58,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var driveBR: Double = 0.0
     override var shooter: Double = 0.0
     override var intake: Double = 0.0
+    override var turret: Double = 0.0
+    override var turretAngle: Double = 0.0
+    override var spindexer: Double = 0.0
+    override var breakPower: Double = 0.0
 
     private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
             getX(DistanceUnit.METER),
@@ -64,7 +78,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     )
 
     override fun position(): Pose2d {
-        return pinpoint?.position?.toPose2d() ?: Pose2d()
+        val sensorPose = pinpoint?.position?.toPose2d()
+        return when (sensorPose) {
+            null -> posOffset
+            else -> posOffset.compose(sensorPose)
+        }
     }
 
     override fun velocity(): Pose2d {
@@ -80,8 +98,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         return flyWheelMotor0?.getVelocity(AngleUnit.RADIANS) ?: 0.0
     }
 
+    var posOffset = Pose2d()
+
     override fun setPosition(p: Pose2d) {
-        pinpoint?.position = p.toFtcPose2d()
+        val sensorPose = pinpoint?.position?.toPose2d()
+        posOffset = when (sensorPose) {
+            null -> p
+            else -> p
+        }
     }
 
     override fun update() {
@@ -91,9 +115,15 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBLMotor.power = driveBL
         driveBRMotor.power = driveBR
 
+
         //updating power values of auxilery motors
         flyWheelMotor0?.power = shooter
         intakeMotor?.power = intake
+        turretMotor.power = turret
+        spindexerMotor.power = spindexer
+        //updating the positions of all the servos
+        turretServo.position = turretAngle
+        breakServo.position = breakPower
 
         pinpoint?.update()
     }
@@ -119,6 +149,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         //resetting the positions for the IMU
         pinpoint?.resetPosAndIMU()
+    }
+
+    fun configureLimelight() {
+        limelight?.pipelineSwitch(0);
+        limelight?.start();
     }
 
     init {
@@ -153,3 +188,20 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
 }
+
+private fun Pose2d.compose(other: Pose2d): Pose2d {
+    val rotated = other.v.rotate(rot)
+    rotated.add(v)
+    return Pose2d(rotated, rot + other.rot)
+}
+
+private fun Pose2d.inverse(): Pose2d {
+    val invRot = -rot
+    val invTranslation = Vector2d(v).negate().rotate(invRot)
+    return Pose2d(invTranslation, invRot)
+}
+
+fun Vector2d.rotate(theta: Double) = Vector2d(
+    cos(theta)*x - sin(theta)*y,
+    sin(theta)*x + cos(theta)*y,
+)

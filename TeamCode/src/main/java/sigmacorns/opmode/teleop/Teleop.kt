@@ -1,19 +1,14 @@
 package sigmacorns.opmode.teleop
 
-import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import com.qualcomm.robotcore.hardware.DcMotor
-import com.qualcomm.robotcore.hardware.DcMotorSimple
 import org.joml.times
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MecanumDynamics
 
 @TeleOp
 class Teleop(): SigmaOpMode() {
-
     val mecanumDynamics = MecanumDynamics(drivetrainParameters)
     var spinUpToggle = 0
 

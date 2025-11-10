@@ -32,7 +32,7 @@ class MPCSingleContourTest(): SigmaOpMode() {
         val voltageSensor = hardwareMap.voltageSensor.iterator().next()
 
         RerunLogging.save("MPCSingleContourTest","/sdcard/FIRST/MPCSingleContourTest.rrd").use { rr ->
-            mpc.setTarget(contours)
+            mpc.setTargetContours(contours)
 
             val state = State(
                 0.0,

@@ -6,7 +6,7 @@ import org.jetbrains.kotlinx.kandy.dsl.plot
 import org.jetbrains.kotlinx.kandy.letsplot.export.save
 import org.jetbrains.kotlinx.kandy.letsplot.layers.path
 import org.junit.jupiter.api.Test
-import sigmacorns.io.ContourLoader
+import sigmacorns.io.MPCClient
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -15,7 +15,7 @@ import kotlin.math.sin
 class ContourGenTest {
     @Test
     fun testParsing() {
-        val contours = ContourLoader.load(Choreo().loadTrajectory<MecanumSample>("New Path (2)").get())
+        val contours = MPCClient.load(Choreo().loadTrajectory<MecanumSample>("New Path (2)").get())
 
         plot {
             path {
