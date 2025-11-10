@@ -1,9 +1,15 @@
 package sigmacorns.opmode
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode
+import com.qualcomm.robotcore.eventloop.opmode.OpMode
+import com.qualcomm.robotcore.hardware.Gamepad
+import com.qualcomm.robotcore.robocol.TelemetryMessage
+import org.firstinspires.ftc.robotcore.internal.opmode.OpModeServices
+import org.firstinspires.ftc.robotcore.internal.opmode.TelemetryImpl
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.io.HardwareIO
+import sigmacorns.io.RerunLogging
 import sigmacorns.io.SigmaIO
 import sigmacorns.io.SimIO
 import java.io.File
@@ -14,14 +20,40 @@ import kotlin.time.Duration.Companion.seconds
 abstract class SigmaOpMode(
     private val providedIO: SigmaIO? = null
 ): LinearOpMode() {
+
     val io: SigmaIO by lazy {
         providedIO ?: hardwareMap?.let { HardwareIO(it) } ?: SimIO()
     }
 
-    private val internalState by lazy { OpModeReflection(this) }
+    private val internalState = OpModeReflection(this)
+
+    init {
+        if (SIM) {
+            super.gamepad1 = Gamepad()
+            super.gamepad2 = Gamepad()
+            super.telemetry = TelemetryImpl(this)
+
+            val services = object : OpModeServices {
+                override fun refreshUserTelemetry(
+                    msg: TelemetryMessage?,
+                    sInterval: Double
+                ) {
+                    println("TELEMETRY: ${msg?.dataStrings}")
+                }
+
+                override fun requestOpModeStop(opModeToStopIfActive: OpMode?) {
+                }
+
+            }
+
+            internalState.internalOpModeServicesField.set(this,services)
+        }
+    }
 
     fun solverIP() = if (LIMELIGHT_CONNECTED) Network.LIMELIGHT else Network.SIM_MPC
     fun rerunIP() = if (SIM) Network.SIM_RERUN else Network.ROBOT_RERUN
+
+    fun rerunSink(name: String) = if(SIM) RerunLogging.connect(name, Network.SIM_RERUN) else RerunLogging.save(name, "/sdcard/FIRST/$name.rrd")
 
     fun rerunLocation() = if (SIM) File(System.getProperty("user.dir")!!,"rerun") else File("/sdcard/FIRST/rerun")
 
@@ -51,6 +83,7 @@ abstract class SigmaOpMode(
         private val opModeInternalClass = Class.forName("com.qualcomm.robotcore.eventloop.opmode.OpModeInternal")
         private val linearOpModeClass = Class.forName("com.qualcomm.robotcore.eventloop.opmode.LinearOpMode")
         private val isStartedField = opModeInternalClass.getDeclaredField("isStarted").apply { isAccessible = true }
+        val internalOpModeServicesField = opModeInternalClass.getDeclaredField("internalOpModeServices").apply { isAccessible = true }
         private val userMonitoredForStartField = linearOpModeClass.getDeclaredField("userMonitoredForStart").apply { isAccessible = true }
 
         fun isStarted(): Boolean = isStartedField.getBoolean(target)

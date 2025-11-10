@@ -10,10 +10,17 @@ import sigmacorns.constants.drivetrainParameters
 import sigmacorns.io.MPCClient
 import sigmacorns.io.RerunLogging
 import sigmacorns.io.SIM_UPDATE_TIME
+import sigmacorns.io.SolverRequestType
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MecanumState
 import kotlin.time.Duration.Companion.seconds
+
+
+enum class LaunchZones(val launchSpeed: Double) {
+    Close(1.0),
+    Far(2.0)
+}
 
 @TeleOp(group = "test")
 class MPCForward: MPCTest("forward")
@@ -29,12 +36,12 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
         val voltageSensor = hardwareMap?.voltageSensor?.iterator()?.next()
 
         MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2).use { mpc ->
-            RerunLogging.save("MPCTest($trajName)", "/sdcard/FIRST/MPCTest($trajName).rrd").use { rr ->
-                mpc.setTarget(traj)
+            rerunSink("MPCTest($trajName)").use { rr ->
+                mpc.setTarget(traj, SolverRequestType.CONTOURING)
 
                 val state = State(
                     0.0,
-                    mpc.path!![0].pos,
+                    mpc.startPose(),
                     Pose2d(),
                     Pose2d(Vector2d(), 0.0),
                     0.0,
@@ -45,10 +52,10 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
 
                 waitForStart()
 
-                io.setPosition(mpc.path!![0].pos)
+                io.setPosition(mpc.startPose())
 
                 rr.logState(state)
-                rr.logLineStrip("path/pos", mpc.path!!.map { it.pos.v })
+                //rr.logLineStrip("path/pos", mpc.path!!.map { it.pos.v })
 
                 while (opModeIsActive()) {
                     val t = io.time()
