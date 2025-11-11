@@ -1,5 +1,6 @@
 package sigmacorns
 
+
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.FlywheelState
@@ -11,10 +12,6 @@ import kotlin.time.DurationUnit
 val globalFieldState = FieldState()
 
 data class FieldState (
-    var motif: Int //motif can only equal = 21 (GPP), 22 (PGP), or 23 (PPG)
-) {
-    constructor(): this(
-        motif = 0
-    ) {
-    }
-}
+    var motif: Int = 0, //motif can only equal = 21 (GPP), 22 (PGP), or 23 (PPG)
+    var ramp: IntArray = IntArray(9)
+)

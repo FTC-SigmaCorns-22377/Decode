@@ -3,6 +3,7 @@ package sigmacorns.opmode.teleop
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.joml.times
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.globalFieldState
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MecanumDynamics
@@ -17,6 +18,8 @@ class Teleop(): SigmaOpMode() {
 
         val voltageSensor = hardwareMap.voltageSensor.iterator().next()
         waitForStart()
+
+        var rampArray = globalFieldState.ramp
 
         while (opModeIsActive()) {
             val voltage = voltageSensor.voltage
@@ -95,6 +98,41 @@ class Teleop(): SigmaOpMode() {
             } else if (spinUpToggle == 2 ){
                 io.shooter = -spinUpFar * dVoltage
             }
+
+            if (gamepad2.aWasPressed()) {
+                for (i in 0 until 9) {
+                    if (rampArray[i] == 0) {
+                        rampArray[i] = 1
+                        break
+                    }
+                }
+            }
+            if (gamepad2.bWasPressed()) {
+                for (i in 0 until 9) {
+                    if (rampArray[i] == 0) {
+                        rampArray[i] = 2
+                        break
+                    }
+                }
+            }
+            if (gamepad2.xWasPressed()) {
+                for (i in 9 downTo 0) {
+                    if (rampArray[i] != 0) {
+                        rampArray[i] = 0
+                        break
+                    }
+                }
+            }
+            if (gamepad2.yWasPressed()) {
+                for (i in 0 until 9) {
+                    if (rampArray[i] != 0) {
+                        rampArray[i] = 0
+                    }
+                }
+            }
+
+            telemetry.addData("Ramp",rampArray)
+            telemetry.update()
 
             io.update()
         }
