@@ -8,6 +8,8 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
+val globalFieldState = FieldState()
+
 data class FieldState (
     var motif: Int //motif can only equal = 21 (GPP), 22 (PGP), or 23 (PPG)
 ) {

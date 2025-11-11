@@ -4,6 +4,7 @@ import com.qualcomm.hardware.limelightvision.LLResultTypes.FiducialResult
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import sigmacorns.FieldState
+import sigmacorns.globalFieldState
 import sigmacorns.opmode.SigmaOpMode
 
 
@@ -14,8 +15,6 @@ class MoveForward: SigmaOpMode() {
         val limelight = hardwareMap.get<Limelight3A?>(Limelight3A::class.java, "limelight")
         limelight.setPollRateHz(10) // This sets how often we ask Limelight for data (100 times per second)
         limelight.start() // This tells Limelight to start looking!
-
-        val fieldState = FieldState()
 
         var motifDetected : Boolean = false
 
@@ -48,9 +47,10 @@ class MoveForward: SigmaOpMode() {
                             (id == 23))
                         {
                             motifDetected = true
-                            fieldState.motif = id
+                            globalFieldState.motif = id
                         }
-                        telemetry.addData("Motif ID", fieldState.motif )
+                        telemetry.addData("Motif ID", globalFieldState.motif)
+                        telemetry.update()
                     }
                 }
             }
