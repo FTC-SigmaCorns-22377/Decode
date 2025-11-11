@@ -116,7 +116,7 @@ class Teleop(): SigmaOpMode() {
                 }
             }
             if (gamepad2.xWasPressed()) {
-                for (i in 9 downTo 0) {
+                for (i in 8 downTo 0) {
                     if (rampArray[i] != 0) {
                         rampArray[i] = 0
                         break
