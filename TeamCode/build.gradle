@@ -60,7 +60,7 @@ afterEvaluate {
 
     tasks.matching { it.name.startsWith("cargoBuild") }.configureEach {
         // Skip Gradle's up-to-date checks so cargo always produces a fresh shared object.
-        outputs.upToDateWhen { false }
+        //outputs.upToDateWhen { false }
     }
 
 //    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
