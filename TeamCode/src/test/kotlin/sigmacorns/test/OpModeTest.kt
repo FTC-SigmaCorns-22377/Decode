@@ -14,7 +14,7 @@ class OpModeTest {
     fun opModeTest() {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
-        val opmode = MPCForward()
+        val opmode = DrivetrainModelValidationTest()
 
         opmode.runOpMode()
     }

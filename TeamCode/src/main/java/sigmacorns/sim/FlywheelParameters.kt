@@ -11,7 +11,7 @@ package sigmacorns.sim
 data class FlywheelParameters(
     val motor: LinearDcMotor,
     val inertia: Double,
-    val viscousFriction: Double = 0.0,
+    val viscousFriction: Double = 0.0
 ) {
     /**
      * The mechanical time constant for the flywheel system

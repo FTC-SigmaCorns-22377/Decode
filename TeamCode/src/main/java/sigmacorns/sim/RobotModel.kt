@@ -1,5 +1,6 @@
 package sigmacorns.sim
 
+import androidx.lifecycle.viewmodel.CreationExtras
 import org.joml.Vector3d
 import sigmacorns.constants.BALL_EXIT_SPEED_PER_RADIAN
 import sigmacorns.constants.BALL_GRAVITY_MAGNITUDE
@@ -7,6 +8,8 @@ import sigmacorns.constants.BALL_LAUNCH_ANGLE_RADIANS
 import sigmacorns.constants.BALL_LAUNCH_HEIGHT_METERS
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelParameters
+import sigmacorns.constants.spindexerParameters
+import sigmacorns.sim.SpindexerState
 import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
 import kotlin.math.cos
@@ -17,6 +20,7 @@ private const val PROJECTILE_DT: Double = 0.0005
 
 const val MECANUM_DT: Double = 0.0005
 const val FLYWHEEL_DT: Double = 0.0002
+const val SPINDEXER_DT: Double = 0.002
 
 private data class Projectile(
     val id: Int,
@@ -30,6 +34,11 @@ private data class Projectile(
 class RobotModel {
 
     var flywheelState = FlywheelState()
+    var spindexerState = SpindexerState(
+        0.0,
+        listOf(Balls.Empty,Balls.Empty,Balls.Empty),
+        0.0
+    )
 
     /**
      * Current state of the mecanum drivetrain.
@@ -43,6 +52,7 @@ class RobotModel {
     // dynamics of the drivetrain
     val drivetrain = MecanumDynamics(drivetrainParameters)
     val flywheel = FlywheelDynamics(flywheelParameters)
+    val spindexer = SpindexerDynamics(spindexerParameters)
 
     private val projectiles = mutableListOf<Projectile>()
     private var nextProjectileId = 0
@@ -70,6 +80,8 @@ class RobotModel {
         val flywheelInputs = doubleArrayOf(io.shooter)
         flywheelState = flywheel.integrate(t, FLYWHEEL_DT, flywheelInputs, flywheelState)
 
+        val spindexerInputs = doubleArrayOf(io.spindexer)
+        spindexerState = spindexer.integrate(t,SPINDEXER_DT,spindexerInputs,spindexerState)
         integrateProjectiles(t)
     }
 

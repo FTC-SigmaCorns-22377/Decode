@@ -3,6 +3,7 @@ package sigmacorns.constants
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
+import sigmacorns.sim.SpindexerParameters
 import kotlin.math.PI
 
 // specs of a goBilda motor without a gearbox (Modern Robotics 12v DC motor)
@@ -12,6 +13,7 @@ import kotlin.math.PI
  * Modern Robotics 12v DC motor top speed in rad/s
  */
 private val bareMotorTopSpeed = 617.84
+
 
 /**
  * Modern Robotics 12v DC motor stall torque in N*m
@@ -41,6 +43,8 @@ val drivetrainParameters = MecanumParameters(
 
 val flywheelGearRatio = 13.7
 val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio,bareMotorStallTorque*flywheelGearRatio)
+val spindexerGearRatio = 10.0
+val spinMotor = LinearDcMotor(bareMotorTopSpeed/spindexerGearRatio,bareMotorStallTorque*spindexerGearRatio)
 
 /**
  * Parameters of the dual-motor flywheel used in the simulator
@@ -49,6 +53,12 @@ val flywheelParameters = FlywheelParameters(
     flywheelMotor,
     0.025,
     0.0001,
+)
+
+val spindexerParameters = SpindexerParameters(
+    spinMotor,
+    6.0,
+    7.0
 )
 
 /**

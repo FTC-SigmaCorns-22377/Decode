@@ -4,6 +4,7 @@ import org.joml.Vector3d
 import sigmacorns.math.Pose2d
 //import sigmacorns.sim.ProjectileSnapshot
 import sigmacorns.sim.RobotModel
+import sigmacorns.sim.spindexerState
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
@@ -49,6 +50,37 @@ class SimIO : SigmaIO {
     override fun configurePinpoint() {
 
     }
+
+
+    fun transfer(): Double {
+        //return transferPower
+        return transfer()
+    }
+
+    fun intake(): Double {
+        return intake
+    }
+
+    fun turretRotation(): Double {
+        //create function in the sim
+        return turretRotation()
+    }
+
+    fun turretAngle(): Double {
+        return turretAngle
+    }
+
+    fun breakActive(): Double {
+        return breakPower
+    }
+
+    //function for rotation of the spindexer
+    //function for shooting of the ball out of the spindexer(servo)
+    //function for ramping up the flywheel( may already exist, ask thomas)
+    //function for intaking
+    //function for rotation of the turret
+    //function for turret angle
+    //function for break
 
 //    fun launchBall() {
 //        robot.launchBall()

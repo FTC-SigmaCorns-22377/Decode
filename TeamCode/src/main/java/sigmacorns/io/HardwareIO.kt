@@ -42,7 +42,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //spindexer
     private val spindexerMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"spindexer")
     //breakServo
-    private val breakServo: Servo = hardwareMap.get(Servo::class.java,"breakPower")
+    private val breakServo: Servo = hardwareMap.get(Servo::class.java,"break")
+    private val transfer: Servo = hardwareMap.get(Servo::class.java,"transfer")
 
     //sensors
     private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
@@ -62,6 +63,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var turretAngle: Double = 0.0
     override var spindexer: Double = 0.0
     override var breakPower: Double = 0.0
+    override var transferPower: Double = 0.0
 
     private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
             getX(DistanceUnit.METER),
@@ -124,6 +126,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //updating the positions of all the servos
         turretServo.position = turretAngle
         breakServo.position = breakPower
+        transfer.position = transferPower
 
         pinpoint?.update()
     }
