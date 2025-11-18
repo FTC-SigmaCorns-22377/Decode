@@ -63,7 +63,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var turretAngle: Double = 0.0
     override var spindexer: Double = 0.0
     override var breakPower: Double = 0.0
-    override var transferPower: Double = 0.0
+    var transferPower: Double = 0.0
 
     private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
             getX(DistanceUnit.METER),
