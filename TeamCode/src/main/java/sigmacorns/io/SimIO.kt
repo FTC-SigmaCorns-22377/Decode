@@ -4,7 +4,7 @@ import org.joml.Vector3d
 import sigmacorns.math.Pose2d
 //import sigmacorns.sim.ProjectileSnapshot
 import sigmacorns.sim.RobotModel
-import sigmacorns.sim.spindexerState
+import sigmacorns.sim.SpindexerState
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
