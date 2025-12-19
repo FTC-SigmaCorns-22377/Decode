@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decode Simulation Viz</title>
+    <style>
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+        #container { display: flex; flex: 1; overflow: hidden; }
+        #canvas-container { flex: 2; position: relative; background: #222; }
+        #sidebar { flex: 1; display: flex; flex-direction: column; background: #eee; border-left: 1px solid #ccc; padding: 10px; overflow-y: auto; max-width: 400px; }
+        .chart-container { height: 200px; width: 100%; margin-bottom: 20px; }
+        #controls { padding: 10px; background: #ddd; display: flex; gap: 10px; align-items: center; }
+        button { padding: 5px 10px; cursor: pointer; }
+        #status { margin-left: auto; font-size: 0.9em; }
+    </style>
+    
+    <!-- Import Maps Polyfill -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.154.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.154.0/examples/jsm/",
+                "three/examples/jsm/": "https://unpkg.com/three@0.154.0/examples/jsm/",
+                "urdf-loader": "https://unpkg.com/urdf-loader@0.12.1/src/URDFLoader.js"
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>console.log("Index.html loaded");</script>
+</head>
+<body>
+    <div id="controls">
+        <button id="btn-replay">Replay</button>
+        <button id="btn-live" disabled>Live</button>
+        <span id="time-display">T: 0.00s</span>
+        <span id="status">Disconnected</span>
+        <span id="error-msg" style="color: red; font-weight: bold; margin-left: 20px;"></span>
+    </div>
+    <div id="container">
+        <div id="canvas-container"></div>
+        <div id="sidebar">
+            <h3>Joints</h3>
+            <div class="chart-container"><canvas id="chart-wheels"></canvas></div>
+            <div class="chart-container"><canvas id="chart-mechanisms"></canvas></div>
+            <h3>Robot Position</h3>
+            <div class="chart-container"><canvas id="chart-pos"></canvas></div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

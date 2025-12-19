@@ -28,6 +28,7 @@ android {
     }
 
     testOptions {
+        unitTests.returnDefaultValues = true
         compileOptions {
             sourceCompatibility JavaVersion.VERSION_11
             targetCompatibility JavaVersion.VERSION_11
@@ -41,6 +42,12 @@ android {
         jniLibs.useLegacyPackaging true
     }
 
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.28.3"
+        }
+    }
 }
 
 apply plugin: 'org.mozilla.rust-android-gradle.rust-android'
@@ -107,8 +114,60 @@ tasks.whenTaskAdded { task ->
 Properties local = new Properties()
 local.load(project.rootProject.file('local.properties').newDataInputStream())
 
+def drakeDesktopBuildDir = file("$buildDir/native-desktop")
+def drakeDesktopLibDir = file("$buildDir/native-desktop/lib")
+def drakeDirProp = local.getProperty("drake.dir")
+def drakePrefixProp = local.getProperty("drake.prefix")
+def drakeDefaultDir = file("/opt/drake/lib/cmake/drake")
+
+tasks.register("cmakeConfigureDrakeDesktop", Exec) {
+    workingDir projectDir
+    commandLine "/usr/bin/cmake",
+            "-S", "src/main/cpp",
+            "-B", drakeDesktopBuildDir,
+            "-GNinja",
+            "-DCMAKE_BUILD_TYPE=Debug",
+            "-DENABLE_DRAKE=ON",
+            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${drakeDesktopLibDir}",
+            "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${drakeDesktopLibDir}",
+            "-DANDROID=OFF",
+            "-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja"
+
+    def drakeDir = drakeDirProp ?: System.getenv("DRAKE_DIR")
+    def drakePrefix = drakePrefixProp ?: System.getenv("DRAKE_PREFIX")
+    if (drakeDir != null && !drakeDir.isEmpty()) {
+        args "-Ddrake_DIR=${drakeDir}"
+    } else if (drakePrefix != null && !drakePrefix.isEmpty()) {
+        args "-DCMAKE_PREFIX_PATH=${drakePrefix}"
+    } else if (drakeDefaultDir.exists()) {
+        args "-Ddrake_DIR=${drakeDefaultDir}"
+    }
+}
+
+tasks.register("cmakeBuildDrakeDesktop", Exec) {
+    workingDir projectDir
+    dependsOn "cmakeConfigureDrakeDesktop"
+    commandLine "/usr/bin/cmake", "--build", drakeDesktopBuildDir, "--config", "Debug"
+
+    doLast {
+        def targetDir = file("${projectDir}/src/testDebug/jniLibs")
+        if (!targetDir.exists()) {
+            targetDir.mkdirs()
+        }
+        copy {
+            from "${drakeDesktopLibDir}/libnative-lib.so"
+            into targetDir
+        }
+    }
+}
+
+tasks.matching { it.name == "test" || it.name.endsWith("UnitTest") }.configureEach {
+    dependsOn "cmakeBuildDrakeDesktop"
+}
+
 repositories {
     mavenCentral()
+    mavenLocal()
 
     maven {
         name = "choreolib"
@@ -135,6 +194,9 @@ dependencies {
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
     testImplementation "org.jetbrains.kotlinx:kandy-lets-plot:0.8.0"
+    testImplementation "io.javalin:javalin:6.1.3"
+    testImplementation "org.slf4j:slf4j-simple:2.0.7"
+    testImplementation "com.fasterxml.jackson.core:jackson-databind:2.15.0"
 
     implementation "com.bylazar:fullpanels:1.0.7"
 }
