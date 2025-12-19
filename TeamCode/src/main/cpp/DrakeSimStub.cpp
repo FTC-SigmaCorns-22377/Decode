@@ -1,0 +1,13 @@
+#include "DrakeSim.hpp"
+
+DrakeSim::DrakeSim(const std::string& /* urdf_path */) {}
+
+DrakeSim::~DrakeSim() {}
+
+void DrakeSim::Step(double /* dt */, const std::vector<double>& /* inputs */) {}
+
+std::vector<double> DrakeSim::GetState() {
+    return {};
+}
+
+void DrakeSim::SpawnBall(double /* x */, double /* y */, double /* z */) {}
