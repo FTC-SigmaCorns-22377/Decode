@@ -263,6 +263,10 @@ let playbackInterval = null;
 
 const btnReplay = document.getElementById('btn-replay');
 const btnLive = document.getElementById('btn-live');
+const btnPlayPause = document.getElementById('btn-play-pause');
+const scrubber = document.getElementById('scrubber');
+
+let isPaused = false;
 
 function updateVisuals(state) {
     if (!robot) return;
@@ -286,31 +290,58 @@ function updateVisuals(state) {
         });
     }
     timeDisplay.textContent = `T: ${state.t.toFixed(2)}s`;
+    
+    // Update scrubber if not dragging
+    if (!scrubberDragging) {
+        scrubber.max = history.length - 1;
+        // Find index of current state
+        // If live, index is history.length-1. If replay, playbackIndex.
+        const idx = isLive ? history.length - 1 : playbackIndex;
+        scrubber.value = idx;
+    }
 }
 
-function updateCharts(state) {
-    const limit = 500;
-    if (!state.telemetry) return;
-    function pushData(chart, vals) {
-        if (chart.data.labels.length > limit) {
-            chart.data.labels.shift();
-            chart.data.datasets.forEach(ds => ds.data.shift());
-        }
-        chart.data.labels.push(state.t);
-        chart.data.datasets.forEach((ds, i) => {
-            if (vals[i] !== undefined) ds.data.push(vals[i]);
-        });
-        chart.update();
+let scrubberDragging = false;
+scrubber.addEventListener('mousedown', () => { scrubberDragging = true; isLive = false; stopReplay(); });
+scrubber.addEventListener('mouseup', () => { scrubberDragging = false; startReplay(); });
+scrubber.addEventListener('input', () => {
+    playbackIndex = parseInt(scrubber.value);
+    if (history[playbackIndex]) {
+        updateVisuals(history[playbackIndex]);
+        updateCharts(history[playbackIndex]);
     }
-    pushData(chartWheels, [state.telemetry.fl, state.telemetry.fr, state.telemetry.bl, state.telemetry.br]);
-    pushData(chartMechs, [state.telemetry.flywheel, state.telemetry.turret]);
-    pushData(chartPos, [state.base.x, state.base.y, state.base.yaw]);
-}
+});
+
+btnPlayPause.addEventListener('click', () => {
+    if (isLive) {
+        // If live, switch to replay paused at end
+        isLive = false;
+        playbackIndex = history.length - 1;
+        stopReplay();
+        isPaused = true;
+        btnPlayPause.textContent = "Play";
+        btnLive.disabled = false;
+        btnReplay.disabled = true; // technically in replay mode
+    } else {
+        if (isPaused) {
+            startReplay();
+            isPaused = false;
+            btnPlayPause.textContent = "Pause";
+        } else {
+            stopReplay();
+            isPaused = true;
+            btnPlayPause.textContent = "Play";
+        }
+    }
+});
 
 btnReplay.addEventListener('click', () => {
     isLive = false;
     btnLive.disabled = false;
     btnReplay.disabled = true;
+    playbackIndex = 0;
+    isPaused = false;
+    btnPlayPause.textContent = "Pause";
     startReplay();
 });
 
@@ -318,6 +349,7 @@ btnLive.addEventListener('click', () => {
     isLive = true;
     btnLive.disabled = true;
     btnReplay.disabled = false;
+    btnPlayPause.textContent = "Pause"; // Live is auto-playing
     stopReplay();
     if (history.length > 0) {
         updateVisuals(history[history.length - 1]);
@@ -325,12 +357,20 @@ btnLive.addEventListener('click', () => {
 });
 
 function startReplay() {
-    playbackIndex = 0;
     if (playbackInterval) clearInterval(playbackInterval);
     playbackInterval = setInterval(() => {
-        if (playbackIndex >= history.length) playbackIndex = 0;
-        updateVisuals(history[playbackIndex]);
+        if (playbackIndex >= history.length - 1) {
+            // End of history
+            // if (isPaused) ...
+            // Just pause at end
+             stopReplay();
+             isPaused = true;
+             btnPlayPause.textContent = "Play";
+             return;
+        }
         playbackIndex++;
+        updateVisuals(history[playbackIndex]);
+        updateCharts(history[playbackIndex]); // Also update charts during replay
     }, 20);
 }
 
