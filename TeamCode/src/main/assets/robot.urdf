@@ -12,11 +12,13 @@
   <!-- Base Link -->
   <link name="base_link">
     <visual>
-      <geometry><box size="0.4 0.4 0.05"/></geometry>
+      <origin xyz="0 -0.1575875 0" rpy="0 0 1.57079632679"/>
+      <geometry><mesh filename="robotMeshes/robot frame.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="gray"/>
     </visual>
     <collision>
-      <geometry><box size="0.4 0.4 0.05"/></geometry>
+      <origin xyz="0 -0.1575875 0.0508" rpy="0 0 1.57079632679"/>
+      <geometry><box size="0.39557406 0.4367 0.1016"/></geometry>
     </collision>
     <inertial>
       <mass value="10.0"/>
@@ -27,11 +29,12 @@
   <!-- Wheels (Standard Cylinders for now) -->
   <link name="fl_wheel">
     <visual>
-      <geometry><cylinder length="0.05" radius="0.05"/></geometry>
+      <origin xyz="0 0 0" rpy="-1.57079632679 3.14159265359 0"/>
+      <geometry><mesh filename="robotMeshes/wheel.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="black"/>
     </visual>
     <collision>
-      <geometry><cylinder length="0.05" radius="0.05"/></geometry>
+      <geometry><cylinder length="0.048" radius="0.048"/></geometry>
       <!-- Friction properties would be set in a separate tag in SDF/Drake custom tags, using standard here -->
     </collision>
     <inertial>
@@ -42,17 +45,19 @@
   <joint name="fl_wheel_joint" type="continuous">
     <parent link="base_link"/>
     <child link="fl_wheel"/>
-    <origin xyz="0.15 0.15 0" rpy="-1.5708 0 0"/>
+    <origin xyz="0.13278703 0.1538125 0.04" rpy="-1.57079632679 0 0"/>
     <axis xyz="0 0 1"/>
   </joint>
 
   <link name="fr_wheel">
     <visual>
-      <geometry><cylinder length="0.05" radius="0.05"/></geometry>
+      <origin xyz="0 0 0" rpy="-1.57079632679 0 0"/>
+      <geometry><mesh filename="robotMeshes/wheel.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="black"/>
     </visual>
     <collision>
-      <geometry><cylinder length="0.05" radius="0.05"/></geometry>
+      <geometry><cylinder length="0.048" radius="0.048"/></geometry>
+      <!-- Friction properties would be set in a separate tag in SDF/Drake custom tags, using standard here -->
     </collision>
     <inertial>
       <mass value="0.5"/>
@@ -62,13 +67,14 @@
   <joint name="fr_wheel_joint" type="continuous">
     <parent link="base_link"/>
     <child link="fr_wheel"/>
-    <origin xyz="0.15 -0.15 0" rpy="-1.5708 0 0"/>
+    <origin xyz="0.13278703 -0.1538125 0.04" rpy="-1.57079632679 0 0"/>
     <axis xyz="0 0 1"/>
   </joint>
 
   <link name="bl_wheel">
     <visual>
-      <geometry><cylinder length="0.05" radius="0.05"/></geometry>
+      <origin xyz="0 0 0" rpy="-1.57079632679 3.14159265359 0"/>
+      <geometry><mesh filename="robotMeshes/wheel.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="black"/>
     </visual>
     <collision>
@@ -82,13 +88,14 @@
   <joint name="bl_wheel_joint" type="continuous">
     <parent link="base_link"/>
     <child link="bl_wheel"/>
-    <origin xyz="-0.15 0.15 0" rpy="-1.5708 0 0"/>
+    <origin xyz="-0.13278703 0.1538125 0.04" rpy="-1.57079632679 0 0"/>
     <axis xyz="0 0 1"/>
   </joint>
 
   <link name="br_wheel">
     <visual>
-      <geometry><cylinder length="0.05" radius="0.05"/></geometry>
+      <origin xyz="0 0 0" rpy="-1.57079632679 0 0"/>
+      <geometry><mesh filename="robotMeshes/wheel.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="black"/>
     </visual>
     <collision>
@@ -102,19 +109,19 @@
   <joint name="br_wheel_joint" type="continuous">
     <parent link="base_link"/>
     <child link="br_wheel"/>
-    <origin xyz="-0.15 -0.15 0" rpy="-1.5708 0 0"/>
+    <origin xyz="-0.13278703 -0.1538125 0.04" rpy="-1.57079632679 0 0"/>
     <axis xyz="0 0 1"/>
   </joint>
 
   <!-- Intake Roller -->
   <link name="intake_link">
-    <visual>
-      <geometry><cylinder length="0.3" radius="0.03"/></geometry>
-      <material name="green"/>
-    </visual>
-    <collision>
-      <geometry><cylinder length="0.3" radius="0.03"/></geometry>
-    </collision>
+    <!-- <visual> -->
+    <!--   <geometry><cylinder length="0.3" radius="0.03"/></geometry> -->
+    <!--   <material name="green"/> -->
+    <!-- </visual> -->
+    <!-- <collision> -->
+    <!--   <geometry><cylinder length="0.3" radius="0.03"/></geometry> -->
+    <!-- </collision> -->
     <inertial>
       <mass value="0.2"/>
       <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
@@ -123,7 +130,7 @@
   <joint name="intake_joint" type="continuous">
     <parent link="base_link"/>
     <child link="intake_link"/>
-    <origin xyz="0.25 0 0" rpy="0 1.5708 0"/>
+    <origin xyz="0.25 0 1" rpy="0 1.5708 0"/>
     <axis xyz="0 0 1"/>
   </joint>
 
@@ -191,23 +198,23 @@
   <!-- Let's put Turret on base_link, effectively passing through spindexer center or above it. -->
   <link name="turret_link">
     <visual>
-      <geometry><box size="0.1 0.1 0.1"/></geometry>
+      <!-- <origin xyz="-0.039962 0 0.22744" rpy="0 0 0"/> -->
+      <geometry><mesh filename="robotMeshes/shooter.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="red"/>
     </visual>
-    <collision>
-      <geometry><box size="0.1 0.1 0.1"/></geometry>
-    </collision>
+    <!-- <collision> -->
+    <!--   <geometry><box size="0.1 0.1 0.1"/></geometry> -->
+    <!-- </collision> -->
     <inertial>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
     </inertial>
   </link>
-  <joint name="turret_joint" type="revolute">
+  <joint name="turret_joint" type="continuous">
     <parent link="base_link"/>
     <child link="turret_link"/>
-    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+    <origin xyz="-0.039962 0 0.22744" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit lower="-1.5708" upper="1.5708" effort="20" velocity="10"/>
   </joint>
 
   <!-- Flywheel -->

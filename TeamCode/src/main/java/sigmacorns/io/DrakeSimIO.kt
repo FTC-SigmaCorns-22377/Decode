@@ -21,11 +21,6 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     init {
         server.start()
-        // Spawn balls
-        for (i in 0 until 10) {
-             // Stack them or place randomly
-             model.spawnBall(0.0, 0.0, 0.5 + i * 0.2)
-        }
     }
 
     override var driveFL: Double = 0.0
