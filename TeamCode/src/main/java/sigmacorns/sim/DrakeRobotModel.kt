@@ -20,6 +20,7 @@ class DrakeRobotModel(urdfPath: String) {
     // Viz support
     var jointPositions = mutableMapOf<String, Double>()
     var jointVelocities = mutableMapOf<String, Double>()
+    var ballPositions = List(10) { Vector3d() }
 
     fun advanceSim(t: Double, io: SimIO) {
         // Map IO to input vector
@@ -74,6 +75,15 @@ class DrakeRobotModel(urdfPath: String) {
 
             val flywheelVel = state[jointVelStart + 7]
             flywheelState.omega = flywheelVel
+
+            val ballStart = 6 + jointNames.size * 2
+            if (state.size >= ballStart + 10 * 3) {
+                for (i in 0 until 10) {
+                    ballPositions[i].x = state[ballStart + i * 3]
+                    ballPositions[i].y = state[ballStart + i * 3 + 1]
+                    ballPositions[i].z = state[ballStart + i * 3 + 2]
+                }
+            }
         }
     }
 

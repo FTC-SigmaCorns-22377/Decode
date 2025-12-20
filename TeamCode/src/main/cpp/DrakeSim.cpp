@@ -351,6 +351,17 @@ std::vector<double> DrakeSim::GetState() {
         }
     }
 
+    // Add ball positions (x, y, z for each of the 10 balls)
+    for (int i = 0; i < 10; ++i) {
+        std::string name = "ball_" + std::to_string(i);
+        const auto& body = plant_->GetBodyByName(name);
+        const auto& X_WB = plant_->EvalBodyPoseInWorld(plant_context, body);
+        const auto& p_WB = X_WB.translation();
+        state.push_back(p_WB.x());
+        state.push_back(p_WB.y());
+        state.push_back(p_WB.z());
+    }
+
     return state;
 }
 
