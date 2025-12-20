@@ -12,8 +12,8 @@ class SimServer(private val port: Int = 8000) {
     private val mapper = ObjectMapper()
 
     fun start() {
-        val path1 = "TeamCode/src/test/resources/web"
-        val path2 = "src/test/resources/web"
+        val path1 = "TeamCode/src/main/resources/web"
+        val path2 = "src/main/resources/web"
         val staticDir = if (File(path1).exists()) path1 else path2
         println("Serving static files from: ${File(staticDir).absolutePath}")
 

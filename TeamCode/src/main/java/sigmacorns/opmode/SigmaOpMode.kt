@@ -17,12 +17,102 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+import sigmacorns.io.DrakeSimIO
+
 abstract class SigmaOpMode(
     private val providedIO: SigmaIO? = null
 ): LinearOpMode() {
 
+    private var createdIO: SigmaIO? = null
+
     val io: SigmaIO by lazy {
-        providedIO ?: hardwareMap?.let { HardwareIO(it) } ?: SimIO()
+        if (providedIO != null) return@lazy providedIO
+        
+        if (hardwareMap != null) {
+            val hio = HardwareIO(hardwareMap)
+            createdIO = hio
+            return@lazy hio
+        }
+        
+        // Sim Mode
+        if (tryLoadDrake()) {
+             try {
+                 val urdfCandidates = listOfNotNull(
+                    System.getenv("ROBOT_URDF"),
+                    "TeamCode/src/main/assets/robot.urdf",
+                    "src/main/assets/robot.urdf"
+                 ).map { File(it) }
+                 val urdfFile = urdfCandidates.firstOrNull { it.exists() }
+                 if (urdfFile != null) {
+                     println("Initializing DrakeSimIO with ${urdfFile.absolutePath}")
+                     val drakeIO = DrakeSimIO(urdfFile.absolutePath)
+                     createdIO = drakeIO
+                     return@lazy drakeIO
+                 }
+             } catch (e: Throwable) {
+                 e.printStackTrace()
+                 println("Failed to init DrakeSimIO, falling back to Kotlin SimIO")
+             }
+        }
+        
+        println("Using Fallback Kotlin SimIO")
+        val simIO = SimIO()
+        createdIO = simIO
+        simIO
+    }
+
+    override fun runOpMode() {
+        // Implementers override this. 
+        // We can't easily hook into the end of runOpMode here without enforcing super.runOpMode() which isn't standard in LinearOpMode 
+        // unless we wrap it.
+        // But for LinearOpMode, the user code IS runOpMode. 
+        // So we can't auto-cleanup unless we use a different structure or users call a cleanup method.
+        // HOWEVER, if we are running in a test, we can call a cleanup method.
+    }
+    
+    fun cleanup() {
+        if (createdIO is DrakeSimIO) {
+            (createdIO as DrakeSimIO).close()
+            println("DrakeSimIO closed.")
+        }
+    }
+
+    private fun tryLoadDrake(): Boolean {
+        try {
+            System.loadLibrary("native-lib")
+            return true
+        } catch (e: UnsatisfiedLinkError) {
+            // Try manual load
+            val libName = "libnative-lib.so"
+            val candidates = listOf(
+                File("TeamCode/build/native-desktop/lib/$libName"),
+                File("build/native-desktop/lib/$libName"),
+                File("src/testDebug/jniLibs/$libName") // Also check where we copied it
+            )
+            val lib = candidates.firstOrNull { it.exists() }
+            if (lib != null) {
+                try {
+                    System.load(lib.absolutePath)
+                    return true
+                } catch (t: Throwable) {
+                    t.printStackTrace()
+                }
+            }
+        } catch (t: Throwable) {
+            t.printStackTrace()
+        }
+        return false
+    }
+
+    override fun waitForStart() {
+        if (!SIM) {
+            super.waitForStart()
+            return
+        }
+
+        if (!internalState.isStarted()) {
+            internalState.markStarted()
+        }
     }
 
     private val internalState = OpModeReflection(this)
@@ -64,17 +154,6 @@ abstract class SigmaOpMode(
             state.update(io)
             if(f(state, state.timestamp-tOld)) return
             io.update()
-        }
-    }
-
-    override fun waitForStart() {
-        if (!SIM) {
-            super.waitForStart()
-            return
-        }
-
-        if (!internalState.isStarted()) {
-            internalState.markStarted()
         }
     }
 
