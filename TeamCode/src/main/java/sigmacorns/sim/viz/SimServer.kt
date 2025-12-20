@@ -10,6 +10,7 @@ class SimServer(private val port: Int = 8000) {
     private var app: Javalin? = null
     private val sockets = ConcurrentHashMap.newKeySet<WsContext>()
     private val mapper = ObjectMapper()
+    private val history = java.util.Collections.synchronizedList(mutableListOf<SimState>())
 
     fun start() {
         val path1 = "TeamCode/src/main/resources/web"
@@ -30,6 +31,11 @@ class SimServer(private val port: Int = 8000) {
                     }
                 }
             }
+        }
+
+        app?.get("/history") { ctx ->
+            println("History requested from ${ctx.ip()}, sending ${history.size} states")
+            ctx.json(history)
         }
 
         app?.get("/assets/{filename}") { ctx ->
@@ -86,9 +92,10 @@ class SimServer(private val port: Int = 8000) {
 
     private var lastBroadcastLog = 0L
     fun broadcast(state: SimState) {
+        history.add(state)
         val now = System.currentTimeMillis()
         if (now - lastBroadcastLog > 5000) {
-            println("Broadcasting state, t=${state.t}, connected clients: ${sockets.size}")
+            println("Broadcasting state, t=${state.t}, connected clients: ${sockets.size}, history size: ${history.size}")
             lastBroadcastLog = now
         }
         val json = mapper.writeValueAsString(state)

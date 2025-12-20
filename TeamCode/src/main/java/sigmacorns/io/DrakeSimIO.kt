@@ -24,7 +24,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         // Spawn balls
         for (i in 0 until 10) {
              // Stack them or place randomly
-             robot.spawnBall(2.0, 0.0, 0.5 + i * 0.2)
+             robot.spawnBall(0.0, 0.0, 0.5 + i * 0.2)
         }
     }
 

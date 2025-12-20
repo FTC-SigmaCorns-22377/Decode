@@ -5,44 +5,24 @@ import URDFLoader from 'urdf-loader';
 
 console.log("App starting...");
 
+// --- Elements ---
 const statusDisplay = document.getElementById('status');
 const errorDisplay = document.getElementById('error-msg');
 const timeDisplay = document.getElementById('time-display');
+const btnReplay = document.getElementById('btn-replay');
+const btnLive = document.getElementById('btn-live');
+const btnPlayPause = document.getElementById('btn-play-pause');
+const scrubber = document.getElementById('scrubber');
 
-// --- Networking (Move to top to connect ASAP) ---
-const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsUrl = `${protocol}//${window.location.host}/sim`;
-console.log("Connecting to WebSocket:", wsUrl);
-let ws = new WebSocket(wsUrl);
-
-ws.onopen = () => {
-    console.log("WebSocket opened successfully");
-    statusDisplay.textContent = "Connected";
-    statusDisplay.style.color = "green";
-    errorDisplay.textContent = "";
-};
-
-ws.onclose = (event) => {
-    console.log("WebSocket closed", event);
-    statusDisplay.textContent = "Disconnected";
-    statusDisplay.style.color = "red";
-    errorDisplay.textContent = `WS Closed: ${event.code} ${event.reason}`;
-};
-
-ws.onerror = (error) => {
-    console.error("WebSocket error", error);
-    errorDisplay.textContent = "WS Error. Check Console.";
-};
-
-ws.onmessage = (event) => {
-    const state = JSON.parse(event.data);
-    history.push(state);
-    if (history.length > 20000) history.shift(); 
-    if (isLive) {
-        updateVisuals(state);
-        updateCharts(state);
-    }
-};
+// --- State ---
+let history = []; 
+let isLive = true;
+let isPaused = false;
+let playbackIndex = 0;
+let playbackInterval = null;
+let scrubberDragging = false;
+let robot = null;
+const balls = [];
 
 // --- Scene Setup ---
 const scene = new THREE.Scene();
@@ -50,7 +30,7 @@ scene.background = new THREE.Color(0x333333);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(2, 2, 2);
-camera.up.set(0, 0, 1); // Z is up
+camera.up.set(0, 0, 1); 
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 const container = document.getElementById('canvas-container');
@@ -61,326 +41,189 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
 // Lights
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambientLight);
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(5, 5, 10);
 scene.add(dirLight);
 
-// Grid
-const gridHelper = new THREE.GridHelper(10, 10);
+// Grid & Axis
+const gridHelper = new THREE.GridHelper(3.6576, 6);
 gridHelper.rotation.x = Math.PI / 2;
 scene.add(gridHelper);
+scene.add(new THREE.AxesHelper(1));
 
-// Axis
-const axesHelper = new THREE.AxesHelper(1);
-scene.add(axesHelper);
-
-// --- Field Rendering ---
-const fieldSize = 3.6576; // 12 ft in meters
-const wallHeight = 0.312; // ~12 inches
-
-// Floor (12x12 tiles)
-const floorGeo = new THREE.PlaneGeometry(fieldSize, fieldSize);
-const floorMat = new THREE.MeshPhongMaterial({ color: 0x444444, side: THREE.DoubleSide });
-const floor = new THREE.Mesh(floorGeo, floorMat);
-floor.receiveShadow = true;
+// Field
+const fieldSize = 3.6576; 
+const wallHeight = 0.312;
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(fieldSize, fieldSize), new THREE.MeshPhongMaterial({ color: 0x444444, side: THREE.DoubleSide }));
 scene.add(floor);
 
-// Grid for tiles (6x6 tiles, each 2ft)
-const grid = new THREE.GridHelper(fieldSize, 6, 0x888888, 0x222222);
-grid.rotation.x = Math.PI / 2;
-scene.add(grid);
-
-// Walls
 const wallMat = new THREE.MeshPhongMaterial({ color: 0xcccccc, transparent: true, opacity: 0.3 });
 const sideWallGeo = new THREE.BoxGeometry(fieldSize, 0.02, wallHeight);
-
-// North Wall
-const wallN = new THREE.Mesh(sideWallGeo, wallMat);
-wallN.position.set(0, fieldSize/2, wallHeight/2);
-scene.add(wallN);
-
-// South Wall
-const wallS = new THREE.Mesh(sideWallGeo, wallMat);
-wallS.position.set(0, -fieldSize/2, wallHeight/2);
-scene.add(wallS);
-
-// East/West Walls
+[[0, fieldSize/2], [0, -fieldSize/2]].forEach(pos => {
+    const w = new THREE.Mesh(sideWallGeo, wallMat);
+    w.position.set(pos[0], pos[1], wallHeight/2);
+    scene.add(w);
+});
 const sideWallGeo2 = new THREE.BoxGeometry(0.02, fieldSize, wallHeight);
-const wallE = new THREE.Mesh(sideWallGeo2, wallMat);
-wallE.position.set(fieldSize/2, 0, wallHeight/2);
-scene.add(wallE);
+[[fieldSize/2, 0], [-fieldSize/2, 0]].forEach(pos => {
+    const w = new THREE.Mesh(sideWallGeo2, wallMat);
+    w.position.set(pos[0], pos[1], wallHeight/2);
+    scene.add(w);
+});
 
-const wallW = new THREE.Mesh(sideWallGeo2, wallMat);
-wallW.position.set(-fieldSize/2, 0, wallHeight/2);
-scene.add(wallW);
-
-// Ramp Assembly
+// Ramp
 const stlLoader = new STLLoader();
 stlLoader.load('/assets/Ramp Assembly - am-5715 (1).stl', geometry => {
-    const material = new THREE.MeshPhongMaterial({ color: 0x0000ff, side: THREE.DoubleSide });
-    const mesh = new THREE.Mesh(geometry, material);
-    
-    // Scale from mm to m
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: 0x0000ff, side: THREE.DoubleSide }));
     mesh.scale.set(0.001, 0.001, 0.001);
-    
-    // Compute bounding box to help positioning
-    geometry.computeBoundingBox();
-    const bbox = geometry.boundingBox;
-    console.log("Ramp BBox (mm):", bbox);
-
     mesh.rotation.x = Math.PI / 2; 
-    
-    // Position in corner. 
-    // User wants "corner of the stl furthest from the center to be at 1.792859m,-1.792066m"
-    // After rotation X=PI/2, we need to find the bounding box in world space.
+    geometry.computeBoundingBox();
     mesh.updateMatrixWorld();
     const worldBox = new THREE.Box3().setFromObject(mesh);
-    console.log("Ramp World Box (before translation):", worldBox);
-
-    // Target corner (furthest from center 0,0)
-    const targetX = -1.792859; // User said 1.79, but it is the blue (-x, +y) corner. 
-    // Wait, user said (+y -x corner), and then gave positive 1.79, -1.79.
-    // If it's -x, +y, then X should be negative and Y should be positive.
-    // 1.79, -1.79 is +x, -y (South-East).
-    // Let's assume user meant the absolute values and the corner is -x, +y.
-    const tx = -1.792859;
-    const ty = 1.792066;
-
-    // The "furthest corner" of the box from 0,0 in the -x, +y quadrant is (minX, maxY).
-    const offsetX = tx - worldBox.min.x;
-    const offsetY = ty - worldBox.max.y;
-
+    const offsetX = -1.792859 - worldBox.min.x;
+    const offsetY = 1.792066 - worldBox.max.y;
     mesh.position.x += offsetX;
     mesh.position.y += offsetY;
-    
     scene.add(mesh);
-    console.log("Blue Ramp STL loaded and positioned at", mesh.position);
-
-    // Red Ramp (Mirrored about Y axis)
     const redRamp = mesh.clone();
     redRamp.material = new THREE.MeshPhongMaterial({ color: 0xff0000, side: THREE.DoubleSide });
-    // Mirror about Y axis means flipping X coordinates
     redRamp.scale.x = -0.001; 
-    // Position: if blue is at -tx, red is at +tx
     redRamp.position.x = -mesh.position.x;
     scene.add(redRamp);
-    console.log("Red Ramp added (mirrored)");
 });
 
 // Balls
-const balls = [];
 const ballGeo = new THREE.SphereGeometry(0.05, 16, 16);
 const ballMat = new THREE.MeshPhongMaterial({ color: 0xff8800 });
 for (let i = 0; i < 10; i++) {
-    const ball = new THREE.Mesh(ballGeo, ballMat);
-    ball.position.set(0, 0, -100); // Hide initially
-    scene.add(ball);
-    balls.push(ball);
+    const b = new THREE.Mesh(ballGeo, ballMat);
+    b.position.set(0, 0, -100);
+    scene.add(b);
+    balls.push(b);
 }
 
 // Robot
-let robot = null;
 const loader = new URDFLoader();
-console.log("Loading URDF from /robot.urdf...");
 loader.load('/robot.urdf', result => {
-    console.log("URDF loaded successfully", result);
     robot = result;
     scene.add(robot);
-}, progress => {
-    // console.log("URDF loading progress", progress);
-}, error => {
-    console.error("URDF loading error", error);
-    errorDisplay.textContent = "URDF Error: " + error.message;
 });
 
-// Resize handler
-window.addEventListener('resize', () => {
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
-});
-new ResizeObserver(() => {
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
-}).observe(container);
-
-
-// --- Charts ---
-function createChart(id, label, datasets) {
-    const ctx = document.getElementById(id).getContext('2d');
-    return new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: datasets.map((ds, i) => ({
-                label: ds.label,
-                borderColor: ds.color,
-                data: [],
-                borderWidth: 1,
-                pointRadius: 0
-            }))
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            interaction: { mode: 'index', intersect: false },
-            scales: { x: { display: false } }
-        }
-    });
-}
-
-const chartWheels = createChart('chart-wheels', 'Wheel Vels', [
-    { label: 'FL', color: 'red' },
-    { label: 'FR', color: 'green' },
-    { label: 'BL', color: 'blue' },
-    { label: 'BR', color: 'yellow' }
-]);
-
-const chartMechs = createChart('chart-mechanisms', 'Mechs', [
-    { label: 'Flywheel', color: 'cyan' },
-    { label: 'Turret', color: 'magenta' }
-]);
-
-const chartPos = createChart('chart-pos', 'Position', [
-    { label: 'X', color: 'red' },
-    { label: 'Y', color: 'green' },
-    { label: 'Heading', color: 'blue' }
-]);
-
-// --- State Management ---
-const history = []; // array of state objects
-let isLive = true;
-let playbackIndex = 0;
-let playbackInterval = null;
-
-const btnReplay = document.getElementById('btn-replay');
-const btnLive = document.getElementById('btn-live');
-const btnPlayPause = document.getElementById('btn-play-pause');
-const scrubber = document.getElementById('scrubber');
-
-let isPaused = false;
-
+// --- Visual Updates ---
 function updateVisuals(state) {
-    if (!robot) return;
-    if (state.base) {
+    if (!state) return;
+    if (robot && state.base) {
         robot.position.set(state.base.x, state.base.y, state.base.z || 0);
-        const euler = new THREE.Euler(state.base.roll || 0, state.base.pitch || 0, state.base.yaw || 0, 'ZYX');
-        robot.setRotationFromEuler(euler);
+        robot.setRotationFromEuler(new THREE.Euler(state.base.roll || 0, state.base.pitch || 0, state.base.yaw || 0, 'ZYX'));
     }
-    if (state.joints) {
+    if (robot && state.joints) {
         for (const [name, val] of Object.entries(state.joints)) {
-            if (robot.joints[name]) {
-                robot.joints[name].setJointValue(val);
-            }
+            if (robot.joints[name]) robot.joints[name].setJointValue(val);
         }
     }
     if (state.balls) {
-        state.balls.forEach((b, i) => {
-            if (balls[i]) {
-                balls[i].position.set(b.x, b.y, b.z);
-            }
-        });
+        state.balls.forEach((b, i) => { if (balls[i]) balls[i].position.set(b.x, b.y, b.z); });
     }
     timeDisplay.textContent = `T: ${state.t.toFixed(2)}s`;
-    
-    // Update scrubber if not dragging
     if (!scrubberDragging) {
         scrubber.max = history.length - 1;
-        // Find index of current state
-        // If live, index is history.length-1. If replay, playbackIndex.
-        const idx = isLive ? history.length - 1 : playbackIndex;
-        scrubber.value = idx;
+        scrubber.value = isLive ? history.length - 1 : playbackIndex;
     }
 }
 
-let scrubberDragging = false;
-scrubber.addEventListener('mousedown', () => { scrubberDragging = true; isLive = false; stopReplay(); });
-scrubber.addEventListener('mouseup', () => { scrubberDragging = false; startReplay(); });
-scrubber.addEventListener('input', () => {
-    playbackIndex = parseInt(scrubber.value);
-    if (history[playbackIndex]) {
-        updateVisuals(history[playbackIndex]);
-        updateCharts(history[playbackIndex]);
+// --- Charts ---
+function createChart(id, datasets) {
+    const ctx = document.getElementById(id).getContext('2d');
+    return new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: datasets.map(ds => ({ label: ds.label, borderColor: ds.color, data: [], borderWidth: 1, pointRadius: 0 })) },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false } } }
+    });
+}
+const chartWheels = createChart('chart-wheels', [{label:'FL',color:'red'},{label:'FR',color:'green'},{label:'BL',color:'blue'},{label:'BR',color:'yellow'}]);
+const chartMechs = createChart('chart-mechanisms', [{label:'Flywheel',color:'cyan'},{label:'Turret',color:'magenta'}]);
+const chartPos = createChart('chart-pos', [{label:'X',color:'red'},{label:'Y',color:'green'},{label:'Heading',color:'blue'}]);
+
+function syncCharts(currentIndex) {
+    if (history.length === 0) return;
+    
+    const limit = 500;
+    const start = Math.max(0, currentIndex - limit);
+    const window = history.slice(start, currentIndex + 1);
+
+    const labels = window.map(s => s.t);
+    
+    const update = (chart, dataExtractors) => {
+        chart.data.labels = labels;
+        dataExtractors.forEach((extractor, i) => {
+            chart.data.datasets[i].data = window.map(extractor);
+        });
+        chart.update();
+    };
+
+    update(chartWheels, [s=>s.telemetry.fl, s=>s.telemetry.fr, s=>s.telemetry.bl, s=>s.telemetry.br]);
+    update(chartMechs, [s=>s.telemetry.flywheel, s=>s.telemetry.turret]);
+    update(chartPos, [s=>s.base.x, s=>s.base.y, s=>s.base.yaw]);
+}
+
+// --- Networking ---
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(`${protocol}//${window.location.host}/sim`);
+
+ws.onopen = () => { statusDisplay.textContent = "Connected"; statusDisplay.style.color = "green"; };
+ws.onclose = (e) => { statusDisplay.textContent = "Disconnected"; statusDisplay.style.color = "red"; };
+ws.onmessage = (e) => {
+    const state = JSON.parse(e.data);
+    if (history.length > 0 && state.t <= history[history.length - 1].t) return;
+    history.push(state);
+    if (history.length > 30000) history.shift();
+    if (isLive) { 
+        updateVisuals(state); 
+        syncCharts(history.length - 1); 
     }
-});
+};
 
-btnPlayPause.addEventListener('click', () => {
-    if (isLive) {
-        // If live, switch to replay paused at end
-        isLive = false;
-        playbackIndex = history.length - 1;
-        stopReplay();
-        isPaused = true;
-        btnPlayPause.textContent = "Play";
-        btnLive.disabled = false;
-        btnReplay.disabled = true; // technically in replay mode
-    } else {
-        if (isPaused) {
-            startReplay();
-            isPaused = false;
-            btnPlayPause.textContent = "Pause";
-        } else {
-            stopReplay();
-            isPaused = true;
-            btnPlayPause.textContent = "Play";
-        }
-    }
-});
-
-btnReplay.addEventListener('click', () => {
-    isLive = false;
-    btnLive.disabled = false;
-    btnReplay.disabled = true;
-    playbackIndex = 0;
-    isPaused = false;
-    btnPlayPause.textContent = "Pause";
-    startReplay();
-});
-
-btnLive.addEventListener('click', () => {
-    isLive = true;
-    btnLive.disabled = true;
-    btnReplay.disabled = false;
-    btnPlayPause.textContent = "Pause"; // Live is auto-playing
-    stopReplay();
+fetch('/history').then(r => r.json()).then(data => {
+    console.log(`History: ${data.length}`);
     if (history.length > 0) {
-        updateVisuals(history[history.length - 1]);
+        const lastT = history[history.length-1].t;
+        const old = data.filter(s => s.t < history[0].t);
+        history = [...old, ...history];
+    } else {
+        history = data;
     }
-});
+    if (history.length > 0 && isLive) {
+        updateVisuals(history[history.length-1]);
+        syncCharts(history.length - 1);
+    }
+}).catch(console.error);
 
-function startReplay() {
+// --- Controls ---
+const startReplay = () => {
     if (playbackInterval) clearInterval(playbackInterval);
     playbackInterval = setInterval(() => {
-        if (playbackIndex >= history.length - 1) {
-            // End of history
-            // if (isPaused) ...
-            // Just pause at end
-             stopReplay();
-             isPaused = true;
-             btnPlayPause.textContent = "Play";
-             return;
-        }
+        if (playbackIndex >= history.length - 1) { stopReplay(); isPaused = true; btnPlayPause.textContent = "Play"; return; }
         playbackIndex++;
         updateVisuals(history[playbackIndex]);
-        updateCharts(history[playbackIndex]); // Also update charts during replay
+        syncCharts(playbackIndex);
     }, 20);
-}
+};
+const stopReplay = () => { if (playbackInterval) clearInterval(playbackInterval); };
 
-function stopReplay() {
-    if (playbackInterval) clearInterval(playbackInterval);
-}
+btnPlayPause.addEventListener('click', () => {
+    if (isLive) { isLive = false; playbackIndex = history.length - 1; stopReplay(); isPaused = true; btnPlayPause.textContent = "Play"; btnLive.disabled = false; btnReplay.disabled = true; }
+    else if (isPaused) { startReplay(); isPaused = false; btnPlayPause.textContent = "Pause"; }
+    else { stopReplay(); isPaused = true; btnPlayPause.textContent = "Play"; }
+});
+btnReplay.addEventListener('click', () => { isLive = false; btnLive.disabled = false; btnReplay.disabled = true; playbackIndex = 0; isPaused = false; btnPlayPause.textContent = "Pause"; startReplay(); });
+btnLive.addEventListener('click', () => { isLive = true; btnLive.disabled = true; btnReplay.disabled = false; btnPlayPause.textContent = "Pause"; stopReplay(); if (history.length > 0) { updateVisuals(history[history.length-1]); syncCharts(history.length - 1); } });
+scrubber.addEventListener('mousedown', () => { scrubberDragging = true; isLive = false; stopReplay(); });
+scrubber.addEventListener('mouseup', () => { scrubberDragging = false; if (!isPaused) startReplay(); });
+scrubber.addEventListener('input', () => { playbackIndex = parseInt(scrubber.value); updateVisuals(history[playbackIndex]); syncCharts(playbackIndex); });
 
-function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
-}
+window.addEventListener('resize', () => { renderer.setSize(container.clientWidth, container.clientHeight); camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix(); });
+new ResizeObserver(() => { renderer.setSize(container.clientWidth, container.clientHeight); camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix(); }).observe(container);
+
+function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
 animate();
