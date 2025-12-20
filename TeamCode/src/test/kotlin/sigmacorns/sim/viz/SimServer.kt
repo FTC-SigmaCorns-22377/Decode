@@ -32,6 +32,19 @@ class SimServer(private val port: Int = 8000) {
             }
         }
 
+        app?.get("/assets/{filename}") { ctx ->
+            val filename = ctx.pathParam("filename")
+            println("Asset requested: $filename")
+            val p1 = "TeamCode/src/main/assets/$filename"
+            val p2 = "src/main/assets/$filename"
+            val file = if (File(p1).exists()) File(p1) else File(p2)
+            if (file.exists()) {
+                ctx.result(file.inputStream())
+            } else {
+                ctx.status(404).result("Asset not found")
+            }
+        }
+
         app?.get("/robot.urdf") { ctx ->
             println("URDF requested from ${ctx.ip()}")
             val uPath1 = "TeamCode/src/main/assets/robot.urdf"
@@ -91,8 +104,11 @@ data class SimState(
     val t: Double,
     val base: BaseState,
     val joints: Map<String, Double>,
-    val telemetry: TelemetryState
+    val telemetry: TelemetryState,
+    val balls: List<BallState> = emptyList()
 )
+
+data class BallState(val x: Double, val y: Double, val z: Double)
 
 data class BaseState(
     val x: Double,

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import URDFLoader from 'urdf-loader';
 
 console.log("App starting...");
@@ -74,6 +75,110 @@ scene.add(gridHelper);
 // Axis
 const axesHelper = new THREE.AxesHelper(1);
 scene.add(axesHelper);
+
+// --- Field Rendering ---
+const fieldSize = 3.6576; // 12 ft in meters
+const wallHeight = 0.312; // ~12 inches
+
+// Floor (12x12 tiles)
+const floorGeo = new THREE.PlaneGeometry(fieldSize, fieldSize);
+const floorMat = new THREE.MeshPhongMaterial({ color: 0x444444, side: THREE.DoubleSide });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Grid for tiles (6x6 tiles, each 2ft)
+const grid = new THREE.GridHelper(fieldSize, 6, 0x888888, 0x222222);
+grid.rotation.x = Math.PI / 2;
+scene.add(grid);
+
+// Walls
+const wallMat = new THREE.MeshPhongMaterial({ color: 0xcccccc, transparent: true, opacity: 0.3 });
+const sideWallGeo = new THREE.BoxGeometry(fieldSize, 0.02, wallHeight);
+
+// North Wall
+const wallN = new THREE.Mesh(sideWallGeo, wallMat);
+wallN.position.set(0, fieldSize/2, wallHeight/2);
+scene.add(wallN);
+
+// South Wall
+const wallS = new THREE.Mesh(sideWallGeo, wallMat);
+wallS.position.set(0, -fieldSize/2, wallHeight/2);
+scene.add(wallS);
+
+// East/West Walls
+const sideWallGeo2 = new THREE.BoxGeometry(0.02, fieldSize, wallHeight);
+const wallE = new THREE.Mesh(sideWallGeo2, wallMat);
+wallE.position.set(fieldSize/2, 0, wallHeight/2);
+scene.add(wallE);
+
+const wallW = new THREE.Mesh(sideWallGeo2, wallMat);
+wallW.position.set(-fieldSize/2, 0, wallHeight/2);
+scene.add(wallW);
+
+// Ramp Assembly
+const stlLoader = new STLLoader();
+stlLoader.load('/assets/Ramp Assembly - am-5715 (1).stl', geometry => {
+    const material = new THREE.MeshPhongMaterial({ color: 0x0000ff, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    // Scale from mm to m
+    mesh.scale.set(0.001, 0.001, 0.001);
+    
+    // Compute bounding box to help positioning
+    geometry.computeBoundingBox();
+    const bbox = geometry.boundingBox;
+    console.log("Ramp BBox (mm):", bbox);
+
+    mesh.rotation.x = Math.PI / 2; 
+    
+    // Position in corner. 
+    // User wants "corner of the stl furthest from the center to be at 1.792859m,-1.792066m"
+    // After rotation X=PI/2, we need to find the bounding box in world space.
+    mesh.updateMatrixWorld();
+    const worldBox = new THREE.Box3().setFromObject(mesh);
+    console.log("Ramp World Box (before translation):", worldBox);
+
+    // Target corner (furthest from center 0,0)
+    const targetX = -1.792859; // User said 1.79, but it is the blue (-x, +y) corner. 
+    // Wait, user said (+y -x corner), and then gave positive 1.79, -1.79.
+    // If it's -x, +y, then X should be negative and Y should be positive.
+    // 1.79, -1.79 is +x, -y (South-East).
+    // Let's assume user meant the absolute values and the corner is -x, +y.
+    const tx = -1.792859;
+    const ty = 1.792066;
+
+    // The "furthest corner" of the box from 0,0 in the -x, +y quadrant is (minX, maxY).
+    const offsetX = tx - worldBox.min.x;
+    const offsetY = ty - worldBox.max.y;
+
+    mesh.position.x += offsetX;
+    mesh.position.y += offsetY;
+    
+    scene.add(mesh);
+    console.log("Blue Ramp STL loaded and positioned at", mesh.position);
+
+    // Red Ramp (Mirrored about Y axis)
+    const redRamp = mesh.clone();
+    redRamp.material = new THREE.MeshPhongMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+    // Mirror about Y axis means flipping X coordinates
+    redRamp.scale.x = -0.001; 
+    // Position: if blue is at -tx, red is at +tx
+    redRamp.position.x = -mesh.position.x;
+    scene.add(redRamp);
+    console.log("Red Ramp added (mirrored)");
+});
+
+// Balls
+const balls = [];
+const ballGeo = new THREE.SphereGeometry(0.05, 16, 16);
+const ballMat = new THREE.MeshPhongMaterial({ color: 0xff8800 });
+for (let i = 0; i < 10; i++) {
+    const ball = new THREE.Mesh(ballGeo, ballMat);
+    ball.position.set(0, 0, -100); // Hide initially
+    scene.add(ball);
+    balls.push(ball);
+}
 
 // Robot
 let robot = null;
@@ -172,6 +277,13 @@ function updateVisuals(state) {
                 robot.joints[name].setJointValue(val);
             }
         }
+    }
+    if (state.balls) {
+        state.balls.forEach((b, i) => {
+            if (balls[i]) {
+                balls[i].position.set(b.x, b.y, b.z);
+            }
+        });
     }
     timeDisplay.textContent = `T: ${state.t.toFixed(2)}s`;
 }

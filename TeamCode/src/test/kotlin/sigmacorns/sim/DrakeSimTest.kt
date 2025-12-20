@@ -88,9 +88,9 @@ class DrakeSimTest {
             while (t < duration) {
                 // Generate some inputs
                 io.driveFL = 1.0 // Drive forward
-                io.driveFR = 1.0
+                io.driveFR = -1.0
                 io.driveBL = 1.0
-                io.driveBR = 1.0
+                io.driveBR = -1.0
                 
                 io.turret = sin(t) // Oscillate turret power
                 io.turretAngle = 0.4 // Set hood position
@@ -131,7 +131,8 @@ class DrakeSimTest {
                         br = io.driveBR,
                         flywheel = fw.omega,
                         turret = io.turret
-                    )
+                    ),
+                    balls = robot.ballPositions.map { sigmacorns.sim.viz.BallState(it.x, it.y, it.z) }
                 )
                 
                 server.broadcast(vizState)
