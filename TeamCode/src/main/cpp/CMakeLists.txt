@@ -45,7 +45,9 @@ if(ENABLE_DRAKE)
 
     add_library(native-lib SHARED
                 native-lib.cpp
-                DrakeSim.cpp)
+                DrakeSim.cpp
+                DrakeSimSetup.cpp
+                DrakeSimState.cpp)
     target_compile_definitions(native-lib PRIVATE USE_DRAKE=1)
 
     if(NOT ANDROID)

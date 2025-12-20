@@ -11,3 +11,5 @@ std::vector<double> DrakeSim::GetState() {
 }
 
 void DrakeSim::SpawnBall(double /* x */, double /* y */, double /* z */) {}
+
+void DrakeSim::SetPosition(double /* x */, double /* y */, double /* yaw */) {}

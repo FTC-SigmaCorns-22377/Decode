@@ -61,6 +61,20 @@ Java_sigmacorns_sim_DrakeNative_spawnBall(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_sigmacorns_sim_DrakeNative_setPosition(
+        JNIEnv* env,
+        jobject /* this */,
+        jlong simPtr,
+        jdouble x,
+        jdouble y,
+        jdouble yaw) {
+    DrakeSim* sim = reinterpret_cast<DrakeSim*>(simPtr);
+    if (sim) {
+        sim->SetPosition(x, y, yaw);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_sigmacorns_sim_DrakeNative_destroySim(
         JNIEnv* env,
         jobject /* this */,
