@@ -14,5 +14,6 @@ object DrakeNative {
     external fun step(simPtr: Long, dt: Double, inputs: DoubleArray)
     external fun getState(simPtr: Long): DoubleArray
     external fun spawnBall(simPtr: Long, x: Double, y: Double, z: Double)
+    external fun setPosition(simPtr: Long, x: Double, y: Double, yaw: Double)
     external fun destroySim(simPtr: Long)
 }

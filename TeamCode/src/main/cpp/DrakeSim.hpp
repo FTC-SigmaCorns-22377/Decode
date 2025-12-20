@@ -3,7 +3,6 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <array>
 
 #if defined(USE_DRAKE) && USE_DRAKE
 #include <drake/systems/framework/diagram.h>
@@ -21,11 +20,12 @@ public:
     // inputs: [fl, bl, br, fr, intake, spindexer, turret, flywheel, hood] (power -1..1)
     void Step(double dt, const std::vector<double>& inputs);
 
-    // returns: [x, y, yaw, vx, vy, omega, ... joint positions ..., ... joint velocities ...]
+    // returns: [x, y, z, yaw, vx, vy, omega, ... joint positions ..., ... joint velocities ...]
     std::vector<double> GetState();
     
     // Spawns a ball at the given position
     void SpawnBall(double x, double y, double z);
+    void SetPosition(double x, double y, double yaw);
 
 private:
     std::unique_ptr<drake::systems::Diagram<double>> diagram_;
@@ -62,22 +62,49 @@ private:
         double rot_inertia = 0.5;
         MotorConfig drive_motor;
     };
+    struct RobotState {
+        double x = 0.0;
+        double y = 0.0;
+        double z = 0.0;
+        double roll = 0.0;
+        double pitch = 0.0;
+        double yaw = 0.0;
+        double wx = 0.0;
+        double wy = 0.0;
+        double wz = 0.0;
+        double vx = 0.0;
+        double vy = 0.0;
+        double vz = 0.0;
+        double time_sec = 0.0;
+        std::vector<double> joint_positions;
+        std::vector<double> joint_velocities;
+    };
+    struct BallState {
+        double x = 0.0;
+        double y = 0.0;
+        double z = 0.0;
+        double wx = 0.0;
+        double wy = 0.0;
+        double wz = 0.0;
+        double vx = 0.0;
+        double vy = 0.0;
+        double vz = 0.0;
+    };
 
     std::vector<ActuatorInfo> actuators_;
     std::vector<std::string> joint_state_order_;
-    std::vector<drake::multibody::JointIndex> wheel_joints_; // Indices for FL, BL, BR, FR
     MecanumParams mecanum_params_;
     MecanumState mecanum_state_;
     drake::multibody::BodyIndex base_body_index_;
-    double base_z_ = 0.05;
-
-    int ball_count_ = 0;
+    drake::multibody::ModelInstanceIndex ball_instance_;
+    std::vector<drake::multibody::BodyIndex> ball_bodies_;
+    std::vector<BallState> balls_;
+    std::string urdf_path_;
 
     double MotorTorque(const MotorConfig& motor, double power, double omega) const;
-    MecanumState IntegrateMecanum(double dt,
-                                  const std::array<double, 4>& inputs,
-                                  const MecanumState& state) const;
-    void SetBasePoseAndVelocity(const MecanumState& state);
+    void BuildSimulator(const RobotState* state);
+    RobotState CaptureRobotState() const;
+    void RefreshBallStates();
 };
 #else
 class DrakeSim {
@@ -88,5 +115,6 @@ public:
     void Step(double dt, const std::vector<double>& inputs);
     std::vector<double> GetState();
     void SpawnBall(double x, double y, double z);
+    void SetPosition(double x, double y, double yaw);
 };
 #endif

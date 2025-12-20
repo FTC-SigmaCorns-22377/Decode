@@ -13,7 +13,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
 class DrakeSimIO(urdfPath: String) : SigmaIO {
-    val robot = DrakeRobotModel(urdfPath)
+    val model = DrakeRobotModel(urdfPath)
     val server = SimServer(8080)
     
     private var t = 0.seconds
@@ -24,7 +24,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         // Spawn balls
         for (i in 0 until 10) {
              // Stack them or place randomly
-             robot.spawnBall(0.0, 0.0, 0.5 + i * 0.2)
+             model.spawnBall(0.0, 0.0, 0.5 + i * 0.2)
         }
     }
 
@@ -39,30 +39,30 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     override var turretAngle: Double = 0.0
     override var breakPower: Double = 0.0
 
-    override fun position(): Pose2d = robot.drivetrainState.pos
-    override fun velocity(): Pose2d = robot.drivetrainState.vel
-    override fun flywheelVelocity(): Double = robot.flywheelState.omega
+    override fun position(): Pose2d = model.drivetrainState.pos
+    override fun velocity(): Pose2d = model.drivetrainState.vel
+    override fun flywheelVelocity(): Double = model.flywheelState.omega
 
     override fun update() {
         // Step Simulation
-        robot.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS), this)
+        model.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS), this)
         t += SIM_UPDATE_TIME
 
         // Broadcast State
-        val state = robot.drivetrainState
-        val fw = robot.flywheelState
+        val state = model.drivetrainState
+        val fw = model.flywheelState
         
         val vizState = SimState(
             t = t.toDouble(DurationUnit.SECONDS),
             base = BaseState(
                 x = state.pos.v.x,
                 y = state.pos.v.y,
-                z = 0.0,
+                z = model.baseZ,
                 roll = 0.0,
                 pitch = 0.0,
                 yaw = state.pos.rot
             ),
-            joints = robot.jointPositions,
+            joints = model.jointPositions,
             telemetry = TelemetryState(
                 fl = driveFL,
                 fr = driveFR,
@@ -71,7 +71,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                 flywheel = fw.omega,
                 turret = turret
             ),
-            balls = robot.ballPositions.map { BallState(it.x, it.y, it.z) }
+            balls = model.ballPositions.map { BallState(it.x, it.y, it.z) }
         )
         server.broadcast(vizState)
         
@@ -85,9 +85,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     }
 
     override fun setPosition(p: Pose2d) {
-        // Not fully supported in DrakeSim yet (setting state directly from IO), 
-        // but we could add it to DrakeRobotModel if needed.
-        // For now, ignore or implement if DrakeRobotModel supports it.
+        model.setPosition(p)
     }
 
     override fun time(): Duration = t
@@ -95,7 +93,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     override fun configurePinpoint() {}
     
     fun close() {
-        robot.destroy()
+        model.destroy()
         server.stop()
     }
 }
