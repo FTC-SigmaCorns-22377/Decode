@@ -1,3 +1,6 @@
+# clangd
+.cache
+
 # Built application files
 *.apk
 *.aar

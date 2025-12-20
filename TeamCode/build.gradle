@@ -159,7 +159,7 @@ tasks.register("cmakeBuildDrakeDesktop", Exec) {
     commandLine "/usr/bin/cmake", "--build", drakeDesktopBuildDir, "--config", "Debug"
 
     doLast {
-        def targetDir = file("${projectDir}/src/testDebug/jniLibs")
+        def targetDir = file("${projectDir}/src/test/jniLibs")
         if (!targetDir.exists()) {
             targetDir.mkdirs()
         }

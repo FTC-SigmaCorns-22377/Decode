@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # IMPORTANT: You must set CMAKE_PREFIX_PATH to the location of your Drake installation.
 # e.g. -DCMAKE_PREFIX_PATH=/opt/drake

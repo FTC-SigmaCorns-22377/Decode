@@ -65,6 +65,7 @@ private:
 
     std::vector<ActuatorInfo> actuators_;
     std::vector<std::string> joint_state_order_;
+    std::vector<drake::multibody::JointIndex> wheel_joints_; // Indices for FL, BL, BR, FR
     MecanumParams mecanum_params_;
     MecanumState mecanum_state_;
     drake::multibody::BodyIndex base_body_index_;
