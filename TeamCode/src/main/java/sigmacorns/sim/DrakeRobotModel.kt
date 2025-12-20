@@ -4,6 +4,7 @@ import org.joml.Vector2d
 import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
 import org.joml.Vector3d
+import sigmacorns.io.SigmaIO
 
 class DrakeRobotModel(urdfPath: String) {
     private var simPtr: Long = 0
@@ -22,7 +23,7 @@ class DrakeRobotModel(urdfPath: String) {
     var jointVelocities = mutableMapOf<String, Double>()
     var ballPositions = List(10) { Vector3d() }
 
-    fun advanceSim(t: Double, io: SimIO) {
+    fun advanceSim(t: Double, io: SigmaIO) {
         // Map IO to input vector
         // Input order: fl, bl, br, fr, intake, spindexer, turret, flywheel, hood
         val inputs = doubleArrayOf(
