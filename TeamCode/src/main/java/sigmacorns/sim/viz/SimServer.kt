@@ -51,6 +51,20 @@ class SimServer(private val port: Int = 8000) {
             }
         }
 
+        app?.get("/robotMeshes/{filename}") { ctx ->
+            val filename = ctx.pathParam("filename")
+            println("Mesh requested: $filename")
+            val p1 = "TeamCode/src/main/assets/robotMeshes/$filename"
+            val p2 = "src/main/assets/robotMeshes/$filename"
+            val file = if (File(p1).exists()) File(p1) else File(p2)
+            if (file.exists()) {
+                ctx.result(file.inputStream())
+            } else {
+                println("Mesh not found: $filename")
+                ctx.status(404).result("Mesh not found")
+            }
+        }
+
         app?.get("/robot.urdf") { ctx ->
             println("URDF requested from ${ctx.ip()}")
             val uPath1 = "TeamCode/src/main/assets/robot.urdf"
