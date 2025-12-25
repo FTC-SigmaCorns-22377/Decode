@@ -17,7 +17,8 @@ std::vector<double> DrakeSim::GetState() {
   Eigen::VectorXd v = plant_->GetVelocities(plant_context);
 
   std::vector<double> state;
-  state.reserve(7 + joint_state_order_.size() * 2 + ball_bodies_.size() * 3);
+  state.reserve(7 + joint_state_order_.size() * 2 +
+                last_wheel_forces_W_.size() * 3 + ball_bodies_.size() * 3);
 
   state.push_back(mecanum_state_.pos.x);
   state.push_back(mecanum_state_.pos.y);
@@ -46,6 +47,12 @@ std::vector<double> DrakeSim::GetState() {
     } else {
       state.push_back(0.0);
     }
+  }
+
+  for (const auto &force : last_wheel_forces_W_) {
+    state.push_back(force[0]);
+    state.push_back(force[1]);
+    state.push_back(force[2]);
   }
 
   // Add ball positions (x, y, z for each ball)

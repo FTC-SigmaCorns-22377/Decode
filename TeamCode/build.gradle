@@ -87,6 +87,16 @@ def desktopCopyTargets = [
     "cargoBuildDarwin"            : ["desktop/darwin", "librerun.dylib"],
 ]
 
+def desktopCargoTask = null
+def osName = System.getProperty("os.name").toLowerCase()
+if (osName.contains("win")) {
+    desktopCargoTask = "cargoBuildWin32-x86-64-msvc"
+} else if (osName.contains("mac") || osName.contains("darwin")) {
+    desktopCargoTask = "cargoBuildDarwin"
+} else if (osName.contains("linux")) {
+    desktopCargoTask = "cargoBuildLinux-x86-64"
+}
+
 def androidCopyTargets = [
     "cargoBuildArm64": ["android/arm64-v8a", "librerun.so"],
 ]
@@ -172,6 +182,9 @@ tasks.register("cmakeBuildDrakeDesktop", Exec) {
 
 tasks.matching { it.name == "test" || it.name.endsWith("UnitTest") }.configureEach {
     dependsOn "cmakeBuildDrakeDesktop"
+    if (desktopCargoTask != null) {
+        dependsOn desktopCargoTask
+    }
 }
 
 repositories {

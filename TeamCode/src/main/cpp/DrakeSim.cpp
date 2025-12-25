@@ -46,8 +46,43 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
   };
 
   for (int step = 0; step < kSubsteps; ++step) {
+    for (auto &force : last_wheel_forces_W_) {
+      force = {0.0, 0.0, 0.0};
+    }
+
     Eigen::VectorXd velocities = plant_->GetVelocities(plant_context);
     Eigen::VectorXd torques = Eigen::VectorXd::Zero(plant_->num_actuators());
+
+    const auto &base_body = plant_->get_body(base_body_index_);
+    RigidTransformd X_W_Base =
+        plant_->EvalBodyPoseInWorld(plant_context, base_body);
+    double yaw = RollPitchYaw<double>(X_W_Base.rotation()).yaw_angle();
+    SpatialVelocity<double> V_WB =
+        plant_->EvalBodySpatialVelocityInWorld(plant_context, base_body);
+    Eigen::Vector3d v_world = V_WB.translational();
+    double c = std::cos(yaw);
+    double s = std::sin(yaw);
+    const double v_body_x = v_world.x() * c + v_world.y() * s;
+    const double v_body_y = -v_world.x() * s + v_world.y() * c;
+    const double omega_body = V_WB.rotational().z();
+    const double l = mecanum_params_.lx + mecanum_params_.ly;
+    const double r = mecanum_params_.wheel_radius;
+    const std::array<double, 4> wheel_omegas = {
+        (v_body_x - v_body_y - l * omega_body) / r,  // FL
+        (v_body_x + v_body_y - l * omega_body) / r,  // BL
+        (v_body_x - v_body_y + l * omega_body) / r,  // BR
+        (v_body_x + v_body_y + l * omega_body) / r   // FR
+    };
+
+    for (size_t i = 0; i < wheel_omegas.size(); ++i) {
+      const JointActuator<double> &joint_actuator =
+          plant_->get_joint_actuator(actuators_[i].index);
+      const Joint<double> &joint = joint_actuator.joint();
+      if (joint.num_velocities() == 1) {
+        velocities[joint.velocity_start()] = wheel_omegas[i];
+      }
+    }
+    plant_->SetVelocities(&plant_context, velocities);
 
     // 1. Calculate Motor Torques for ALL actuators
     for (const auto &actuator : actuators_) {
@@ -60,7 +95,11 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
       const Joint<double> &joint = joint_actuator.joint();
       double joint_vel = 0.0;
       if (joint.num_velocities() == 1) {
-        joint_vel = velocities[joint.velocity_start()];
+        if (actuator.input_index >= 0 && actuator.input_index < 4) {
+          joint_vel = wheel_omegas[actuator.input_index];
+        } else {
+          joint_vel = velocities[joint.velocity_start()];
+        }
       }
       torques[actuator.index] = MotorTorque(actuator.motor, command, joint_vel);
     }
@@ -69,10 +108,6 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
     // 2. Apply Ground Reaction Forces for Wheels (direct torque -> force)
     std::vector<ExternallyAppliedSpatialForce<double>> spatial_forces;
     spatial_forces.reserve(4);
-    const auto &base_body = plant_->get_body(base_body_index_);
-    RigidTransformd X_W_Base =
-        plant_->EvalBodyPoseInWorld(plant_context, base_body);
-    double yaw = RollPitchYaw<double>(X_W_Base.rotation()).yaw_angle();
 
     for (size_t i = 0; i < wheel_names.size(); ++i) {
       const auto &wheel_body = plant_->GetBodyByName(wheel_names[i]);
@@ -83,7 +118,7 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
       if (X_W_Wheel.translation().z() < mecanum_params_.wheel_radius * 1.2) {
         // Get torque calculated in step 1
         double T = torques[actuators_[i].index];
-        double f_mag = T / mecanum_params_.wheel_radius;
+        double f_mag = (T * std::sqrt(2)) / mecanum_params_.wheel_radius;
 
         // force safety checks
         if (std::fabs(f_mag) > 200.0) {
@@ -109,6 +144,8 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
         spatial_forces.push_back(
             {base_body_index_, p_BoBq_B,
              SpatialForce<double>(Eigen::Vector3d::Zero(), force_W)});
+
+        last_wheel_forces_W_[i] = {force_W.x(), force_W.y(), force_W.z()};
       }
     }
 

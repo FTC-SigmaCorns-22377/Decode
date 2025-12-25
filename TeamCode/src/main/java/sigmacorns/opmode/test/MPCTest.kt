@@ -39,7 +39,7 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
 
         MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2).use { mpc ->
             rerunSink("MPCTest($trajName)").use { rr ->
-                mpc.setTarget(traj, SolverRequestType.CONTOURING)
+                mpc.setTarget(traj, SolverRequestType.TRACKING)
 
                 val state = State(
                     0.0,
@@ -50,7 +50,6 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                     0.0,
                     0.seconds
                 )
-
 
                 waitForStart()
 

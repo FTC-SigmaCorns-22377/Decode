@@ -55,7 +55,7 @@ class MPCClient(
     SOLVER_PORT: Int = 5000,
     ROBOT_PORT: Int = 22377,
     val sampleLookahead: Int = 0,
-    val preIntegrate: Duration = 30.milliseconds
+    val preIntegrate: Duration = 10.milliseconds
 ): AutoCloseable {
 
     companion object {
@@ -175,7 +175,7 @@ class MPCClient(
     private val channel = DatagramChannel.open()
     private val solverAddr = InetSocketAddress(SOLVER_IP, SOLVER_PORT)
     private val selector = Selector.open()
-    private var solverRequestType: SolverRequestType = SolverRequestType.CONTOURING
+    private var solverRequestType: SolverRequestType = SolverRequestType.TRACKING
 
     init {
         channel.configureBlocking(false)

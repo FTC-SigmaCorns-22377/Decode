@@ -23,6 +23,17 @@ let playbackInterval = null;
 let scrubberDragging = false;
 let robot = null;
 const balls = [];
+const wheelForceArrows = new Map();
+const wheelForceScale = 0.0025;
+const wheelForceMaxLen = 0.6;
+const wheelForceMinLen = 0.02;
+const wheelForceConfig = [
+    { link: 'fl_wheel', color: 0xff0000 },
+    { link: 'bl_wheel', color: 0x0000ff },
+    { link: 'br_wheel', color: 0xffff00 },
+    { link: 'fr_wheel', color: 0x00ff00 }
+];
+const wheelForceTmp = new THREE.Vector3();
 
 // --- Scene Setup ---
 const scene = new THREE.Scene();
@@ -108,6 +119,12 @@ const loader = new URDFLoader();
 loader.load('/robot.urdf', result => {
     robot = result;
     scene.add(robot);
+    wheelForceConfig.forEach(cfg => {
+        const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), wheelForceMinLen, cfg.color);
+        arrow.visible = false;
+        scene.add(arrow);
+        wheelForceArrows.set(cfg.link, arrow);
+    });
 });
 
 // --- Visual Updates ---
@@ -124,6 +141,29 @@ function updateVisuals(state) {
     }
     if (state.balls) {
         state.balls.forEach((b, i) => { if (balls[i]) balls[i].position.set(b.x, b.y, b.z); });
+    }
+    if (state.wheelForces && robot) {
+        wheelForceConfig.forEach((cfg, i) => {
+            const force = state.wheelForces[i];
+            const arrow = wheelForceArrows.get(cfg.link);
+            const link = robot.links ? robot.links[cfg.link] : null;
+            if (!force || !arrow || !link) return;
+            const forceVec = new THREE.Vector3(force.x, force.y, force.z);
+            const magnitude = forceVec.length();
+            if (magnitude < 1e-6) {
+                arrow.visible = false;
+                return;
+            }
+            const length = Math.max(wheelForceMinLen, Math.min(magnitude * wheelForceScale, wheelForceMaxLen));
+            forceVec.normalize();
+            link.getWorldPosition(wheelForceTmp);
+            arrow.position.copy(wheelForceTmp);
+            arrow.setDirection(forceVec);
+            arrow.setLength(length, length * 0.2, length * 0.1);
+            arrow.visible = true;
+        });
+    } else {
+        wheelForceArrows.forEach(arrow => { arrow.visible = false; });
     }
     timeDisplay.textContent = `T: ${state.t.toFixed(2)}s`;
     if (!scrubberDragging) {

@@ -42,7 +42,7 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
   Box box(ground_size, ground_size, ground_depth);
   plant_->RegisterCollisionGeometry(plant_->world_body(), X_WG, box,
                                     "ground_collision",
-                                    CoulombFriction<double>(0.8, 0.8));
+                                    CoulombFriction<double>(0.0, 0.0));
   plant_->RegisterVisualGeometry(plant_->world_body(), X_WG, box,
                                  "ground_visual",
                                  Vector4<double>(0.3, 0.3, 0.3, 1.0));
@@ -116,7 +116,6 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
   mecanum_params_.mass = 15.0;
   mecanum_params_.rot_inertia = 0.5;
   mecanum_params_.drive_motor = drive_motor;
-  const double base_z = mecanum_params_.wheel_radius;
 
   const std::vector<std::string> actuator_joint_names = {
       "fl_wheel_joint", "bl_wheel_joint", "br_wheel_joint",
@@ -212,6 +211,16 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
 
   auto &context = simulator_->get_mutable_context();
   auto &plant_context = diagram_->GetMutableSubsystemContext(*plant_, &context);
+  auto default_context = plant_->CreateDefaultContext();
+  const auto &base_body_for_default = plant_->GetBodyByName("base_link");
+  const auto &fl_wheel_body = plant_->GetBodyByName("fl_wheel");
+  const double wheel_center_z =
+      plant_->CalcRelativeTransform(*default_context,
+                                    base_body_for_default.body_frame(),
+                                    fl_wheel_body.body_frame())
+          .translation()
+          .z();
+  const double base_z = mecanum_params_.wheel_radius - wheel_center_z;
 
   if (state) {
     context.SetTime(state->time_sec);

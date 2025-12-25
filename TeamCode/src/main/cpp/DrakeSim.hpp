@@ -1,8 +1,9 @@
 #pragma once
 
+#include <array>
 #include <memory>
-#include <vector>
 #include <string>
+#include <vector>
 
 #if defined(USE_DRAKE) && USE_DRAKE
 #include <drake/systems/framework/diagram.h>
@@ -20,7 +21,8 @@ public:
     // inputs: [fl, bl, br, fr, intake, spindexer, turret, flywheel, hood] (power -1..1)
     void Step(double dt, const std::vector<double>& inputs);
 
-    // returns: [x, y, z, yaw, vx, vy, omega, ... joint positions ..., ... joint velocities ...]
+    // returns: [x, y, z, yaw, vx, vy, omega, ... joint positions ..., ... joint velocities ...,
+    //           wheel forces (FL, BL, BR, FR; each as x,y,z), ... ball positions ...]
     std::vector<double> GetState();
     
     // Spawns a ball at the given position
@@ -44,6 +46,7 @@ private:
         drake::multibody::JointActuatorIndex index;
         int input_index = 0;
         MotorConfig motor;
+        double direction = 1.0;
     };
     struct Pose2d {
         double x = 0.0;
@@ -100,6 +103,7 @@ private:
     std::vector<drake::multibody::BodyIndex> ball_bodies_;
     std::vector<BallState> balls_;
     std::string urdf_path_;
+    std::array<std::array<double, 3>, 4> last_wheel_forces_W_{};
 
     double MotorTorque(const MotorConfig& motor, double power, double omega) const;
     void BuildSimulator(const RobotState* state);
