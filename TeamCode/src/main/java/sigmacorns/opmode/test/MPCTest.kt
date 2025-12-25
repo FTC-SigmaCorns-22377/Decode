@@ -15,7 +15,13 @@ import sigmacorns.io.SolverRequestType
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MecanumState
+import sigmacorns.io.DrakeSimIO
+import sigmacorns.sim.viz.ErrorState
+import sigmacorns.sim.viz.PathPoint
+import kotlin.math.PI
+import kotlin.math.hypot
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 
 
 enum class LaunchZones(val launchSpeed: Double) {
@@ -40,6 +46,11 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
         MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2).use { mpc ->
             rerunSink("MPCTest($trajName)").use { rr ->
                 mpc.setTarget(traj, SolverRequestType.TRACKING)
+                val drakeIO = io as? DrakeSimIO
+                if (drakeIO != null) {
+                    val pathPoints = traj.samples.map { PathPoint(it.x, it.y) }
+                    drakeIO.setChoreoPath(pathPoints)
+                }
 
                 val state = State(
                     0.0,
@@ -79,6 +90,27 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
 
                     rr.logState(state)
                     rr.logInputs(io)
+
+                    if (drakeIO != null) {
+                        val pos = io.position()
+                        val vel = io.velocity()
+                        val closest = traj.samples.minByOrNull {
+                            hypot(pos.v.x - it.x, pos.v.y - it.y)
+                        }
+                        if (closest != null) {
+                            val errX = pos.v.x - closest.x
+                            val errY = pos.v.y - closest.y
+                            var errYaw = pos.rot - closest.heading
+                            while (errYaw > PI) errYaw -= 2 * PI
+                            while (errYaw < -PI) errYaw += 2 * PI
+                            val errVx = vel.v.x - closest.vx
+                            val errVy = vel.v.y - closest.vy
+                            val errOmega = vel.rot - closest.omega
+                            drakeIO.setTrackingError(ErrorState(errX, errY, errYaw, errVx, errVy, errOmega))
+                        } else {
+                            drakeIO.setTrackingError(null)
+                        }
+                    }
 
                     println("ROTATION=${io.position().rot}, state=${state.driveTrainPosition.rot}")
 

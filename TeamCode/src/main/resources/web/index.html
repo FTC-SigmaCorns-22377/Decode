@@ -10,7 +10,9 @@
         #canvas-container { flex: 2; position: relative; background: #222; }
         #sidebar { flex: 1; display: flex; flex-direction: column; background: #eee; border-left: 1px solid #ccc; padding: 10px; overflow-y: auto; max-width: 400px; }
         .chart-container { height: 200px; width: 100%; margin-bottom: 20px; }
-        #controls { padding: 10px; background: #ddd; display: flex; gap: 10px; align-items: center; }
+        #controls { padding: 10px; background: #ddd; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        #display-toggles { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.9em; }
+        #display-toggles label { display: inline-flex; gap: 6px; align-items: center; }
         button { padding: 5px 10px; cursor: pointer; }
         #status { margin-left: auto; font-size: 0.9em; }
     </style>
@@ -45,11 +47,22 @@
     <div id="container">
         <div id="canvas-container"></div>
         <div id="sidebar">
+            <h3>Display</h3>
+            <div id="display-toggles">
+                <label><input type="checkbox" id="toggle-robot-mesh" checked>Robot mesh</label>
+                <label><input type="checkbox" id="toggle-robot-point">Robot point</label>
+                <label><input type="checkbox" id="toggle-path" checked>Choreo path</label>
+                <label><input type="checkbox" id="toggle-forces" checked>Wheel forces</label>
+                <label><input type="checkbox" id="toggle-balls" checked>Balls</label>
+                <label><input type="checkbox" id="toggle-error-chart" checked>Error chart</label>
+            </div>
             <h3>Joints</h3>
             <div class="chart-container"><canvas id="chart-wheels"></canvas></div>
             <div class="chart-container"><canvas id="chart-mechanisms"></canvas></div>
             <h3>Robot Position</h3>
             <div class="chart-container"><canvas id="chart-pos"></canvas></div>
+            <h3 id="error-chart-title">Tracking Error</h3>
+            <div class="chart-container" id="error-chart-container"><canvas id="chart-error"></canvas></div>
         </div>
     </div>
 

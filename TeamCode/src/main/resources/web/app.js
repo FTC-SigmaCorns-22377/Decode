@@ -13,6 +13,14 @@ const btnReplay = document.getElementById('btn-replay');
 const btnLive = document.getElementById('btn-live');
 const btnPlayPause = document.getElementById('btn-play-pause');
 const scrubber = document.getElementById('scrubber');
+const toggleRobotMesh = document.getElementById('toggle-robot-mesh');
+const toggleRobotPoint = document.getElementById('toggle-robot-point');
+const togglePath = document.getElementById('toggle-path');
+const toggleForces = document.getElementById('toggle-forces');
+const toggleBalls = document.getElementById('toggle-balls');
+const toggleErrorChart = document.getElementById('toggle-error-chart');
+const errorChartContainer = document.getElementById('error-chart-container');
+const errorChartTitle = document.getElementById('error-chart-title');
 
 // --- State ---
 let history = []; 
@@ -34,6 +42,15 @@ const wheelForceConfig = [
     { link: 'fr_wheel', color: 0x00ff00 }
 ];
 const wheelForceTmp = new THREE.Vector3();
+let pathLine = null;
+let pathSignature = '';
+const robotPoint = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 12, 12),
+    new THREE.MeshPhongMaterial({ color: 0xffaa00 })
+);
+const robotHeading = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.2, 0xffaa00);
+robotPoint.visible = false;
+robotHeading.visible = false;
 
 // --- Scene Setup ---
 const scene = new THREE.Scene();
@@ -114,6 +131,9 @@ for (let i = 0; i < 10; i++) {
     balls.push(b);
 }
 
+scene.add(robotPoint);
+scene.add(robotHeading);
+
 // Robot
 const loader = new URDFLoader();
 loader.load('/robot.urdf', result => {
@@ -127,12 +147,53 @@ loader.load('/robot.urdf', result => {
     });
 });
 
+function setPath(points) {
+    if (!points || points.length === 0) {
+        if (pathLine) {
+            scene.remove(pathLine);
+            pathLine.geometry.dispose();
+        }
+        pathLine = null;
+        pathSignature = '';
+        return;
+    }
+    const head = points[0];
+    const tail = points[points.length - 1];
+    const signature = `${points.length}:${head.x.toFixed(3)},${head.y.toFixed(3)}:${tail.x.toFixed(3)},${tail.y.toFixed(3)}`;
+    if (signature === pathSignature) return;
+    pathSignature = signature;
+    if (pathLine) {
+        scene.remove(pathLine);
+        pathLine.geometry.dispose();
+    }
+    const verts = new Float32Array(points.length * 3);
+    points.forEach((p, i) => {
+        verts[i * 3] = p.x;
+        verts[i * 3 + 1] = p.y;
+        verts[i * 3 + 2] = 0.01;
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+    pathLine = new THREE.Line(geometry, material);
+    pathLine.visible = togglePath.checked;
+    scene.add(pathLine);
+}
+
 // --- Visual Updates ---
 function updateVisuals(state) {
     if (!state) return;
     if (robot && state.base) {
         robot.position.set(state.base.x, state.base.y, state.base.z || 0);
         robot.setRotationFromEuler(new THREE.Euler(state.base.roll || 0, state.base.pitch || 0, state.base.yaw || 0, 'ZYX'));
+    }
+    if (state.base) {
+        robotPoint.position.set(state.base.x, state.base.y, (state.base.z || 0) + 0.02);
+        const yaw = state.base.yaw || 0;
+        const dir = new THREE.Vector3(Math.cos(yaw), Math.sin(yaw), 0);
+        robotHeading.position.copy(robotPoint.position);
+        robotHeading.setDirection(dir);
+        robotHeading.setLength(0.2, 0.06, 0.03);
     }
     if (robot && state.joints) {
         for (const [name, val] of Object.entries(state.joints)) {
@@ -142,7 +203,7 @@ function updateVisuals(state) {
     if (state.balls) {
         state.balls.forEach((b, i) => { if (balls[i]) balls[i].position.set(b.x, b.y, b.z); });
     }
-    if (state.wheelForces && robot) {
+    if (state.wheelForces && robot && toggleForces.checked) {
         wheelForceConfig.forEach((cfg, i) => {
             const force = state.wheelForces[i];
             const arrow = wheelForceArrows.get(cfg.link);
@@ -165,6 +226,10 @@ function updateVisuals(state) {
     } else {
         wheelForceArrows.forEach(arrow => { arrow.visible = false; });
     }
+    if (robot) robot.visible = toggleRobotMesh.checked;
+    robotPoint.visible = toggleRobotPoint.checked;
+    robotHeading.visible = toggleRobotPoint.checked;
+    balls.forEach(ball => { ball.visible = toggleBalls.checked; });
     timeDisplay.textContent = `T: ${state.t.toFixed(2)}s`;
     if (!scrubberDragging) {
         scrubber.max = history.length - 1;
@@ -184,6 +249,14 @@ function createChart(id, datasets) {
 const chartWheels = createChart('chart-wheels', [{label:'FL',color:'red'},{label:'FR',color:'green'},{label:'BL',color:'blue'},{label:'BR',color:'yellow'}]);
 const chartMechs = createChart('chart-mechanisms', [{label:'Flywheel',color:'cyan'},{label:'Turret',color:'magenta'}]);
 const chartPos = createChart('chart-pos', [{label:'X',color:'red'},{label:'Y',color:'green'},{label:'Heading',color:'blue'}]);
+const chartError = createChart('chart-error', [
+    {label:'Err X',color:'red'},
+    {label:'Err Y',color:'green'},
+    {label:'Err Heading',color:'blue'},
+    {label:'Err Vx',color:'orange'},
+    {label:'Err Vy',color:'purple'},
+    {label:'Err Omega',color:'cyan'}
+]);
 
 function syncCharts(currentIndex) {
     if (history.length === 0) return;
@@ -205,6 +278,14 @@ function syncCharts(currentIndex) {
     update(chartWheels, [s=>s.telemetry.fl, s=>s.telemetry.fr, s=>s.telemetry.bl, s=>s.telemetry.br]);
     update(chartMechs, [s=>s.telemetry.flywheel, s=>s.telemetry.turret]);
     update(chartPos, [s=>s.base.x, s=>s.base.y, s=>s.base.yaw]);
+    update(chartError, [
+        s=>s.error ? s.error.x : null,
+        s=>s.error ? s.error.y : null,
+        s=>s.error ? s.error.yaw : null,
+        s=>s.error ? s.error.vx : null,
+        s=>s.error ? s.error.vy : null,
+        s=>s.error ? s.error.omega : null
+    ]);
 }
 
 // --- Networking ---
@@ -239,6 +320,9 @@ fetch('/history').then(r => r.json()).then(data => {
     }
 }).catch(console.error);
 
+fetch('/path').then(r => r.json()).then(setPath).catch(console.error);
+setInterval(() => { fetch('/path').then(r => r.json()).then(setPath).catch(() => {}); }, 2000);
+
 // --- Controls ---
 const startReplay = () => {
     if (playbackInterval) clearInterval(playbackInterval);
@@ -261,6 +345,18 @@ btnLive.addEventListener('click', () => { isLive = true; btnLive.disabled = true
 scrubber.addEventListener('mousedown', () => { scrubberDragging = true; isLive = false; stopReplay(); });
 scrubber.addEventListener('mouseup', () => { scrubberDragging = false; if (!isPaused) startReplay(); });
 scrubber.addEventListener('input', () => { playbackIndex = parseInt(scrubber.value); updateVisuals(history[playbackIndex]); syncCharts(playbackIndex); });
+
+toggleRobotMesh.addEventListener('change', () => { if (robot) robot.visible = toggleRobotMesh.checked; });
+toggleRobotPoint.addEventListener('change', () => { robotPoint.visible = toggleRobotPoint.checked; robotHeading.visible = toggleRobotPoint.checked; });
+togglePath.addEventListener('change', () => { if (pathLine) pathLine.visible = togglePath.checked; });
+toggleForces.addEventListener('change', () => { if (!toggleForces.checked) wheelForceArrows.forEach(arrow => { arrow.visible = false; }); });
+toggleBalls.addEventListener('change', () => { balls.forEach(ball => { ball.visible = toggleBalls.checked; }); });
+toggleErrorChart.addEventListener('change', () => {
+    const show = toggleErrorChart.checked;
+    errorChartContainer.style.display = show ? '' : 'none';
+    errorChartTitle.style.display = show ? '' : 'none';
+});
+toggleErrorChart.dispatchEvent(new Event('change'));
 
 window.addEventListener('resize', () => { renderer.setSize(container.clientWidth, container.clientHeight); camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix(); });
 new ResizeObserver(() => { renderer.setSize(container.clientWidth, container.clientHeight); camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix(); }).observe(container);
