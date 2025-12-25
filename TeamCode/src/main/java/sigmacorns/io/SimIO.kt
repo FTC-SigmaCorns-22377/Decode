@@ -36,6 +36,10 @@ class SimIO : SigmaIO {
         return robot.flywheelState.omega
     }
 
+    override fun turretPosition(): Double {
+        return 0.0 // Todo: Implement turret simulation
+    }
+
     override fun update() {
         robot.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS),this)
         t += SIM_UPDATE_TIME
@@ -54,7 +58,7 @@ class SimIO : SigmaIO {
 
     fun transfer(): Double {
         //return transferPower
-        return transfer()
+        return 0.0
     }
 
     fun intake(): Double {
@@ -63,7 +67,7 @@ class SimIO : SigmaIO {
 
     fun turretRotation(): Double {
         //create function in the sim
-        return turretRotation()
+        return 0.0
     }
 
     fun turretAngle(): Double {

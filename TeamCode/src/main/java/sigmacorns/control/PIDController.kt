@@ -1,29 +1,23 @@
 package sigmacorns.control
-import kotlin.math.abs
+import kotlin.time.Duration
+import kotlin.time.DurationUnit
 
 
 class PIDController(
-    var kp: Float,
-    var kd: Float,
-    var ki: Float,
-    var integralterm: Float,
-    var init_error: Float,
-    var setpoint: Float,
-    var statepoint:Float
+    var kp: Double,
+    var kd: Double,
+    var ki: Double,
+    var setpoint: Double,
 ) {
+    private var integral: Double = 0.0
+    private var lastError: Double? = null
 
-    fun update(measured_state: Float, dt: Float): Float{
-        val error = abs(measured_state - setpoint)
-        val p = kp*error
+    fun update(measured_state: Double, dt: Duration): Double{
+        val t = dt.toDouble(DurationUnit.SECONDS)
+        val error = setpoint-measured_state
+        integral += error*t
+        val dError = if(lastError!=null) kd*(error - lastError!!)/t else 0.0
 
-        integralterm += error * dt
-        val i =  ki  * integralterm
-
-        val d = kd* (error - init_error)/dt
-
-        return p + i + d
-
+        return kp*error + integral - kd*dError + ki*integral
     }
-
-
 }

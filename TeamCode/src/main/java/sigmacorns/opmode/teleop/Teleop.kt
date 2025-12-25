@@ -76,11 +76,16 @@ class Teleop(): SigmaOpMode() {
             io.intake = gamepad1.left_trigger.toDouble() * dVoltage
 
             if (gamepad1.left_bumper) { //ejecting the ball
-                io.shooter = 1.0 * dVoltage
                 io.intake = -1.0 * dVoltage
             }
+
+
+            if (gamepad1.right_bumper) { //ejecting the ball
+                io.intake = 1.0 * dVoltage
+            }
+
             if (gamepad1.left_trigger > 0.1 * dVoltage && gamepad1.right_trigger < 0.1 * dVoltage){ //intaking
-                io.shooter = 0.4 * dVoltage
+                io.shooter = 0.8 * dVoltage
             }
 
             //presets

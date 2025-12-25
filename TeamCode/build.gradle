@@ -63,15 +63,15 @@ afterEvaluate {
         //outputs.upToDateWhen { false }
     }
 
-//    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
-//        dependsOn(cargoBuildArm)
-//    }
-//    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }.configureEach {
-//        dependsOn(cargoBuildArm)
-//    }
-//    tasks.matching { it.name.startsWith("package") }.configureEach {
-//        dependsOn(cargoBuildArm)
-//    }
+    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
+        dependsOn(cargoBuildArm)
+    }
+    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }.configureEach {
+        dependsOn(cargoBuildArm)
+    }
+    tasks.matching { it.name.startsWith("package") }.configureEach {
+        dependsOn(cargoBuildArm)
+    }
 }
 
 def desktopCopyTargets = [
@@ -109,6 +109,7 @@ local.load(project.rootProject.file('local.properties').newDataInputStream())
 
 repositories {
     mavenCentral()
+    mavenLocal()
 
     maven {
         name = "choreolib"

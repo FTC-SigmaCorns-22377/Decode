@@ -1,11 +1,9 @@
 package sigmacorns.io
 
-import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.IMU
 import com.qualcomm.robotcore.hardware.Servo
-import com.qualcomm.robotcore.hardware.CRServo
 import com.qualcomm.robotcore.hardware.ColorRangeSensor
 import com.qualcomm.robotcore.hardware.DcMotorSimple
 import com.qualcomm.robotcore.hardware.HardwareMap
@@ -33,17 +31,16 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
 
     //shooter
-    private val flyWheelMotor0: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
+    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
 //turret
-    private val turretMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"turret")
-    private val turretServo: Servo = hardwareMap.get(Servo::class.java,"turretAngle")
+    private val turretMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"turret")
     //spindexer
-    private val spindexerMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"spindexer")
+    private val spindexerMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"spindexer")
     //breakServo
-    private val breakServo: Servo = hardwareMap.get(Servo::class.java,"break")
-    private val transfer: Servo = hardwareMap.get(Servo::class.java,"transfer")
+    private val breakServo: Servo? = hardwareMap.tryGet(Servo::class.java,"break")
+    private val transfer: Servo? = hardwareMap.tryGet(Servo::class.java,"transfer")
 
     //sensors
     private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
@@ -97,7 +94,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun flywheelVelocity(): Double {
-        return flyWheelMotor0?.getVelocity(AngleUnit.RADIANS) ?: 0.0
+        return flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0
+    }
+
+    override fun turretPosition(): Double {
+        return turretMotor?.currentPosition?.toDouble() ?: 0.0
     }
 
     var posOffset = Pose2d()
@@ -119,14 +120,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
 
         //updating power values of auxilery motors
-        flyWheelMotor0?.power = shooter
+        flywheelMotor?.power = shooter
         intakeMotor?.power = intake
-        turretMotor.power = turret
-        spindexerMotor.power = spindexer
+        turretMotor?.power = turret
+        spindexerMotor?.power = spindexer
         //updating the positions of all the servos
-        turretServo.position = turretAngle
-        breakServo.position = breakPower
-        transfer.position = transferPower
+        breakServo?.position = breakPower
+        transfer?.position = transferPower
 
         pinpoint?.update()
     }
@@ -167,7 +167,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBRMotor.direction = DcMotorSimple.Direction.FORWARD
 
         //flywheel and intake motors(auxilery) direction declarations
-        flyWheelMotor0?.direction = DcMotorSimple.Direction.FORWARD
+        flywheelMotor?.direction = DcMotorSimple.Direction.FORWARD
+        turretMotor?.direction = DcMotorSimple.Direction.FORWARD
         intakeMotor?.direction = DcMotorSimple.Direction.FORWARD
 
         //declaring driveMode's for drive motors( which will be run without encoder for now)
@@ -179,11 +180,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBRMotor.mode = driveMode
 
         //stoping and resetting the encoders for the auxilery motors( stop and reset)
-        flyWheelMotor0?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        flywheelMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        turretMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
 
         //declaring the driveMode's for auxilery motors(which will be run without encoder for now)
-        flyWheelMotor0?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        flywheelMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
 
         // configuring pinpoint
