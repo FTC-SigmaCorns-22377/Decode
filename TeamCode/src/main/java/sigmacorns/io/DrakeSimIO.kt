@@ -7,6 +7,7 @@ import sigmacorns.sim.viz.SimState
 import sigmacorns.sim.viz.BaseState
 import sigmacorns.sim.viz.TelemetryState
 import sigmacorns.sim.viz.BallState
+import sigmacorns.sim.viz.ForceState
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -66,6 +67,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                 flywheel = fw.omega,
                 turret = turret
             ),
+            wheelForces = model.wheelForces.map { ForceState(it.x, it.y, it.z) },
             balls = model.ballPositions.map { BallState(it.x, it.y, it.z) }
         )
         server.broadcast(vizState)

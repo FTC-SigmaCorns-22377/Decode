@@ -126,10 +126,12 @@ data class SimState(
     val base: BaseState,
     val joints: Map<String, Double>,
     val telemetry: TelemetryState,
+    val wheelForces: List<ForceState> = emptyList(),
     val balls: List<BallState> = emptyList()
 )
 
 data class BallState(val x: Double, val y: Double, val z: Double)
+data class ForceState(val x: Double, val y: Double, val z: Double)
 
 data class BaseState(
     val x: Double,

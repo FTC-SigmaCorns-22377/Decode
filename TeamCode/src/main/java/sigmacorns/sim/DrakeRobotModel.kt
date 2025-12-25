@@ -15,7 +15,7 @@ class DrakeRobotModel(urdfPath: String) {
 
     // Mirroring RobotModel properties for compatibility
     var drivetrainState = MecanumState(Pose2d(), Pose2d())
-    var baseZ = 0.048
+    var baseZ = 0.1
     var flywheelState = FlywheelState()
     var spindexerState = SpindexerState(0.0, listOf(), 0.0)
 
@@ -23,6 +23,7 @@ class DrakeRobotModel(urdfPath: String) {
     var jointPositions = mutableMapOf<String, Double>()
     var jointVelocities = mutableMapOf<String, Double>()
     var ballPositions = mutableListOf<Vector3d>()
+    var wheelForces = MutableList(4) { Vector3d() }
 
     fun advanceSim(t: Double, io: SigmaIO) {
         // Map IO to input vector
@@ -54,7 +55,8 @@ class DrakeRobotModel(urdfPath: String) {
             "intake_joint", "spindexer_joint", "turret_joint", "flywheel_joint", "hood_joint"
         )
 
-        val expectedSize = 7 + jointNames.size * 2
+        val wheelForceCount = 4
+        val expectedSize = 7 + jointNames.size * 2 + wheelForceCount * 3
         if (state.size >= expectedSize) {
             val x = state[0]
             val y = state[1]
@@ -80,7 +82,18 @@ class DrakeRobotModel(urdfPath: String) {
             val flywheelVel = state[jointVelStart + 7]
             flywheelState.omega = flywheelVel
 
-            val ballStart = 7 + jointNames.size * 2
+            val wheelForceStart = 7 + jointNames.size * 2
+            if (wheelForces.size != wheelForceCount) {
+                wheelForces = MutableList(wheelForceCount) { Vector3d() }
+            }
+            for (i in 0 until wheelForceCount) {
+                val fx = state[wheelForceStart + i * 3]
+                val fy = state[wheelForceStart + i * 3 + 1]
+                val fz = state[wheelForceStart + i * 3 + 2]
+                wheelForces[i].set(fx, fy, fz)
+            }
+
+            val ballStart = wheelForceStart + wheelForceCount * 3
             val remaining = state.size - ballStart
             if (remaining >= 3) {
                 val ballCount = remaining / 3
