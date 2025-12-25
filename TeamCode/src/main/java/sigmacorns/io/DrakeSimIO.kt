@@ -7,7 +7,9 @@ import sigmacorns.sim.viz.SimState
 import sigmacorns.sim.viz.BaseState
 import sigmacorns.sim.viz.TelemetryState
 import sigmacorns.sim.viz.BallState
+import sigmacorns.sim.viz.ErrorState
 import sigmacorns.sim.viz.ForceState
+import sigmacorns.sim.viz.PathPoint
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -16,6 +18,7 @@ import kotlin.time.DurationUnit
 class DrakeSimIO(urdfPath: String) : SigmaIO {
     val model = DrakeRobotModel(urdfPath)
     val server = SimServer(8080)
+    private var trackingError: ErrorState? = null
     
     private var t = 0.seconds
     private val SIM_UPDATE_TIME = 10.milliseconds
@@ -68,6 +71,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                 turret = turret
             ),
             wheelForces = model.wheelForces.map { ForceState(it.x, it.y, it.z) },
+            error = trackingError,
             balls = model.ballPositions.map { BallState(it.x, it.y, it.z) }
         )
         server.broadcast(vizState)
@@ -92,5 +96,13 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     fun close() {
         model.destroy()
         server.stop()
+    }
+
+    fun setTrackingError(error: ErrorState?) {
+        trackingError = error
+    }
+
+    fun setChoreoPath(path: List<PathPoint>) {
+        server.setChoreoPath(path)
     }
 }

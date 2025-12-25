@@ -11,6 +11,7 @@ class SimServer(private val port: Int = 8000) {
     private val sockets = ConcurrentHashMap.newKeySet<WsContext>()
     private val mapper = ObjectMapper()
     private val history = java.util.Collections.synchronizedList(mutableListOf<SimState>())
+    @Volatile private var choreoPath: List<PathPoint> = emptyList()
 
     fun start() {
         val path1 = "TeamCode/src/main/resources/web"
@@ -36,6 +37,9 @@ class SimServer(private val port: Int = 8000) {
         app?.get("/history") { ctx ->
             println("History requested from ${ctx.ip()}, sending ${history.size} states")
             ctx.json(history)
+        }
+        app?.get("/path") { ctx ->
+            ctx.json(choreoPath)
         }
 
         app?.get("/assets/{filename}") { ctx ->
@@ -119,6 +123,10 @@ class SimServer(private val port: Int = 8000) {
             }
         }
     }
+
+    fun setChoreoPath(path: List<PathPoint>) {
+        choreoPath = path
+    }
 }
 
 data class SimState(
@@ -127,11 +135,21 @@ data class SimState(
     val joints: Map<String, Double>,
     val telemetry: TelemetryState,
     val wheelForces: List<ForceState> = emptyList(),
+    val error: ErrorState? = null,
     val balls: List<BallState> = emptyList()
 )
 
 data class BallState(val x: Double, val y: Double, val z: Double)
 data class ForceState(val x: Double, val y: Double, val z: Double)
+data class ErrorState(
+    val x: Double,
+    val y: Double,
+    val yaw: Double,
+    val vx: Double,
+    val vy: Double,
+    val omega: Double
+)
+data class PathPoint(val x: Double, val y: Double)
 
 data class BaseState(
     val x: Double,
