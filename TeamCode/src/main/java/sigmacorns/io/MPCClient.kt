@@ -3,6 +3,7 @@ package sigmacorns.io
 import dev.nullftc.choreolib.sample.MecanumSample
 import dev.nullftc.choreolib.trajectory.Trajectory
 import org.joml.Vector2d
+import org.joml.dot
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
 import sigmacorns.sim.MecanumDynamics
@@ -21,6 +22,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sign
@@ -151,8 +153,7 @@ class MPCClient(
         private set
 
     private var trackingReferenceStates: List<DoubleArray> = emptyList()
-    private var contourReferencePositions: List<Vector2d> = emptyList()
-    private var trackingReferencePositions: List<Vector2d> = emptyList()
+    private var referencePositions: List<Pose2d> = emptyList()
 
     private var sentTargetContours: MutableList<Pair<Long, Contour?>> = mutableListOf()
     private var curTime = 0.seconds
@@ -172,6 +173,21 @@ class MPCClient(
 
     private var latestSampleI = 0
     private var lastTrackingHorizonPositions: List<Vector2d> = emptyList()
+
+    // Monotonic progression tracking
+    private var confirmedProgressIndex = 0
+    private var consecutiveForwardSteps = 0
+
+    // Search window parameters
+    private val SEARCH_WINDOW_SIZE = 10
+    private val BACKWARDS_TOLERANCE = 5
+    private val RECOVERY_THRESHOLD = 1.5  // meters
+
+    // Scoring weights
+    private val DISTANCE_WEIGHT = 1.0
+    private val HEADING_WEIGHT = 0.0  // Increased to better distinguish at intersections
+    private val VELOCITY_WEIGHT = 0.2
+    private val CONFIRMATION_THRESHOLD = 2  // Faster confirmation to track position better
 
     private val channel = DatagramChannel.open()
     private val solverAddr = InetSocketAddress(SOLVER_IP, SOLVER_PORT)
@@ -200,6 +216,18 @@ class MPCClient(
         return Pair(progress, err)
     }
 
+    private fun updateProgressState(selectedIndex: Int) {
+        if (selectedIndex >= confirmedProgressIndex) {
+            consecutiveForwardSteps++
+            if (consecutiveForwardSteps >= CONFIRMATION_THRESHOLD) {
+                confirmedProgressIndex = selectedIndex
+            }
+        } else {
+            consecutiveForwardSteps = 0
+        }
+        latestSampleI = selectedIndex
+    }
+
     private data class TargetSelection(
         val closestIndex: Int,
         val targetIndex: Int,
@@ -207,24 +235,91 @@ class MPCClient(
     )
 
     private fun selectTarget(state: DoubleArray): TargetSelection? {
-        val positions = when (solverRequestType) {
-            SolverRequestType.CONTOURING -> contourReferencePositions
-            SolverRequestType.TRACKING -> trackingReferencePositions
+        if (referencePositions.isEmpty()) return null
+
+        val robotPos = Vector2d(state[3], state[4])
+        val robotHeading = state[5]
+        val robotVel = Vector2d(state[0], state[1])
+
+        // Check if we're far from expected position (recovery mode)
+        val inRecovery = if (referencePositions.isNotEmpty()) {
+            robotPos.distance(referencePositions[confirmedProgressIndex].v) > RECOVERY_THRESHOLD
+        } else false
+
+        // Determine search window
+        val searchStart: Int
+        val searchEnd: Int
+        if (inRecovery) {
+            searchStart = max(0, confirmedProgressIndex - 20)
+            searchEnd = min(referencePositions.size - 1, confirmedProgressIndex + 100)
+        } else {
+            // Search around latest position (not confirmed, to be more responsive)
+            // but don't go backwards past confirmed progress
+            val windowCenter = max(confirmedProgressIndex, latestSampleI)
+            searchStart = max(confirmedProgressIndex, windowCenter - BACKWARDS_TOLERANCE)
+            searchEnd = min(referencePositions.size - 1, searchStart + SEARCH_WINDOW_SIZE)
         }
 
-        if (positions.isEmpty()) {
-            return null
+        // Find best candidate by scoring
+
+        val bestIndex = (searchStart..searchEnd).minBy { idx ->
+            val dist = robotPos.distance(referencePositions[idx].v)
+
+            if (inRecovery) {
+                // Recovery mode: prioritize distance and heading
+                val pathHeading = when (solverRequestType) {
+                    SolverRequestType.CONTOURING -> path!![idx].tangent
+                    SolverRequestType.TRACKING -> trackingReferenceStates[idx][5]
+                }
+                var headingDiff = pathHeading - robotHeading
+                while (headingDiff > PI) headingDiff -= 2 * PI
+                while (headingDiff < -PI) headingDiff += 2 * PI
+                val headingScore = abs(headingDiff)
+
+                val score = dist * 3.0 + headingScore
+                score
+            } else {
+                // Normal mode: multi-criteria scoring
+
+                // Heading score
+                var headingDiff = referencePositions[idx].rot - robotHeading
+                while (headingDiff > PI) headingDiff -= 2 * PI
+                while (headingDiff < -PI) headingDiff += 2 * PI
+                val headingScore = abs(headingDiff)
+
+                // Velocity score
+                val v = when (solverRequestType) {
+                    SolverRequestType.CONTOURING -> {
+                       path!![idx].vel.v
+                    }
+                    SolverRequestType.TRACKING -> {
+                        Vector2d(trackingReferenceStates[idx][0], trackingReferenceStates[idx][1])
+                    }
+                }
+                val robotSpeed = robotVel.length()
+                val pathSpeed = v.length()
+                val velocityScore = if (robotSpeed < 0.01 || pathSpeed < 0.01) {
+                    0.0
+                } else {
+                    val similarity = robotVel.dot(v) / (robotSpeed * pathSpeed)
+                    1.0 - similarity
+                }
+
+                val score = (
+                    DISTANCE_WEIGHT * dist +
+                    HEADING_WEIGHT * headingScore +
+                    VELOCITY_WEIGHT * velocityScore
+                )
+
+                score
+            }
         }
 
-        val closestIndex = positions.withIndex().minBy { (_, ref) ->
-            val dx = ref.x() - state[3]
-            val dy = ref.y() - state[4]
-            dx * dx + dy * dy
-        }.index
+        val closestIndex = bestIndex
 
-        latestSampleI = closestIndex
+        updateProgressState(closestIndex)
 
-        val targetIndex = min(closestIndex + sampleLookahead, positions.size - 1)
+        val targetIndex = min(closestIndex + sampleLookahead, referencePositions.size - 1)
 
         val contour = if (solverRequestType == SolverRequestType.CONTOURING) {
             path?.getOrNull(targetIndex)
@@ -232,11 +327,7 @@ class MPCClient(
             null
         }
 
-        return TargetSelection(
-            closestIndex = closestIndex,
-            targetIndex = targetIndex,
-            contour = contour,
-        )
+        return TargetSelection(closestIndex, targetIndex, contour)
     }
 
     private fun buildTrackingReferenceStates(traj: Trajectory<MecanumSample>): List<DoubleArray> {
@@ -274,12 +365,8 @@ class MPCClient(
         if (x0 == null) {
             return
         }
-        val hasReference = when (solverRequestType) {
-            SolverRequestType.CONTOURING -> contourReferencePositions.isNotEmpty()
-            SolverRequestType.TRACKING -> trackingReferencePositions.isNotEmpty()
-        }
 
-        if (!hasReference) {
+        if (referencePositions.isEmpty()) {
             return
         }
 
@@ -475,9 +562,10 @@ class MPCClient(
         this.path = path
         solverRequestType = SolverRequestType.CONTOURING
         trackingReferenceStates = emptyList()
-        contourReferencePositions = path.map { Vector2d(it.pos.v) }
-        trackingReferencePositions = emptyList()
+        referencePositions = path.map { it.pos }
         latestSampleI = 0
+        confirmedProgressIndex = 0
+        consecutiveForwardSteps = 0
         lastTargetContour = null
         latestU = DoubleArray(N * NU)
     }
@@ -486,9 +574,10 @@ class MPCClient(
         solverRequestType = SolverRequestType.TRACKING
         this.path = null
         trackingReferenceStates = states.map { it.copyOf() }
-        trackingReferencePositions = trackingReferenceStates.map { Vector2d(it[3], it[4]) }
-        contourReferencePositions = emptyList()
+        referencePositions = trackingReferenceStates.map { Pose2d(it[3], it[4], it[5]) }
         latestSampleI = 0
+        confirmedProgressIndex = 0
+        consecutiveForwardSteps = 0
         lastTargetContour = null
         latestU = DoubleArray(N * NU)
     }
