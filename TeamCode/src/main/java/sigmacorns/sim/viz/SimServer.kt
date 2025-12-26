@@ -136,7 +136,8 @@ data class SimState(
     val telemetry: TelemetryState,
     val wheelForces: List<ForceState> = emptyList(),
     val error: ErrorState? = null,
-    val balls: List<BallState> = emptyList()
+    val balls: List<BallState> = emptyList(),
+    val mpcTarget: List<PathPoint> = emptyList()
 )
 
 data class BallState(val x: Double, val y: Double, val z: Double)

@@ -19,6 +19,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     val model = DrakeRobotModel(urdfPath)
     val server = SimServer(8080)
     private var trackingError: ErrorState? = null
+    private var trackingTarget: List<PathPoint> = emptyList()
     
     private var t = 0.seconds
     private val SIM_UPDATE_TIME = 10.milliseconds
@@ -72,7 +73,8 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
             ),
             wheelForces = model.wheelForces.map { ForceState(it.x, it.y, it.z) },
             error = trackingError,
-            balls = model.ballPositions.map { BallState(it.x, it.y, it.z) }
+            balls = model.ballPositions.map { BallState(it.x, it.y, it.z) },
+            mpcTarget = trackingTarget
         )
         server.broadcast(vizState)
         
@@ -104,5 +106,9 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     fun setChoreoPath(path: List<PathPoint>) {
         server.setChoreoPath(path)
+    }
+
+    fun setTrackingTarget(path: List<PathPoint>) {
+        trackingTarget = path
     }
 }
