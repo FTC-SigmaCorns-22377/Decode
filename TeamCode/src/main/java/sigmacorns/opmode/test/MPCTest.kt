@@ -41,9 +41,9 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
 
         val voltageSensor = hardwareMap?.voltageSensor?.iterator()?.next()
 
-        MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2).use { mpc ->
+        MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 1).use { mpc ->
             rerunSink("MPCTest($trajName)").use { rr ->
-                mpc.setTarget(traj, SolverRequestType.TRACKING)
+                mpc.setTarget(traj, SolverRequestType.CONTOURING)
                 val drakeIO = io as? DrakeSimIO
                 if (drakeIO != null) {
                     val pathPoints = traj.samples.map { PathPoint(it.x, it.y) }
@@ -90,6 +90,8 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                     rr.logInputs(io)
 
                     if (drakeIO != null) {
+                        val targetPoints = mpc.getLastTrackingHorizonPositions()
+                        drakeIO.setTrackingTarget(targetPoints.map { PathPoint(it.x, it.y) })
                         val pos = io.position()
                         val vel = io.velocity()
                         val closest = traj.samples.minByOrNull {

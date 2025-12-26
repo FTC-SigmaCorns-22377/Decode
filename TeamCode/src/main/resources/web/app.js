@@ -16,6 +16,7 @@ const scrubber = document.getElementById('scrubber');
 const toggleRobotMesh = document.getElementById('toggle-robot-mesh');
 const toggleRobotPoint = document.getElementById('toggle-robot-point');
 const togglePath = document.getElementById('toggle-path');
+const toggleMpcTarget = document.getElementById('toggle-mpc-target');
 const toggleForces = document.getElementById('toggle-forces');
 const toggleBalls = document.getElementById('toggle-balls');
 const toggleErrorChart = document.getElementById('toggle-error-chart');
@@ -44,6 +45,8 @@ const wheelForceConfig = [
 const wheelForceTmp = new THREE.Vector3();
 let pathLine = null;
 let pathSignature = '';
+let mpcTargetLine = null;
+let mpcTargetSignature = '';
 const robotPoint = new THREE.Mesh(
     new THREE.SphereGeometry(0.04, 12, 12),
     new THREE.MeshPhongMaterial({ color: 0xffaa00 })
@@ -180,6 +183,39 @@ function setPath(points) {
     scene.add(pathLine);
 }
 
+function setMpcTarget(points) {
+    if (!points || points.length === 0) {
+        if (mpcTargetLine) {
+            scene.remove(mpcTargetLine);
+            mpcTargetLine.geometry.dispose();
+        }
+        mpcTargetLine = null;
+        mpcTargetSignature = '';
+        return;
+    }
+    const head = points[0];
+    const tail = points[points.length - 1];
+    const signature = `${points.length}:${head.x.toFixed(3)},${head.y.toFixed(3)}:${tail.x.toFixed(3)},${tail.y.toFixed(3)}`;
+    if (signature === mpcTargetSignature) return;
+    mpcTargetSignature = signature;
+    if (mpcTargetLine) {
+        scene.remove(mpcTargetLine);
+        mpcTargetLine.geometry.dispose();
+    }
+    const verts = new Float32Array(points.length * 3);
+    points.forEach((p, i) => {
+        verts[i * 3] = p.x;
+        verts[i * 3 + 1] = p.y;
+        verts[i * 3 + 2] = 0.03;
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0x00ffff });
+    mpcTargetLine = new THREE.Line(geometry, material);
+    mpcTargetLine.visible = toggleMpcTarget.checked;
+    scene.add(mpcTargetLine);
+}
+
 // --- Visual Updates ---
 function updateVisuals(state) {
     if (!state) return;
@@ -230,6 +266,7 @@ function updateVisuals(state) {
     robotPoint.visible = toggleRobotPoint.checked;
     robotHeading.visible = toggleRobotPoint.checked;
     balls.forEach(ball => { ball.visible = toggleBalls.checked; });
+    setMpcTarget(state.mpcTarget || []);
     timeDisplay.textContent = `T: ${state.t.toFixed(2)}s`;
     if (!scrubberDragging) {
         scrubber.max = history.length - 1;
@@ -349,6 +386,7 @@ scrubber.addEventListener('input', () => { playbackIndex = parseInt(scrubber.val
 toggleRobotMesh.addEventListener('change', () => { if (robot) robot.visible = toggleRobotMesh.checked; });
 toggleRobotPoint.addEventListener('change', () => { robotPoint.visible = toggleRobotPoint.checked; robotHeading.visible = toggleRobotPoint.checked; });
 togglePath.addEventListener('change', () => { if (pathLine) pathLine.visible = togglePath.checked; });
+toggleMpcTarget.addEventListener('change', () => { if (mpcTargetLine) mpcTargetLine.visible = toggleMpcTarget.checked; });
 toggleForces.addEventListener('change', () => { if (!toggleForces.checked) wheelForceArrows.forEach(arrow => { arrow.visible = false; }); });
 toggleBalls.addEventListener('change', () => { balls.forEach(ball => { ball.visible = toggleBalls.checked; }); });
 toggleErrorChart.addEventListener('change', () => {
