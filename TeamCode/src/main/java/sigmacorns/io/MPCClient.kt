@@ -171,6 +171,7 @@ class MPCClient(
     private var latestUTime = 0L
 
     private var latestSampleI = 0
+    private var lastTrackingHorizonPositions: List<Vector2d> = emptyList()
 
     private val channel = DatagramChannel.open()
     private val solverAddr = InetSocketAddress(SOLVER_IP, SOLVER_PORT)
@@ -312,16 +313,30 @@ class MPCClient(
         p[0] *= V/parameters.motor.vRef
         p[1] *= V/parameters.motor.vRef
 
+        val headingAnchor = x0!!.pos.rot
+
         // Payload
         when (solverRequestType) {
-            SolverRequestType.CONTOURING -> putArray(buf, targetContour!!.toArray())
-            SolverRequestType.TRACKING -> putArray(buf, buildExpectedStateHorizon(selection.targetIndex))
+            SolverRequestType.CONTOURING -> {
+                val target = targetContour!!.toArray()
+                target[2] = unwrapAngleNear(target[2], headingAnchor)
+                putArray(buf, target)
+                lastTrackingHorizonPositions = emptyList()
+            }
+            SolverRequestType.TRACKING -> {
+                val expected = buildExpectedStateHorizon(selection.targetIndex)
+                val adjusted = adjustTrackingHeading(expected, headingAnchor)
+                lastTrackingHorizonPositions = buildTrackingHorizonPositions(adjusted)
+                putArray(buf, adjusted)
+            }
         }
 
         val predictedX = predictState(x0!!,time.nanoseconds+preIntegrate)
         val predictedU = getU(time.nanoseconds+preIntegrate)
 
-        putArray(buf, predictedX.toDoubleArray())
+        val predictedXArr = predictedX.toDoubleArray()
+        predictedXArr[5] = unwrapAngleNear(predictedXArr[5], headingAnchor)
+        putArray(buf, predictedXArr)
         putArray(buf, predictedU)
         putArray(buf, p)
 
@@ -351,6 +366,49 @@ class MPCClient(
 
         return expected
     }
+
+    private fun unwrapAngleNear(angle: Double, reference: Double): Double {
+        var unwrapped = angle
+        val twoPi = 2.0 * PI
+        while (unwrapped - reference > PI) {
+            unwrapped -= twoPi
+        }
+        while (unwrapped - reference < -PI) {
+            unwrapped += twoPi
+        }
+        return unwrapped
+    }
+
+    private fun adjustTrackingHeading(expected: DoubleArray, anchorHeading: Double): DoubleArray {
+        if (expected.isEmpty()) {
+            return expected
+        }
+        val adjusted = expected.copyOf()
+        val headingIndex = 5
+        var prevHeading = unwrapAngleNear(adjusted[headingIndex], anchorHeading)
+        adjusted[headingIndex] = prevHeading
+        val stateCount = adjusted.size / NX
+        for (i in 1 until stateCount) {
+            val idx = i * NX + headingIndex
+            val raw = adjusted[idx]
+            val unwrapped = unwrapAngleNear(raw, prevHeading)
+            adjusted[idx] = unwrapped
+            prevHeading = unwrapped
+        }
+        return adjusted
+    }
+
+    private fun buildTrackingHorizonPositions(expected: DoubleArray): List<Vector2d> {
+        val points = ArrayList<Vector2d>(N + 1)
+        val stateCount = expected.size / NX
+        for (i in 0 until stateCount) {
+            val idx = i * NX
+            points.add(Vector2d(expected[idx + 3], expected[idx + 4]))
+        }
+        return points
+    }
+
+    fun getLastTrackingHorizonPositions(): List<Vector2d> = lastTrackingHorizonPositions
 
     private fun receiveResponse() {
         if (selector.selectNow() > 0) {
