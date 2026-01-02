@@ -41,6 +41,10 @@ class SimIO : SigmaIO {
         return 0.0 // Todo: Implement turret simulation
     }
 
+    override fun spindexerPosition(): Double {
+        return robot.spindexerState.spindexerRotation
+    }
+
     override fun update() {
         robot.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS),this)
         t += SIM_UPDATE_TIME

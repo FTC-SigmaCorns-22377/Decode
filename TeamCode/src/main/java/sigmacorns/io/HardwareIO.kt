@@ -101,6 +101,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         return turretMotor?.currentPosition?.toDouble() ?: 0.0
     }
 
+    override fun spindexerPosition(): Double {
+        return spindexerMotor?.currentPosition?.toDouble() ?: 0.0
+    }
+
     var posOffset = Pose2d()
 
     override fun setPosition(p: Pose2d) {

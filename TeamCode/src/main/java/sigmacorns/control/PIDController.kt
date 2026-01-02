@@ -18,6 +18,6 @@ class PIDController(
         integral += error*t
         val dError = if(lastError!=null) kd*(error - lastError!!)/t else 0.0
 
-        return kp*error + integral - kd*dError + ki*integral
+        return kp*error - kd*dError + ki*integral
     }
 }

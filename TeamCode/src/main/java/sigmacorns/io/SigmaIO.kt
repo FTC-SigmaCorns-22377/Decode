@@ -35,6 +35,7 @@ interface SigmaIO {
     fun velocity(): Pose2d
     fun flywheelVelocity(): Double
     fun turretPosition(): Double
+    fun spindexerPosition(): Double
 
     fun update()
 
