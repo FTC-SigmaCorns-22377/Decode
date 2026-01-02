@@ -26,6 +26,7 @@ class SimIO : SigmaIO {
     override var spindexer: Double = 0.0
     override var turretAngle: Double = 0.0
     override var breakPower: Double = 0.0
+    override var transfer: Double = 0.0
 
 
     override fun position(): Pose2d = robot.drivetrainState.pos

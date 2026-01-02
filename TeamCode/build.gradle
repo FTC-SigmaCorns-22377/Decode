@@ -136,6 +136,7 @@ dependencies {
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
     testImplementation "org.jetbrains.kotlinx:kandy-lets-plot:0.8.0"
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2'
 
     implementation "com.bylazar:fullpanels:1.0.7"
 }
