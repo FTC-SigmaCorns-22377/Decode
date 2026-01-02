@@ -23,6 +23,7 @@ interface SigmaIO {
     var spindexer: Double //the tick value of how much we need the spindexer to move in order to get to cycle to the next ball in the spindexer
     //break servo
     var breakPower: Double //the value that contols the position of the servo to engage or disengage the servo
+    var transfer: Double
     /* function to get robo position
     position( drive base)
     velocity(drive base)
