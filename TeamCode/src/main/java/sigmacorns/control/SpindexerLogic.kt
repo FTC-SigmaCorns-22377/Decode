@@ -74,6 +74,9 @@ class SpindexerLogic(val io: SigmaIO) {
     /** Current calculated target velocity for flywheel */
     var targetFlywheelVelocity: Double = 0.0
 
+    /** Whether continuous shooting is requested */
+    var shootingRequested: Boolean = false
+
     enum class State {
         IDLE,
         INTAKING,
@@ -171,6 +174,7 @@ class SpindexerLogic(val io: SigmaIO) {
         if (offsetActive == true) {
             println("changed offset angle")
             spindexerRotation += MODE_CHANGE_ANGLE
+            offsetActive = false
 
             // Wait until spindexer reaches target position
             val startTime = io.time()
@@ -187,7 +191,6 @@ class SpindexerLogic(val io: SigmaIO) {
                 }
                 delay(10)
             }
-            offsetActive = false
         }
 
         // Check for ball detection (polling)
@@ -233,7 +236,7 @@ class SpindexerLogic(val io: SigmaIO) {
         if (spindexerState.all { it != null }) {
             State.FULL
         } else {
-            State.INTAKING
+            State.IDLE
         }
     }
 
@@ -248,6 +251,7 @@ class SpindexerLogic(val io: SigmaIO) {
 
         if (offsetActive == false) {
             spindexerRotation += MODE_CHANGE_ANGLE
+            offsetActive = true
 
             // Wait until spindexer reaches target position
             val startTime = io.time()
@@ -264,7 +268,6 @@ class SpindexerLogic(val io: SigmaIO) {
                 }
                 delay(10)
             }
-            offsetActive = true
         }
 
         // Wait for flywheel to spin up
@@ -293,7 +296,7 @@ class SpindexerLogic(val io: SigmaIO) {
         spindexerState[0] = null
 
         // Check if spindexer is empty
-        if (spindexerState.all { it == null }) {
+        if (spindexerState.all { it == null } && !shootingRequested) {
             io.shooter = 0.0
             State.IDLE
         } else {
@@ -334,8 +337,12 @@ class SpindexerLogic(val io: SigmaIO) {
             }
         )
 
-        // Continue shooting
-        State.SHOOTING
+        // Continue shooting if requested, otherwise go to IDLE
+        if (shootingRequested) {
+            State.SHOOTING
+        } else {
+            State.IDLE
+        }
     }
 
     // Public API for sending events
@@ -343,6 +350,11 @@ class SpindexerLogic(val io: SigmaIO) {
     fun stopIntaking() = fsm.sendEvent(Event.STOP_INTAKING)
     fun shoot() = fsm.sendEvent(Event.SHOOT)
     fun rotate() = fsm.sendEvent(Event.BALL_DETECTED)
+    
+    /** Manually rotate the spindexer by a specific angle (radians) */
+    fun nudge(angle: Double) {
+        spindexerRotation += angle
+    }
 
     // Current state accessor
     val currentState: State get() = fsm.curState

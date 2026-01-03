@@ -46,6 +46,8 @@ class TeleopV2 : SigmaOpMode() {
     private var wasShooting = false
     private var wasAutoAimToggle = false
     private var wasFieldRelativeToggle = false
+    private var wasLeftBumper = false
+    private var wasRightBumper = false
 
     private lateinit var gm1: Gamepad
     private lateinit var gm2: Gamepad
@@ -157,7 +159,7 @@ class TeleopV2 : SigmaOpMode() {
         wasFieldRelativeToggle = fieldRelativeToggle
 
         // Turret yaw control
-        if (autoAim.enabled && autoAim.hasTarget) {
+        if (autoAim.enabled && autoAim.hasTarget && !gm2.left_stick_button) {
             // Auto-aim mode: use sensor fusion for target tracking
             if (turret.fieldRelativeMode) {
                 // Use field-relative target angle from sensor fusion
@@ -175,7 +177,7 @@ class TeleopV2 : SigmaOpMode() {
             targetDistance = autoAim.targetDistance.coerceIn(1.0, 10.0)
         } else {
             // Manual turret yaw control (operator left stick Y)
-            val yawInput = -gm2.left_stick_y.toDouble()
+            val yawInput = -gm2.left_stick_x.toDouble()
             if (yawInput.absoluteValue > 0.1) {
                 if (turret.fieldRelativeMode) {
                     // In field-relative mode, adjust field target angle
@@ -184,13 +186,6 @@ class TeleopV2 : SigmaOpMode() {
                     turret.targetAngle += yawInput * 0.03  // radians per loop
                 }
             }
-        }
-
-        // Manual turret pitch control (operator left stick X -> servo)
-        val pitchInput = gm2.left_stick_x.toDouble()
-        if (pitchInput.absoluteValue > 0.1) {
-            turret.targetPitch = (turret.targetPitch + pitchInput * 0.02).coerceIn(0.0, 1.0)
-            io.turretAngle = turret.targetPitch
         }
 
         // Distance adjustment for flywheel speed (operator D-pad) - only in manual mode
@@ -207,11 +202,6 @@ class TeleopV2 : SigmaOpMode() {
         // Flywheel controls
         var flywheelPower = 0.0
 
-        // Driver flywheel preset (right bumper = far shot)
-        if (gm1.right_bumper) {
-            flywheelPower = 0.79 * dVoltage
-        }
-
         // Manual flywheel override (operator right stick)
         if (gm2.right_stick_y.absoluteValue > 0.1) {
             flywheelPower = -gm2.right_stick_y.toDouble() * dVoltage
@@ -220,7 +210,7 @@ class TeleopV2 : SigmaOpMode() {
         // Apply flywheel power (only if not being controlled by SpindexerLogic shooting)
         if (spindexerLogic.currentState != SpindexerLogic.State.SHOOTING &&
             spindexerLogic.currentState != SpindexerLogic.State.MOVING_SHOOT) {
-            //io.shooter = flywheelPower
+            io.shooter = flywheelPower
         }
 
         // Update turret PID
@@ -237,30 +227,34 @@ class TeleopV2 : SigmaOpMode() {
         }
         wasIntaking = intaking
 
-        if (io.distance() < 0.15) {
+        /*if (io.distance() < 0.15) {
             spindexerLogic.fsm.sendEvent(SpindexerLogic.Event.BALL_DETECTED)
+        }*/
+
+        // Spindexer Nudge Controls (Driver Bumpers)
+        if (gm1.left_bumper && !wasLeftBumper) {
+            spindexerLogic.nudge(-2 * PI / 3) // 120 deg Left
         }
+        wasLeftBumper = gm1.left_bumper
+
+        if (gm1.right_bumper && !wasRightBumper) {
+            spindexerLogic.nudge(2 * PI / 3) // 120 deg Right
+        }
+        wasRightBumper = gm1.right_bumper
 
         // Shooting controls
         // Driver right trigger - shoot
-        val shooting = gm1.right_trigger > 0.5
-        if (shooting && !wasShooting) {
+        val isShooting = gm1.right_trigger > 0.5
+        spindexerLogic.shootingRequested = isShooting
+
+        if (isShooting && !wasShooting) {
             spindexerLogic.shoot()
         }
-        wasShooting = shooting
+        wasShooting = isShooting
 
         // Operator quick shot (right bumper)
         if (gm2.right_bumper && !gm2.left_bumper) {
             // Single press shoot - edge detection handled by checking state
-            if (spindexerLogic.currentState == SpindexerLogic.State.IDLE ||
-                spindexerLogic.currentState == SpindexerLogic.State.FULL) {
-                spindexerLogic.shoot()
-            }
-        }
-
-        // Operator rapid fire (left bumper held)
-        if (gm2.left_bumper) {
-            // Continuous shooting while held
             if (spindexerLogic.currentState == SpindexerLogic.State.IDLE ||
                 spindexerLogic.currentState == SpindexerLogic.State.FULL) {
                 spindexerLogic.shoot()
