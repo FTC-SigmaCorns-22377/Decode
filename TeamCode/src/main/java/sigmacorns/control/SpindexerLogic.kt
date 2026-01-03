@@ -3,6 +3,7 @@ package sigmacorns.control
 import kotlinx.coroutines.delay
 import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 class SpindexerLogic(val io: SigmaIO) {
@@ -180,10 +181,13 @@ class SpindexerLogic(val io: SigmaIO) {
     // Current state accessor
     val currentState: State get() = fsm.curState
 
-    fun update(deltaT: kotlin.time.Duration) {
+    fun update(motorTick: Double, deltaT: Duration) {
         fsm.update()
 
+        val curRotation = motorTick/((1+(46.0/11.0)) * 28)*2*PI
+
         // Update PID for spindexer motor position
-        io.spindexer = spindexerPID.update(spindexerRotation, deltaT)
+        spindexerPID.setpoint = spindexerRotation
+        io.spindexer = spindexerPID.update(curRotation, deltaT)
     }
 }

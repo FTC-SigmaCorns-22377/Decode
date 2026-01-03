@@ -187,11 +187,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flywheelMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
         turretMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        spindexerMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
 
         //declaring the driveMode's for auxilery motors(which will be run without encoder for now)
         flywheelMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        spindexerMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
 
         // configuring pinpoint
         configurePinpoint()

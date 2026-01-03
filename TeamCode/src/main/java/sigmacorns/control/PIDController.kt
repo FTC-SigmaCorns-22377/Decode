@@ -20,4 +20,9 @@ class PIDController(
 
         return kp*error - kd*dError + ki*integral
     }
+
+    fun reset() {
+        integral = 0.0
+        lastError = null
+    }
 }
