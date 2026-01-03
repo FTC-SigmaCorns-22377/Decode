@@ -3,6 +3,7 @@ package sigmacorns.control
 import kotlinx.coroutines.delay
 import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
+import sigmacorns.opmode.test.SpindexerPIDConfig
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -17,11 +18,34 @@ class SpindexerLogic(val io: SigmaIO) {
     private val MODE_CHANGE_ANGLE = PI / 3   // rotation for switching intake to shoot mode
 
     // PID controller for spindexer motor
-    val spindexerPID = PIDController(1.0, 0.0, 0.0, 0.0)
+    val spindexerPID = PIDController(0.25, 10.0, 0.0, 0.0)
+    private val slewRateLimiter = SlewRateLimiter(maxRate = SpindexerPIDConfig.slewRate)
 
-    // Timings
-    private val SPINUP_TIME = 400.milliseconds
-    private val MOVE_TIME = 300.milliseconds  // time to rotate spindexer
+    /** Whether slew rate limiting is enabled */
+    var slewRateLimitingEnabled: Boolean = true
+
+    /** The actual target after limiting */
+    var effectiveTargetRotation: Double = 0.0
+        private set
+
+    // Error thresholds
+    private val POSITION_ERROR_THRESHOLD = 0.05  // radians - position threshold for spindexer
+    private val VELOCITY_ERROR_THRESHOLD = 5.0   // rad/s - velocity threshold for flywheel
+    private val TARGET_FLYWHEEL_VELOCITY = 50.0  // rad/s - target flywheel velocity
+
+    // Timeout for safety (fallback if threshold never reached)
+    private val MAX_WAIT_TIME = 3000.milliseconds
+
+    // Transfer servo timing constants (continuous servo: -1 to 1, 0 = stopped)
+    private val TRANSFER_UP_POWER = 1.0       // Power to move transfer up (towards shooter)
+    private val TRANSFER_DOWN_POWER = -1.0    // Power to move transfer down (reset position)
+    private val TRANSFER_STOP_POWER = 0.0     // Stopped
+    private val TRANSFER_UP_DURATION = 300.milliseconds    // Time to transfer ball up
+    private val TRANSFER_DOWN_DURATION = 400.milliseconds  // Time to reset transfer down
+
+    //extra variables
+    private var offsetActive: Boolean = false
+    private var transferNeedsReset: Boolean = true  // Track if transfer needs to be reset
 
     enum class State {
         IDLE,
@@ -35,7 +59,8 @@ class SpindexerLogic(val io: SigmaIO) {
     enum class Event {
         START_INTAKING,
         STOP_INTAKING,
-        SHOOT
+        SHOOT,
+        BALL_DETECTED
     }
 
     val fsm = FSM<State, Event>(
@@ -67,6 +92,11 @@ class SpindexerLogic(val io: SigmaIO) {
                 else -> {}
             }
         }
+        onEvent(Event.BALL_DETECTED) {
+            if(curState == State.INTAKING) {
+                spindexerState[0] = Balls.Green
+            }
+        }
     }
 
     private fun stateBehavior(state: State): suspend () -> State = when (state) {
@@ -82,13 +112,57 @@ class SpindexerLogic(val io: SigmaIO) {
         // Idle: wait for events, no automatic transitions
         io.intake = 0.0
         io.shooter = 0.0
-        io.transfer = 0.0
+        io.transfer = TRANSFER_STOP_POWER
+
+        // Reset transfer on first idle if needed
+        if (transferNeedsReset) {
+            resetTransfer()
+        }
+
         State.IDLE
+    }
+
+    /** Reset the transfer servo by running it down for a set duration */
+    private suspend fun resetTransfer() {
+        io.transfer = TRANSFER_DOWN_POWER
+        delay(TRANSFER_DOWN_DURATION.inWholeMilliseconds)
+        io.transfer = TRANSFER_STOP_POWER
+        transferNeedsReset = false
+    }
+
+    /** Activate transfer servo by running it up for a set duration to transfer a ball */
+    private suspend fun activateTransfer() {
+        io.transfer = TRANSFER_UP_POWER
+        delay(TRANSFER_UP_DURATION.inWholeMilliseconds)
+        io.transfer = TRANSFER_STOP_POWER
+        transferNeedsReset = true  // Mark that we need to reset next time
     }
 
     private fun intakingBehavior(): suspend () -> State = suspend {
         // Run intake motor
-        io.intake = 0.7
+        println("Entered intaking state")
+        io.intake = -1.0
+        if (offsetActive == true) {
+            println("changed offset angle")
+            spindexerRotation += MODE_CHANGE_ANGLE
+
+            // Wait until spindexer reaches target position
+            val startTime = io.time()
+            while (true) {
+                val curRotation = io.spindexerPosition() / ((1 + (46.0 / 11.0)) * 28) * 2 * PI
+                val error = kotlin.math.abs(curRotation - spindexerRotation)
+
+                if (error < POSITION_ERROR_THRESHOLD) {
+                    break
+                }
+                if (io.time() - startTime > MAX_WAIT_TIME) {
+                    println("Warning: Spindexer offset timeout")
+                    break
+                }
+                delay(10)
+            }
+            offsetActive = false
+        }
 
         // Check for ball detection (polling)
         while (spindexerState[0] == null) {
@@ -102,6 +176,7 @@ class SpindexerLogic(val io: SigmaIO) {
     private fun movingBehavior(): suspend () -> State = suspend {
         // Stop intake while moving
         io.intake = 0.0
+        println("Entering Move State")
 
         // Rotate spindexer to next position
         spindexerRotation += ROTATE_ANGLE
@@ -112,8 +187,21 @@ class SpindexerLogic(val io: SigmaIO) {
         spindexerState[1] = spindexerState[0]
         spindexerState[0] = temp
 
-        // Wait for movement to complete
-        delay(MOVE_TIME.inWholeMilliseconds)
+        // Wait for spindexer to reach target position
+        val startTime = io.time()
+        while (true) {
+            val curRotation = io.spindexerPosition() / ((1 + (46.0 / 11.0)) * 28) * 2 * PI
+            val error = kotlin.math.abs(curRotation - spindexerRotation)
+
+            if (error < POSITION_ERROR_THRESHOLD) {
+                break
+            }
+            if (io.time() - startTime > MAX_WAIT_TIME) {
+                println("Warning: Spindexer movement timeout")
+                break
+            }
+            delay(10)
+        }
 
         // Check if spindexer is full
         if (spindexerState.all { it != null }) {
@@ -131,20 +219,49 @@ class SpindexerLogic(val io: SigmaIO) {
 
     private fun shootingBehavior(): suspend () -> State = suspend {
         // Start flywheel
-        io.shooter = 0.8
+        io.shooter = 1.0
+        if (offsetActive == false) {
+            spindexerRotation += MODE_CHANGE_ANGLE
 
-        // Wait for spinup
-        delay(SPINUP_TIME.inWholeMilliseconds)
+            // Wait until spindexer reaches target position
+            val startTime = io.time()
+            while (true) {
+                val curRotation = io.spindexerPosition() / ((1 + (46.0 / 11.0)) * 28) * 2 * PI
+                val error = kotlin.math.abs(curRotation - spindexerRotation)
 
-        // Activate transfer to shoot ball
-        io.transfer = 0.7
+                if (error < POSITION_ERROR_THRESHOLD) {
+                    break
+                }
+                if (io.time() - startTime > MAX_WAIT_TIME) {
+                    println("Warning: Spindexer offset timeout")
+                    break
+                }
+                delay(10)
+            }
+            offsetActive = true
+        }
 
-        // Wait for ball to be shot
-        delay(200)
+        // Wait for flywheel to spin up
+        val startTime = io.time()
+        while (true) {
+            val currentVelocity = io.flywheelVelocity()
+            val error = kotlin.math.abs(currentVelocity - TARGET_FLYWHEEL_VELOCITY)
+
+            if (error < VELOCITY_ERROR_THRESHOLD) {
+                break
+            }
+            if (io.time() - startTime > MAX_WAIT_TIME) {
+                println("Warning: Flywheel spinup timeout")
+                break
+            }
+            delay(10)
+        }
+
+        // Activate transfer to shoot ball (continuous servo - runs for set duration)
+        activateTransfer()
 
         // Mark current ball as shot
         spindexerState[0] = null
-        io.transfer = 0.0
 
         // Check if spindexer is empty
         if (spindexerState.all { it == null }) {
@@ -166,8 +283,21 @@ class SpindexerLogic(val io: SigmaIO) {
         spindexerState[1] = spindexerState[0]
         spindexerState[0] = temp
 
-        // Wait for movement
-        delay(MOVE_TIME.inWholeMilliseconds)
+        // Wait for spindexer to reach target position
+        val startTime = io.time()
+        while (true) {
+            val curRotation = io.spindexerPosition() / ((1 + (46.0 / 11.0)) * 28) * 2 * PI
+            val error = kotlin.math.abs(curRotation - spindexerRotation)
+
+            if (error < POSITION_ERROR_THRESHOLD) {
+                break
+            }
+            if (io.time() - startTime > MAX_WAIT_TIME) {
+                println("Warning: Spindexer movement timeout")
+                break
+            }
+            delay(10)
+        }
 
         // Continue shooting
         State.SHOOTING
@@ -177,6 +307,7 @@ class SpindexerLogic(val io: SigmaIO) {
     fun startIntaking() = fsm.sendEvent(Event.START_INTAKING)
     fun stopIntaking() = fsm.sendEvent(Event.STOP_INTAKING)
     fun shoot() = fsm.sendEvent(Event.SHOOT)
+    fun rotate() = fsm.sendEvent(Event.BALL_DETECTED)
 
     // Current state accessor
     val currentState: State get() = fsm.curState
@@ -186,8 +317,23 @@ class SpindexerLogic(val io: SigmaIO) {
 
         val curRotation = motorTick/((1+(46.0/11.0)) * 28)*2*PI
 
+        val slewLimitedTarget = if (slewRateLimitingEnabled) {
+            slewRateLimiter.maxRate = SpindexerPIDConfig.slewRate
+            slewRateLimiter.calculate(spindexerRotation, deltaT)
+        } else {
+            spindexerRotation
+        }
+
+        effectiveTargetRotation = slewLimitedTarget
+
         // Update PID for spindexer motor position
-        spindexerPID.setpoint = spindexerRotation
-        io.spindexer = spindexerPID.update(curRotation, deltaT)
+        val count = spindexerState.count { it != null }
+
+        spindexerPID.kp = SpindexerPIDConfig.getKp(count)
+        spindexerPID.kd = SpindexerPIDConfig.getKd(count)
+        spindexerPID.ki = SpindexerPIDConfig.getKi(count)
+
+        spindexerPID.setpoint = effectiveTargetRotation
+        io.spindexer = spindexerPID.update(curRotation, deltaT).coerceIn(-1.0, 1.0)
     }
 }

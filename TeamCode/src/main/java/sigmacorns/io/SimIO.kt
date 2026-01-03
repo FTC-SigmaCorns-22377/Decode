@@ -45,6 +45,10 @@ class SimIO : SigmaIO {
         return robot.spindexerState.spindexerRotation
     }
 
+    override fun distance(): Double {
+        return 0.5 // Dummy value: 0.5 meters
+    }
+
     override fun update() {
         robot.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS),this)
         t += SIM_UPDATE_TIME

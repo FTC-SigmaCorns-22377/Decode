@@ -105,5 +105,7 @@ class FSM<S,E>(
             // start new state behavior
             job = CoroutineScope(dispatcher).launch { curState = behaviors(curState)() }
         }
+
+        oldState = curState
     }
 }

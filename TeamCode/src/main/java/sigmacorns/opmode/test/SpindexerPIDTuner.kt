@@ -1,108 +1,174 @@
 package sigmacorns.opmode.test
 
 import com.bylazar.configurables.annotations.Configurable
-import com.bylazar.panels.Panels
 import com.bylazar.telemetry.PanelsTelemetry
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.control.PIDController
+import sigmacorns.control.SlewRateLimiter
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.math.PI
 
 @Configurable
 object SpindexerPIDConfig {
-    @JvmField var kP = 0.001
-    @JvmField var kD = 0.0
-    @JvmField var kI = 0.0
+    // PID coefficients for 0 balls
+    @JvmField var kP_0 = 0.5
+    @JvmField var kD_0 = 0.001
+    @JvmField var kI_0 = 0.0
+
+    // PID coefficients for 1 ball
+    @JvmField var kP_1 = 0.5
+    @JvmField var kD_1 = 0.001
+    @JvmField var kI_1 = 0.0
+
+    // PID coefficients for 2 balls
+    @JvmField var kP_2 = 1.0
+    @JvmField var kD_2 = 0.002
+    @JvmField var kI_2 = 0.0
+
+    // PID coefficients for 3 balls
+    @JvmField var kP_3 = 1.0
+    @JvmField var kD_3 = 0.02
+    @JvmField var kI_3 = 0.0
+
+    @JvmField var slewRate = 1.5
+
+    fun getKp(ballCount: Int) = when (ballCount) {
+        0 -> kP_0
+        1 -> kP_1
+        2 -> kP_2
+        3 -> kP_3
+        else -> kP_0
+    }
+
+    fun getKd(ballCount: Int) = when (ballCount) {
+        0 -> kD_0
+        1 -> kD_1
+        2 -> kD_2
+        3 -> kD_3
+        else -> kD_0
+    }
+
+    fun getKi(ballCount: Int) = when (ballCount) {
+        0 -> kI_0
+        1 -> kI_1
+        2 -> kI_2
+        3 -> kI_3
+        else -> kI_0
+    }
 }
 
 @TeleOp(name = "Spindexer PID Tuner", group = "Test")
 class SpindexerPIDTuner : SigmaOpMode() {
 
-    override fun runOpMode() {
-        // Encoder ticks per revolution (goBilda motor with 10:1 gear ratio)
-        // Modern Robotics motor: 28 CPR, with 10:1 external = 280 ticks per output revolution
-        val ticksPerRev = 28.0 * 10.0
-        val ticksPerRadian = ticksPerRev / (2 * PI)
+    private val ticksPerRev = (1.0 + (46.0 / 11.0)) * 28.0
+    private val ticksPerRadian = ticksPerRev / (2 * PI)
 
-        var targetPosition = 0.0 // in radians
+    private val discreteStep = (2 * PI) / 3  // 120 degrees (spindexer slot)
+    private val continuousRate = 2.0
+
+    private val slewRateLimiter = SlewRateLimiter(SpindexerPIDConfig.slewRate)
+
+    override fun runOpMode() {
+        var targetValue = 0.0
+        var selectedBallCount = 0
 
         val pid = PIDController(
-            kp = SpindexerPIDConfig.kP,
-            kd = SpindexerPIDConfig.kD,
-            ki = SpindexerPIDConfig.kI,
-            setpoint = targetPosition
+            kp = SpindexerPIDConfig.getKp(selectedBallCount),
+            kd = SpindexerPIDConfig.getKd(selectedBallCount),
+            ki = SpindexerPIDConfig.getKi(selectedBallCount),
+            setpoint = targetValue
         )
 
         telemetry.addLine("Spindexer PID Tuner")
         telemetry.addLine("Use Panels dashboard to adjust kP, kD, kI")
-        telemetry.addLine("Use gamepad to control target position")
+        telemetry.addLine("Use bumpers to select ball count (0-3)")
         telemetry.update()
 
         waitForStart()
 
         ioLoop { state, dt ->
-            // Update PID gains from Panels configurables
-            pid.kp = SpindexerPIDConfig.kP
-            pid.kd = SpindexerPIDConfig.kD
-            pid.ki = SpindexerPIDConfig.kI
+            // Change ball count with bumpers
+            if (gamepad1.left_bumper) {
+                selectedBallCount = (selectedBallCount - 1).coerceIn(0, 3)
+                pid.reset()
+                slewRateLimiter.reset()
+                while (gamepad1.left_bumper && opModeIsActive()) { idle() }
+            }
+            if (gamepad1.right_bumper) {
+                selectedBallCount = (selectedBallCount + 1).coerceIn(0, 3)
+                pid.reset()
+                slewRateLimiter.reset()
+                while (gamepad1.right_bumper && opModeIsActive()) { idle() }
+            }
 
-            // Control target position with gamepad
-            // Right stick Y: adjust target position continuously
-            targetPosition += -gamepad1.right_stick_y * 2.0 * dt.inWholeMilliseconds / 1000.0
+            // Update PID gains from configurables based on selected ball count
+            pid.kp = SpindexerPIDConfig.getKp(selectedBallCount)
+            pid.kd = SpindexerPIDConfig.getKd(selectedBallCount)
+            pid.ki = SpindexerPIDConfig.getKi(selectedBallCount)
+            slewRateLimiter.maxRate = SpindexerPIDConfig.slewRate
 
-            // D-pad for discrete position steps (120 degrees = 2π/3 radians, like spindexer slots)
-            val slotAngle = (2 * PI) / 3
+            // Continuous adjustment with right stick Y
+            targetValue += -gamepad1.right_stick_y * continuousRate * dt.inWholeMilliseconds / 1000.0
+
+            // Discrete steps with dpad
             if (gamepad1.dpad_up) {
-                targetPosition += slotAngle
+                targetValue += discreteStep
                 while (gamepad1.dpad_up && opModeIsActive()) { idle() }
             }
             if (gamepad1.dpad_down) {
-                targetPosition -= slotAngle
+                targetValue -= discreteStep
                 while (gamepad1.dpad_down && opModeIsActive()) { idle() }
             }
 
-            // Reset position with A button
+            // Reset with A button
             if (gamepad1.a) {
-                targetPosition = 0.0
+                targetValue = 0.0
+                pid.reset()
+                slewRateLimiter.reset()
                 while (gamepad1.a && opModeIsActive()) { idle() }
             }
 
-            // Get current position in radians
+            // Get current value
             val currentPositionTicks = io.spindexerPosition()
-            val currentPositionRad = currentPositionTicks / ticksPerRadian
+            val currentValue = currentPositionTicks / ticksPerRadian
 
-            // Update PID setpoint and compute output
-            pid.setpoint = targetPosition
-            val motorPower = pid.update(currentPositionRad, dt).coerceIn(-1.0, 1.0)
+            val slewLimitedTarget = slewRateLimiter.calculate(targetValue, dt)
+
+            // Update PID and compute output
+            pid.setpoint = slewLimitedTarget
+            val motorPower = pid.update(currentValue, dt).coerceIn(-1.0, 1.0)
 
             // Apply motor power
             io.spindexer = motorPower
 
             // Calculate error
-            val error = targetPosition - currentPositionRad
+            val error = targetValue - currentValue
 
             val telemetry = PanelsTelemetry.telemetry
 
             // Telemetry
             telemetry.addLine("=== Spindexer PID Tuner ===")
             telemetry.addLine("")
-            telemetry.addData("kP", SpindexerPIDConfig.kP)
-            telemetry.addData("kD",SpindexerPIDConfig.kD)
-            telemetry.addData("kI", SpindexerPIDConfig.kI)
+            telemetry.addData("*** Ball Count ***", selectedBallCount)
             telemetry.addLine("")
-            telemetry.addData("Target (rad)",  targetPosition)
-            telemetry.addData("Target (deg)",  Math.toDegrees(targetPosition))
-            telemetry.addData("Current (rad)",  currentPositionRad)
-            telemetry.addData("Current (deg)",  Math.toDegrees(currentPositionRad))
-            telemetry.addData("Current (ticks)",  currentPositionTicks)
+            telemetry.addData("kP_$selectedBallCount", SpindexerPIDConfig.getKp(selectedBallCount))
+            telemetry.addData("kD_$selectedBallCount", SpindexerPIDConfig.getKd(selectedBallCount))
+            telemetry.addData("kI_$selectedBallCount", SpindexerPIDConfig.getKi(selectedBallCount))
+            telemetry.addLine("")
+            telemetry.addData("Target (rad)", targetValue)
+            telemetry.addData("Target (deg)", Math.toDegrees(targetValue))
+            telemetry.addData("Current (rad)", currentValue)
+            telemetry.addData("Current (deg)", Math.toDegrees(currentValue))
             telemetry.addLine("")
             telemetry.addData("Error (rad)", error)
-            telemetry.addData("Error (deg)",  Math.toDegrees(error))
-            telemetry.addData("Motor Power",  motorPower)
+            telemetry.addData("Error (deg)", Math.toDegrees(error))
+            telemetry.addData("Motor Power", motorPower)
+            telemetry.addData("Slew Rate", SpindexerPIDConfig.slewRate)
             telemetry.addLine("")
             telemetry.addLine("Controls:")
+            telemetry.addLine("  LB/RB: Change ball count")
             telemetry.addLine("  Right Stick Y: Adjust target")
-            telemetry.addLine("  D-Pad Up/Down: Step 120°")
+            telemetry.addLine("  D-Pad Up/Down: Step +/- 120°")
             telemetry.addLine("  A: Reset to 0")
             telemetry.update()
 

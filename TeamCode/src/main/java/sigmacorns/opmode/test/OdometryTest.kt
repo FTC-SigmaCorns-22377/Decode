@@ -1,5 +1,6 @@
 package sigmacorns.opmode.test
 
+import com.bylazar.gamepad.PanelsGamepad
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.joml.times
 import sigmacorns.constants.drivetrainParameters
@@ -21,7 +22,10 @@ class OdometryTest : SigmaOpMode() {
 
         waitForStart()
 
-        RerunLogging.connect("OdometryTest", rerunIP()).use { rerun ->
+//        val gamepad1 = PanelsGamepad.firstManager.asCombinedFTCGamepad(gamepad1)
+//        val gamepad2 = PanelsGamepad.secondManager.asCombinedFTCGamepad(gamepad2)
+
+//        RerunLogging.connect("OdometryTest", rerunIP()).use { rerun ->
             var wasResetPressed = false
 
             ioLoop { state, _ ->
@@ -31,18 +35,15 @@ class OdometryTest : SigmaOpMode() {
                 }
                 wasResetPressed = resetPressed
 
-                val robotPower = Pose2d(
-                    -gamepad1.left_stick_y.toDouble(),
-                    -gamepad1.left_stick_x.toDouble(),
-                    -gamepad1.right_stick_x.toDouble(),
-                )
+                val robotPower = Pose2d(-gamepad1.left_stick_y.toDouble(), -gamepad1.left_stick_x.toDouble(), -gamepad1.right_stick_x.toDouble())
                 val maxSpeed = mecanumDynamics.maxSpeed()
-                val desiredVelocity = maxSpeed.componentMul(robotPower)
-                var wheelPowers = mecanumDynamics
-                    .mecanumInverseVelKinematics(desiredVelocity) * (1.0 / mecanumDynamics.p.motor.freeSpeed)
-                val maxComponent = wheelPowers.absolute().maxComponent()
-                if (maxComponent > 1.0) {
-                    wheelPowers *= (1.0 / maxComponent)
+                val robotVelocities = maxSpeed.componentMul(robotPower)
+                val wheelVelocities = mecanumDynamics.mecanumInverseVelKinematics(robotVelocities)
+                var wheelPowers = wheelVelocities * (1.0 / mecanumDynamics.p.motor.freeSpeed)
+                val maxComponents = wheelPowers[wheelPowers.maxComponent()]
+
+                if (maxComponents > 1.0) {
+                    wheelPowers *= (1.0 / maxComponents)
                 }
 
                 io.driveFL = wheelPowers[0]
@@ -66,10 +67,10 @@ class OdometryTest : SigmaOpMode() {
                 )
                 telemetry.update()
 
-                rerun.logState(state)
+//                rerun.logState(state)
 
                 false
             }
-        }
+//        }
     }
 }

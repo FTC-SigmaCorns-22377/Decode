@@ -10,19 +10,26 @@ class PIDController(
     var setpoint: Double,
 ) {
     private var integral: Double = 0.0
-    private var lastError: Double? = null
+    private var lastMeasurement: Double? = null
 
     fun update(measured_state: Double, dt: Duration): Double{
         val t = dt.toDouble(DurationUnit.SECONDS)
         val error = setpoint-measured_state
         integral += error*t
-        val dError = if(lastError!=null) kd*(error - lastError!!)/t else 0.0
 
-        return kp*error - kd*dError + ki*integral
+        // Derivative on measurement (not error) to prevent derivative kick on setpoint changes
+        // This is critical for field-relative control where setpoint changes continuously
+        val dMeasurement = if(lastMeasurement!=null) (measured_state - lastMeasurement!!)/t else 0.0
+
+        lastMeasurement = measured_state
+
+        // Note: -kd*dMeasurement is equivalent to -kd*dError when setpoint is constant,
+        // but handles setpoint changes smoothly by ignoring d(setpoint)/dt
+        return kp*error - kd*dMeasurement + ki*integral
     }
 
     fun reset() {
         integral = 0.0
-        lastError = null
+        lastMeasurement = null
     }
 }

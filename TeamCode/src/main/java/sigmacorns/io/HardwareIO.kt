@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.IMU
 import com.qualcomm.robotcore.hardware.Servo
 import com.qualcomm.robotcore.hardware.ColorRangeSensor
+import com.qualcomm.robotcore.hardware.DistanceSensor
 import com.qualcomm.robotcore.hardware.DcMotorSimple
 import com.qualcomm.robotcore.hardware.HardwareMap
 import sigmacorns.math.Pose2d
@@ -12,6 +13,7 @@ import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.TimeSource
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
+import com.qualcomm.robotcore.hardware.CRServo
 import com.qualcomm.robotcore.hardware.DcMotorEx
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
@@ -40,10 +42,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val spindexerMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"spindexer")
     //breakServo
     private val breakServo: Servo? = hardwareMap.tryGet(Servo::class.java,"break")
-    private val transferServo: Servo? = hardwareMap.tryGet(Servo::class.java,"transfer")
+    private val transferServo: CRServo? = hardwareMap.tryGet(CRServo::class.java,"transfer")
 
     //sensors
     private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
+    private val distanceSensor: DistanceSensor? = hardwareMap.tryGet(DistanceSensor::class.java, "dist")
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
     val imu: IMU? = hardwareMap.tryGet(IMU::class.java,"imu")
 
@@ -105,6 +108,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         return spindexerMotor?.currentPosition?.toDouble() ?: 0.0
     }
 
+    override fun distance(): Double {
+        return distanceSensor?.getDistance(DistanceUnit.METER) ?: 0.0
+    }
+
     var posOffset = Pose2d()
 
     override fun setPosition(p: Pose2d) {
@@ -130,7 +137,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         spindexerMotor?.power = spindexer
         //updating the positions of all the servos
         breakServo?.position = breakPower
-        transferServo?.position = transfer
+        transferServo?.power = transfer
 
         pinpoint?.update()
     }
@@ -144,14 +151,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     override fun configurePinpoint() {
         //setting encoder resolution
-        pinpoint?.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
+        pinpoint?.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD)
 
-        pinpoint?.setOffsets(9.5,-9.5, DistanceUnit.CM)
+        pinpoint?.setOffsets(-8.89,12.7, DistanceUnit.CM)
 
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(
-            GoBildaPinpointDriver.EncoderDirection.REVERSED,
-            GoBildaPinpointDriver.EncoderDirection.FORWARD
+            GoBildaPinpointDriver.EncoderDirection.FORWARD,
+            GoBildaPinpointDriver.EncoderDirection.REVERSED
         )
 
         //resetting the positions for the IMU
