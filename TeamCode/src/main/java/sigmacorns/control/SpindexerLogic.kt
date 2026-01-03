@@ -5,7 +5,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
-import sigmacorns.control.ShotPowers.shotPower
 import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
 import sigmacorns.opmode.test.SpindexerPIDConfig
@@ -16,8 +15,11 @@ import kotlin.time.Duration.Companion.milliseconds
 
 @Configurable
 object ShotPowers {
-    @JvmField
-    var shotPower = 0.8
+    @JvmField var shortShotPower = 0.6
+    @JvmField var midShotPower = 0.75
+    @JvmField var longShotPower = 0.94
+    @JvmField var shortDistanceLimit = 0.5
+    @JvmField var midDistanceLimit = 1.2
 }
 
 class SpindexerLogic(val io: SigmaIO) {
@@ -74,8 +76,12 @@ class SpindexerLogic(val io: SigmaIO) {
     /** Current calculated target velocity for flywheel */
     var targetFlywheelVelocity: Double = 0.0
 
+    /** Target power fraction for the shot */
+    var targetShotPower: Double = 0.0
+
     /** Whether continuous shooting is requested */
     var shootingRequested: Boolean = false
+
 
     enum class State {
         IDLE,
@@ -148,6 +154,8 @@ class SpindexerLogic(val io: SigmaIO) {
             resetTransfer()
         }
 
+        // Wait indefinitely until cancelled by an event-triggered state change
+        delay(Long.MAX_VALUE)
         State.IDLE
     }
 
@@ -243,6 +251,7 @@ class SpindexerLogic(val io: SigmaIO) {
     private fun fullBehavior(): suspend () -> State = suspend {
         // Full: wait for shoot event, no automatic transitions
         io.intake = 0.0
+        delay(Long.MAX_VALUE)
         State.FULL
     }
 
@@ -275,7 +284,7 @@ class SpindexerLogic(val io: SigmaIO) {
         while (true) {
             val currentVelocity = io.flywheelVelocity()
             // Target is calculated in update()
-            val error = kotlin.math.abs(currentVelocity - (ShotPowers.shotPower * ShooterFlywheelPIDConfig.maxVelocity))
+            val error = kotlin.math.abs(currentVelocity - (targetShotPower * ShooterFlywheelPIDConfig.maxVelocity))
 
             if (error < VELOCITY_ERROR_THRESHOLD) {
                 break
@@ -394,7 +403,7 @@ class SpindexerLogic(val io: SigmaIO) {
             
             // Calculate target
             val maxVel = ShooterFlywheelPIDConfig.maxVelocity
-            targetFlywheelVelocity = ShotPowers.shotPower * maxVel
+            targetFlywheelVelocity = targetShotPower * maxVel
             flywheelPID.setpoint = targetFlywheelVelocity
             
             // Calculate output

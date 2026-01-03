@@ -30,7 +30,7 @@ import kotlin.math.sin
  */
 class AutoAim(
     private val limelight: Limelight3A?,
-    private val targetAprilTagIds: Set<Int> = setOf(20, 24)
+    private val targetAprilTagIds: Set<Int> = setOf(20)
 ) {
     /** Whether auto-aim is currently enabled */
     var enabled: Boolean = false

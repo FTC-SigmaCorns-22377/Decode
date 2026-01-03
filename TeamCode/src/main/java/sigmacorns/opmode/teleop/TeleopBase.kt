@@ -1,13 +1,12 @@
 package sigmacorns.opmode.teleop
 
-import com.bylazar.gamepad.PanelsGamepad
-import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
 import org.joml.times
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.AutoAim
 import sigmacorns.control.MotorRangeMapper
+import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
 import sigmacorns.control.Turret
 import sigmacorns.globalFieldState
@@ -19,8 +18,14 @@ import kotlin.math.PI
 import kotlin.math.absoluteValue
 import kotlin.time.Duration
 
-@TeleOp(name = "TeleopV2", group = "Competition")
-class TeleopV2 : SigmaOpMode() {
+
+@TeleOp(name = "TeleopBlue", group = "Competition")
+class TeleopBlue: TeleopBase(true)
+
+@TeleOp(name = "TeleopRed", group = "Competition")
+class TeleopRed: TeleopBase(false)
+
+open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
 
     // Subsystems
     private lateinit var spindexerLogic: SpindexerLogic
@@ -40,6 +45,8 @@ class TeleopV2 : SigmaOpMode() {
     private var speedMultiplier = 1.0
     private var targetDistance = 3.0  // default 3m for flywheel speed
     private var dVoltage = 1.0        // voltage compensation factor
+    private var lockedShotPower: Double? = null
+    private var manualOverridePower: Double? = null
 
     // Tracking for edge detection on triggers
     private var wasIntaking = false
@@ -63,7 +70,7 @@ class TeleopV2 : SigmaOpMode() {
 
         // Initialize auto-aim with limelight from HardwareIO
         val hardwareIO = io as? HardwareIO
-        autoAim = AutoAim(hardwareIO?.limelight)
+        autoAim = AutoAim(hardwareIO?.limelight, targetAprilTagIds = if(blue) setOf(20) else setOf(24))
         autoAim.configure()
 
         val voltageSensor = hardwareMap.voltageSensor.iterator().next()
@@ -188,15 +195,6 @@ class TeleopV2 : SigmaOpMode() {
             }
         }
 
-        // Distance adjustment for flywheel speed (operator D-pad) - only in manual mode
-        if (!autoAim.enabled || !autoAim.hasTarget) {
-            if (gm2.dpad_up) {
-                targetDistance = (targetDistance + 0.05).coerceAtMost(10.0)
-            }
-            if (gm2.dpad_down) {
-                targetDistance = (targetDistance - 0.05).coerceAtLeast(1.0)
-            }
-        }
         turret.targetDistance = targetDistance
 
         // Flywheel controls
@@ -218,6 +216,33 @@ class TeleopV2 : SigmaOpMode() {
     }
 
     private fun processIntakeAndShooting(dt: Duration) {
+        // Zone Selection (Operator D-pad)
+        if (gm2.dpad_down) manualOverridePower = ShotPowers.shortShotPower
+        if (gm2.dpad_left || gm2.dpad_right) manualOverridePower = ShotPowers.midShotPower
+        if (gm2.dpad_up) manualOverridePower = ShotPowers.longShotPower
+
+        // Auto Power Calculation
+        val dist = if (autoAim.enabled && autoAim.hasTarget) autoAim.targetDistance else targetDistance
+        val autoPower = when {
+            dist < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
+            dist < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
+            else -> ShotPowers.longShotPower
+        }
+
+        val activePower = manualOverridePower ?: autoPower
+
+        // Locking Logic
+        if (spindexerLogic.shootingRequested) {
+            wasShooting
+            if (lockedShotPower == null) {
+                lockedShotPower = activePower
+            }
+            spindexerLogic.targetShotPower = lockedShotPower!!
+        } else {
+            lockedShotPower = null
+            spindexerLogic.targetShotPower = activePower
+        }
+
         // Intake control (driver left trigger)
         val intaking = gm1.left_trigger > 0.1
         if (intaking && !wasIntaking) {
@@ -249,6 +274,9 @@ class TeleopV2 : SigmaOpMode() {
 
         if (isShooting && !wasShooting) {
             spindexerLogic.shoot()
+        }
+        if (!isShooting && wasShooting) {
+            manualOverridePower = null
         }
         wasShooting = isShooting
 
@@ -328,6 +356,18 @@ class TeleopV2 : SigmaOpMode() {
         }
         telemetry.addData("Turret Pitch", "%.2f", turret.targetPitch)
         telemetry.addData("Distance", "%.1f m", targetDistance)
+        
+        val zone = when (spindexerLogic.targetShotPower) {
+            ShotPowers.shortShotPower -> "SHORT"
+            ShotPowers.midShotPower -> "MID"
+            ShotPowers.longShotPower -> "LONG"
+            else -> "CUSTOM"
+        }
+        telemetry.addData("Shot Zone", zone)
+        telemetry.addData("Shot Power", "%.0f%%", spindexerLogic.targetShotPower * 100)
+        telemetry.addData("Power Locked", if (lockedShotPower != null) "YES" else "NO")
+        telemetry.addData("Manual Override", if (manualOverridePower != null) "YES" else "NO")
+        
         telemetry.addData("Flywheel", "%.0f%%", io.shooter * 100)
 
         telemetry.addLine("")
