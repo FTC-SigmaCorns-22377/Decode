@@ -136,6 +136,7 @@ class TeleopV2 : SigmaOpMode() {
     private fun processTurret(dt: Duration) {
         // Update robot heading for field-relative aiming
         turret.robotHeading = io.position().rot
+        turret.robotAngularVelocity = io.velocity().rot
 
         // Auto-aim toggle (operator back button)
         val autoAimToggle = gm2.back
@@ -219,9 +220,7 @@ class TeleopV2 : SigmaOpMode() {
         // Apply flywheel power (only if not being controlled by SpindexerLogic shooting)
         if (spindexerLogic.currentState != SpindexerLogic.State.SHOOTING &&
             spindexerLogic.currentState != SpindexerLogic.State.MOVING_SHOOT) {
-            if (flywheelPower != 0.0) {
-                io.shooter = flywheelPower
-            }
+            //io.shooter = flywheelPower
         }
 
         // Update turret PID
@@ -269,7 +268,7 @@ class TeleopV2 : SigmaOpMode() {
         }
 
         // Update spindexer FSM
-        spindexerLogic.update(io.spindexerPosition(), dt)
+        spindexerLogic.update(io.spindexerPosition(), dt, dVoltage)
     }
 
     private fun processPracticeGame() {

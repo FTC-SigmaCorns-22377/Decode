@@ -67,6 +67,8 @@ class FSM<S,E>(
     private val sentEvents = ArrayDeque<E>()
     private val eventHandlers = mutableMapOf<E, suspend () -> Unit>()
 
+    val scope = CoroutineScope(dispatcher)
+
     fun onEvent(event: E, handler: suspend () -> Unit) {
         eventHandlers[event] = handler
     }

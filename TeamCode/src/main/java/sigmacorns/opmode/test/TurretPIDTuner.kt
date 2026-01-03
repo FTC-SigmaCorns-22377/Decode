@@ -7,10 +7,13 @@ import kotlin.math.PI
 
 @Configurable
 object TurretPIDConfig {
-    @JvmField var kP = 1.7
+    @JvmField var kP = 1.0
     @JvmField var kD = 0.005
     @JvmField var kI = 0.0
-    @JvmField var slewRate = 2.0
+    @JvmField var kV = 0.0
+    @JvmField var kVRobot = 0.03
+    @JvmField var maxTargetLead = 0.2
+    @JvmField var slewRate = 3.0
     @JvmField var outputSlewRate = 4.0
 }
 

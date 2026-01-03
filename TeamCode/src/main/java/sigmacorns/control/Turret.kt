@@ -3,8 +3,11 @@ package sigmacorns.control
 import sigmacorns.io.SigmaIO
 import sigmacorns.opmode.test.TurretPIDConfig
 import kotlin.math.absoluteValue
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sign
 import kotlin.time.Duration
+import kotlin.time.DurationUnit
 
 class Turret(
     val range: MotorRangeMapper,
@@ -26,6 +29,8 @@ class Turret(
 
     // Current robot heading from odometry (radians)
     var robotHeading: Double = 0.0
+    // Current robot angular velocity (rad/s)
+    var robotAngularVelocity: Double = 0.0
 
     /** Whether to use field-relative aiming */
     var fieldRelativeMode: Boolean = false
@@ -44,11 +49,16 @@ class Turret(
     /** The actual robot-relative target after field conversion and limiting */
     var effectiveTargetAngle: Double = 0.0
         private set
+    /** The raw robot-relative target before limiting (for goal tracking) */
+    var goalTargetAngle: Double = 0.0
+        private set
+    private var lastEffectiveTargetAngle: Double? = null
 
 
     fun update(dt: Duration) {
         val currentAngle = range.tickToPos(io.turretPosition())
         pos = currentAngle
+        val dtSeconds = dt.toDouble(DurationUnit.SECONDS)
 
         // Determine the raw target angle (field-relative or robot-relative)
         val rawTarget = if (fieldRelativeMode) {
@@ -58,6 +68,7 @@ class Turret(
             targetAngle
         }
 
+        goalTargetAngle = rawTarget
         val limitTarget = rawTarget.coerceIn(range.limits)
 
         // Apply slew rate limiting to the target if enabled
@@ -67,16 +78,41 @@ class Turret(
             limitTarget
         }
 
+        // Clamp target lead relative to current position (optional)
+        val lead = TurretPIDConfig.maxTargetLead
+        val leadClampedTarget = if (lead > 0.0) {
+            val minTarget = maxOf(range.limits.start, currentAngle - lead)
+            val maxTarget = minOf(range.limits.endInclusive, currentAngle + lead)
+            slewLimitedTarget.coerceIn(min(maxTarget,minTarget), max(minTarget,maxTarget))
+        } else {
+            slewLimitedTarget
+        }
+
         // Clamp to turret limits
-        effectiveTargetAngle = slewLimitedTarget
+        effectiveTargetAngle = leadClampedTarget.coerceIn(range.limits)
         angleController.setpoint = effectiveTargetAngle
 
         // Calculate turret motor power (Yaw)
         var turretPower = angleController.update(currentAngle, dt).coerceIn(-1.0, 1.0)
 
-//        if ((pos - effectiveTargetAngle).absoluteValue > staticCompensationThresh) {
-//            turretPower += staticPower * turretPower.sign
-//        }
+        if ((pos - effectiveTargetAngle).absoluteValue > staticCompensationThresh) {
+            turretPower += staticPower * turretPower.sign
+        }
+
+        val targetVelocity = if (dtSeconds > 0.0) {
+            val prevTarget = lastEffectiveTargetAngle ?: effectiveTargetAngle
+            (effectiveTargetAngle - prevTarget) / dtSeconds
+        } else {
+            0.0
+        }
+        val velocityFeedforward = TurretPIDConfig.kV * targetVelocity
+        val robotAngularFeedforward = if (fieldRelativeMode) {
+            -TurretPIDConfig.kVRobot * robotAngularVelocity
+        } else {
+            0.0
+        }
+        turretPower = (turretPower + velocityFeedforward + robotAngularFeedforward).coerceIn(-1.0, 1.0)
+        lastEffectiveTargetAngle = effectiveTargetAngle
 
         val flywheelPower = flywheelSpeed()
 

@@ -1,11 +1,24 @@
 package sigmacorns.control
 
+import com.bylazar.configurables.annotations.Configurable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import sigmacorns.control.ShotPowers.shotPower
 import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
 import sigmacorns.opmode.test.SpindexerPIDConfig
+import sigmacorns.opmode.test.ShooterFlywheelPIDConfig
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+
+
+@Configurable
+object ShotPowers {
+    @JvmField
+    var shotPower = 0.8
+}
 
 class SpindexerLogic(val io: SigmaIO) {
     // Spindexer state tracking
@@ -19,6 +32,15 @@ class SpindexerLogic(val io: SigmaIO) {
 
     // PID controller for spindexer motor
     val spindexerPID = PIDController(0.25, 10.0, 0.0, 0.0)
+    
+    // PID controller for flywheel
+    val flywheelPID = PIDController(
+        ShooterFlywheelPIDConfig.kP,
+        ShooterFlywheelPIDConfig.kD,
+        ShooterFlywheelPIDConfig.kI,
+        0.0
+    )
+    
     private val slewRateLimiter = SlewRateLimiter(maxRate = SpindexerPIDConfig.slewRate)
 
     /** Whether slew rate limiting is enabled */
@@ -30,8 +52,7 @@ class SpindexerLogic(val io: SigmaIO) {
 
     // Error thresholds
     private val POSITION_ERROR_THRESHOLD = 0.05  // radians - position threshold for spindexer
-    private val VELOCITY_ERROR_THRESHOLD = 5.0   // rad/s - velocity threshold for flywheel
-    private val TARGET_FLYWHEEL_VELOCITY = 50.0  // rad/s - target flywheel velocity
+    private val VELOCITY_ERROR_THRESHOLD = 20.0   // rad/s - velocity threshold for flywheel
 
     // Timeout for safety (fallback if threshold never reached)
     private val MAX_WAIT_TIME = 3000.milliseconds
@@ -41,11 +62,17 @@ class SpindexerLogic(val io: SigmaIO) {
     private val TRANSFER_DOWN_POWER = -1.0    // Power to move transfer down (reset position)
     private val TRANSFER_STOP_POWER = 0.0     // Stopped
     private val TRANSFER_UP_DURATION = 300.milliseconds    // Time to transfer ball up
-    private val TRANSFER_DOWN_DURATION = 400.milliseconds  // Time to reset transfer down
+    private val TRANSFER_DOWN_DURATION = 500.milliseconds  // Time to reset transfer down
 
     //extra variables
     private var offsetActive: Boolean = false
     private var transferNeedsReset: Boolean = true  // Track if transfer needs to be reset
+
+    /** Voltage compensation factor */
+    var dVoltage: Double = 1.0
+    
+    /** Current calculated target velocity for flywheel */
+    var targetFlywheelVelocity: Double = 0.0
 
     enum class State {
         IDLE,
@@ -86,7 +113,6 @@ class SpindexerLogic(val io: SigmaIO) {
         onEvent(Event.SHOOT) {
             when (curState) {
                 State.IDLE, State.FULL -> {
-                    io.shooter = 0.8
                     curState = State.SHOOTING
                 }
                 else -> {}
@@ -218,8 +244,8 @@ class SpindexerLogic(val io: SigmaIO) {
     }
 
     private fun shootingBehavior(): suspend () -> State = suspend {
-        // Start flywheel
-        io.shooter = 1.0
+        // Flywheel control is handled in update() based on state
+
         if (offsetActive == false) {
             spindexerRotation += MODE_CHANGE_ANGLE
 
@@ -245,7 +271,8 @@ class SpindexerLogic(val io: SigmaIO) {
         val startTime = io.time()
         while (true) {
             val currentVelocity = io.flywheelVelocity()
-            val error = kotlin.math.abs(currentVelocity - TARGET_FLYWHEEL_VELOCITY)
+            // Target is calculated in update()
+            val error = kotlin.math.abs(currentVelocity - (ShotPowers.shotPower * ShooterFlywheelPIDConfig.maxVelocity))
 
             if (error < VELOCITY_ERROR_THRESHOLD) {
                 break
@@ -260,6 +287,8 @@ class SpindexerLogic(val io: SigmaIO) {
         // Activate transfer to shoot ball (continuous servo - runs for set duration)
         activateTransfer()
 
+        transferNeedsReset = true
+
         // Mark current ball as shot
         spindexerState[0] = null
 
@@ -273,31 +302,37 @@ class SpindexerLogic(val io: SigmaIO) {
     }
 
     private fun movingShootBehavior(): suspend () -> State = suspend {
-        // Rotate to next ball while keeping flywheel spinning
-        io.shooter = 0.8
-        spindexerRotation += ROTATE_ANGLE
+        awaitAll(
+            fsm.scope.async { resetTransfer() },
+            fsm.scope.async {
+                // Flywheel control is handled in update() based on state
+                
+                // Rotate to next ball
+                spindexerRotation += ROTATE_ANGLE
 
-        // Shift balls
-        val temp = spindexerState[2]
-        spindexerState[2] = spindexerState[1]
-        spindexerState[1] = spindexerState[0]
-        spindexerState[0] = temp
+                // Shift balls
+                val temp = spindexerState[2]
+                spindexerState[2] = spindexerState[1]
+                spindexerState[1] = spindexerState[0]
+                spindexerState[0] = temp
 
-        // Wait for spindexer to reach target position
-        val startTime = io.time()
-        while (true) {
-            val curRotation = io.spindexerPosition() / ((1 + (46.0 / 11.0)) * 28) * 2 * PI
-            val error = kotlin.math.abs(curRotation - spindexerRotation)
+                // Wait for spindexer to reach target position
+                val startTime = io.time()
+                while (true) {
+                    val curRotation = io.spindexerPosition() / ((1 + (46.0 / 11.0)) * 28) * 2 * PI
+                    val error = kotlin.math.abs(curRotation - spindexerRotation)
 
-            if (error < POSITION_ERROR_THRESHOLD) {
-                break
+                    if (error < POSITION_ERROR_THRESHOLD) {
+                        break
+                    }
+                    if (io.time() - startTime > MAX_WAIT_TIME) {
+                        println("Warning: Spindexer movement timeout")
+                        break
+                    }
+                    delay(10)
+                }
             }
-            if (io.time() - startTime > MAX_WAIT_TIME) {
-                println("Warning: Spindexer movement timeout")
-                break
-            }
-            delay(10)
-        }
+        )
 
         // Continue shooting
         State.SHOOTING
@@ -312,7 +347,8 @@ class SpindexerLogic(val io: SigmaIO) {
     // Current state accessor
     val currentState: State get() = fsm.curState
 
-    fun update(motorTick: Double, deltaT: Duration) {
+    fun update(motorTick: Double, deltaT: Duration, dVoltage: Double = 1.0) {
+        this.dVoltage = dVoltage
         fsm.update()
 
         val curRotation = motorTick/((1+(46.0/11.0)) * 28)*2*PI
@@ -334,6 +370,31 @@ class SpindexerLogic(val io: SigmaIO) {
         spindexerPID.ki = SpindexerPIDConfig.getKi(count)
 
         spindexerPID.setpoint = effectiveTargetRotation
-        io.spindexer = spindexerPID.update(curRotation, deltaT).coerceIn(-1.0, 1.0)
+        val power = spindexerPID.update(curRotation, deltaT).coerceIn(-1.0, 1.0)
+        io.spindexer = power.coerceIn(-0.5,0.5)
+        
+        // Update Flywheel PID if in shooting state
+        if (fsm.curState == State.SHOOTING || fsm.curState == State.MOVING_SHOOT) {
+            // Update PID gains
+            flywheelPID.kp = ShooterFlywheelPIDConfig.kP
+            flywheelPID.kd = ShooterFlywheelPIDConfig.kD
+            flywheelPID.ki = ShooterFlywheelPIDConfig.kI
+            
+            // Calculate target
+            val maxVel = ShooterFlywheelPIDConfig.maxVelocity
+            targetFlywheelVelocity = ShotPowers.shotPower * maxVel
+            flywheelPID.setpoint = targetFlywheelVelocity
+            
+            // Calculate output
+            val currentVel = io.flywheelVelocity()
+            val pidOut = flywheelPID.update(currentVel, deltaT)
+            val feedforward = targetFlywheelVelocity / maxVel
+            
+            // Apply power with voltage compensation
+            // Note: feedforward is 0-1, pidOut is theoretically unbounded but usually small
+            // We want (ff + pid) scaled by voltage
+            val totalPower = (feedforward + pidOut).coerceIn(-1.0, 1.0)
+            io.shooter = totalPower * dVoltage
+        }
     }
 }

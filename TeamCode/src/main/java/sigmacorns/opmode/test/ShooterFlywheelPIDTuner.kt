@@ -5,7 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 
 @Configurable
 object ShooterFlywheelPIDConfig {
-    @JvmField var kP = 0.001
+    @JvmField var kP = 0.01
     @JvmField var kD = 0.0
     @JvmField var kI = 0.0
     /** Max velocity at power 1.0: 6000 RPM = 628.3 rad/s */
@@ -33,7 +33,11 @@ class ShooterFlywheelPIDTuner : BasePIDTuner() {
         return io.flywheelVelocity()
     }
 
+    private val voltageSensor by lazy { hardwareMap.voltageSensor.iterator().next() }
+
     override fun applyMotorPower(power: Double) {
-        io.shooter = power
+        val voltage = voltageSensor.voltage
+        val dVoltage = 12.0 / voltage
+        io.shooter = power * dVoltage
     }
 }

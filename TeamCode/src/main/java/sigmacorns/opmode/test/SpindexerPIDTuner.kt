@@ -21,16 +21,16 @@ object SpindexerPIDConfig {
     @JvmField var kI_1 = 0.0
 
     // PID coefficients for 2 balls
-    @JvmField var kP_2 = 1.0
+    @JvmField var kP_2 = 0.7
     @JvmField var kD_2 = 0.002
     @JvmField var kI_2 = 0.0
 
     // PID coefficients for 3 balls
-    @JvmField var kP_3 = 1.0
-    @JvmField var kD_3 = 0.02
+    @JvmField var kP_3 = 0.7
+    @JvmField var kD_3 = 0.002
     @JvmField var kI_3 = 0.0
 
-    @JvmField var slewRate = 1.5
+    @JvmField var slewRate = 1.7
 
     fun getKp(ballCount: Int) = when (ballCount) {
         0 -> kP_0

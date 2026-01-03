@@ -101,6 +101,13 @@ class AutoAim(
     /** Deadband for tx - ignore vision corrections smaller than this (radians) */
     var txDeadband: Double = 0.01  // ~0.5 degrees
 
+    /** Maximum allowed deviation from predicted position (radians) - readings beyond this are rejected */
+    var maxInnovation: Double = 0.35  // ~20 degrees - reject wild readings
+
+    /** Whether the last reading was rejected as an outlier */
+    var lastReadingRejected: Boolean = false
+        private set
+
     // ===== Sensor Fusion State =====
 
     /** Target position in field coordinates (meters) - updated when vision is available */
@@ -323,21 +330,9 @@ class AutoAim(
                 targetDistance = estimateDistanceFromTy(targetTy)
             }
         } else {
-            // No matching AprilTag found, check for general target
-            if (result.tx.absoluteValue > 0.01 || result.ty.absoluteValue > 0.01) {
-                hasVisionTarget = true
-                trackedTagId = -1
-                lastDetectionTimeMs = System.currentTimeMillis()
-
-                rawTxDegrees = result.tx
-                rawTyDegrees = result.ty
-
-                targetTx = Math.toRadians(result.tx) + cameraMountingOffsetYaw
-                targetTy = Math.toRadians(result.ty)
-                targetDistance = estimateDistanceFromTy(targetTy)
-            } else {
-                hasVisionTarget = false
-            }
+            // No matching AprilTag found - ignore non-target tags.
+            hasVisionTarget = false
+            trackedTagId = -1
         }
     }
 

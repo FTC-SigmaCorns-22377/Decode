@@ -54,6 +54,8 @@ class ShotTuningOpMode : SigmaOpMode() {
     @Volatile private var shootRequested = false
     private var shootingPhase = ShootingPhase.IDLE
     private var shootingStartTime = 0L
+    private var dVoltage = 1.0
+    private val voltageSensor by lazy { hardwareMap.voltageSensor.iterator().next() }
 
     private enum class ShootingPhase {
         IDLE,           // Waiting for shot trigger
@@ -105,6 +107,8 @@ class ShotTuningOpMode : SigmaOpMode() {
 
         try {
             ioLoop { state, dt ->
+                dVoltage = 12.0 / voltageSensor.voltage
+
                 // Update vision
                 autoAim.update()
 
@@ -182,7 +186,7 @@ class ShotTuningOpMode : SigmaOpMode() {
             ShootingPhase.IDLE -> {
                 // Spin flywheel to target speed (normalized to power)
                 val power = (targetFlywheelSpeed / MAX_FLYWHEEL_SPEED).coerceIn(0.0, 1.0)
-                io.shooter = power
+                io.shooter = power * dVoltage
 
                 // Check for shoot request
                 if (shootRequested && isReadyToShoot()) {
@@ -194,7 +198,7 @@ class ShotTuningOpMode : SigmaOpMode() {
 
             ShootingPhase.SPINNING_UP -> {
                 val power = (targetFlywheelSpeed / MAX_FLYWHEEL_SPEED).coerceIn(0.0, 1.0)
-                io.shooter = power
+                io.shooter = power * dVoltage
 
                 // Wait for flywheel to reach speed (max 1 second timeout)
                 if (isFlywheelAtSpeed() || (now - shootingStartTime > 1000)) {
@@ -206,7 +210,7 @@ class ShotTuningOpMode : SigmaOpMode() {
             ShootingPhase.SHOOTING -> {
                 // Keep flywheel at speed
                 val power = (targetFlywheelSpeed / MAX_FLYWHEEL_SPEED).coerceIn(0.0, 1.0)
-                io.shooter = power
+                io.shooter = power * dVoltage
 
                 // Activate transfer servo to release ball
                 io.transfer = 0.7
@@ -224,7 +228,7 @@ class ShotTuningOpMode : SigmaOpMode() {
 
                 // Keep flywheel spinning
                 val power = (targetFlywheelSpeed / MAX_FLYWHEEL_SPEED).coerceIn(0.0, 1.0)
-                io.shooter = power
+                io.shooter = power * dVoltage
 
                 // Wait 200ms before allowing next shot
                 if (now - shootingStartTime > 200) {

@@ -19,6 +19,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.joml.Vector2d
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -33,7 +34,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
 
     //shooter
-    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
+    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")!!
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
 //turret
@@ -97,7 +98,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun flywheelVelocity(): Double {
-        return flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0
+        // seems to be in ticks/s for some reason...
+        return (flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
     }
 
     override fun turretPosition(): Double {
@@ -201,6 +203,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         spindexerMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+
+        transferServo?.direction = DcMotorSimple.Direction.REVERSE
 
         // configuring pinpoint
         configurePinpoint()
