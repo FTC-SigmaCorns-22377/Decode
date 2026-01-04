@@ -7,6 +7,7 @@ import kotlinx.coroutines.launch
 import sigmacorns.control.AutoAim
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.PollableDispatcher
+import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
 import sigmacorns.control.Turret
 import sigmacorns.io.HardwareIO
@@ -124,6 +125,15 @@ class SimpleAuto : SigmaOpMode() {
             // Update turret PID
             turret.update(dt)
 
+            // Calculate shot power based on distance (same logic as TeleopBase)
+            val dist = if (autoAim.hasTarget) autoAim.targetDistance else 3.0
+            val shotPower = when {
+                dist < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
+                dist < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
+                else -> ShotPowers.longShotPower
+            }
+            spindexerLogic.targetShotPower = shotPower
+
             // Update spindexer logic
             spindexerLogic.update(io.spindexerPosition(), dt, dVoltage)
 
@@ -132,6 +142,15 @@ class SimpleAuto : SigmaOpMode() {
             telemetry.addData("AutoAim", if (autoAim.hasTarget) "LOCKED" else "SEARCHING")
             telemetry.addData("Target Dist", "%.2f m", autoAim.targetDistance)
             telemetry.addData("Turret Angle", "%.1f deg", Math.toDegrees(turret.pos))
+            val zone = when (shotPower) {
+                ShotPowers.shortShotPower -> "SHORT"
+                ShotPowers.midShotPower -> "MID"
+                ShotPowers.longShotPower -> "LONG"
+                else -> "CUSTOM"
+            }
+            telemetry.addData("Shot Zone", zone)
+            telemetry.addData("Shot Power", "%.0f%%", shotPower * 100)
+            telemetry.addData("Flywheel", "%.0f%%", io.shooter * 100)
             telemetry.update()
 
             false
