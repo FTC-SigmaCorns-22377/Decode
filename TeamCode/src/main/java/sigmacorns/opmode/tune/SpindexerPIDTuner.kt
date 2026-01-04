@@ -1,4 +1,4 @@
-package sigmacorns.opmode.test
+package sigmacorns.opmode.tune
 
 import com.bylazar.configurables.annotations.Configurable
 import com.bylazar.telemetry.PanelsTelemetry

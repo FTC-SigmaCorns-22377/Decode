@@ -1,14 +1,13 @@
 package sigmacorns.control
 
 import com.bylazar.configurables.annotations.Configurable
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
-import sigmacorns.opmode.test.SpindexerPIDConfig
-import sigmacorns.opmode.test.ShooterFlywheelPIDConfig
+import sigmacorns.opmode.tune.SpindexerPIDConfig
+import sigmacorns.opmode.tune.ShooterFlywheelPIDConfig
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 

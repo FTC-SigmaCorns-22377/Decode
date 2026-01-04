@@ -1,7 +1,7 @@
 package sigmacorns.control
 
 import sigmacorns.io.SigmaIO
-import sigmacorns.opmode.test.TurretPIDConfig
+import sigmacorns.opmode.tune.TurretPIDConfig
 import kotlin.math.absoluteValue
 import kotlin.math.max
 import kotlin.math.min

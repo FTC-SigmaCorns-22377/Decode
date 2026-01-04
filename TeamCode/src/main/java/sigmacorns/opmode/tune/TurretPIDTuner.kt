@@ -1,4 +1,4 @@
-package sigmacorns.opmode.test
+package sigmacorns.opmode.tune
 
 import com.bylazar.configurables.annotations.Configurable
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
@@ -17,9 +17,8 @@ object TurretPIDConfig {
     @JvmField var outputSlewRate = 4.0
 }
 
-@TeleOp(name = "Turret PID Tuner", group = "Test")
+@TeleOp(name = "Turret PID Tuner", group = "Tune")
 class TurretPIDTuner : BasePIDTuner() {
-
     private val ticksPerRev = (1.0 + (46.0 / 11.0)) * 28.0
     private val ticksPerRadian = ticksPerRev / (2 * PI) * 76 / 19
 

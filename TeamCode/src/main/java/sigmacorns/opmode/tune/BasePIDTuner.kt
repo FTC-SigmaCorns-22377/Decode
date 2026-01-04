@@ -1,10 +1,9 @@
-package sigmacorns.opmode.test
+package sigmacorns.opmode.tune
 
 import com.bylazar.telemetry.PanelsTelemetry
 import sigmacorns.control.PIDController
 import sigmacorns.control.SlewRateLimiter
 import sigmacorns.opmode.SigmaOpMode
-import kotlin.time.Duration
 
 /**
  * Base class for PID tuning opmodes. Provides common structure for
