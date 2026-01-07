@@ -26,6 +26,7 @@ class SimIO : SigmaIO {
     override var spindexer: Double = 0.0
     override var turretAngle: Double = 0.0
     override var breakPower: Double = 0.0
+    override var transfer: Double = 0.0
 
 
     override fun position(): Pose2d = robot.drivetrainState.pos
@@ -34,6 +35,18 @@ class SimIO : SigmaIO {
 
     override fun flywheelVelocity(): Double {
         return robot.flywheelState.omega
+    }
+
+    override fun turretPosition(): Double {
+        return 0.0 // Todo: Implement turret simulation
+    }
+
+    override fun spindexerPosition(): Double {
+        return robot.spindexerState.spindexerRotation
+    }
+
+    override fun distance(): Double {
+        return 0.5 // Dummy value: 0.5 meters
     }
 
     override fun update() {
@@ -54,7 +67,7 @@ class SimIO : SigmaIO {
 
     fun transfer(): Double {
         //return transferPower
-        return transfer()
+        return 0.0
     }
 
     fun intake(): Double {
@@ -63,7 +76,7 @@ class SimIO : SigmaIO {
 
     fun turretRotation(): Double {
         //create function in the sim
-        return turretRotation()
+        return 0.0
     }
 
     fun turretAngle(): Double {

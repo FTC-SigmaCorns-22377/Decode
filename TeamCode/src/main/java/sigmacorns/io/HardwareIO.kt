@@ -1,12 +1,11 @@
 package sigmacorns.io
 
-import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.IMU
 import com.qualcomm.robotcore.hardware.Servo
-import com.qualcomm.robotcore.hardware.CRServo
 import com.qualcomm.robotcore.hardware.ColorRangeSensor
+import com.qualcomm.robotcore.hardware.DistanceSensor
 import com.qualcomm.robotcore.hardware.DcMotorSimple
 import com.qualcomm.robotcore.hardware.HardwareMap
 import sigmacorns.math.Pose2d
@@ -14,11 +13,13 @@ import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.TimeSource
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
+import com.qualcomm.robotcore.hardware.CRServo
 import com.qualcomm.robotcore.hardware.DcMotorEx
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.joml.Vector2d
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -33,20 +34,20 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
 
     //shooter
-    private val flyWheelMotor0: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
+    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")!!
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
 //turret
-    private val turretMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"turret")
-    private val turretServo: Servo = hardwareMap.get(Servo::class.java,"turretAngle")
+    private val turretMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"turret")
     //spindexer
-    private val spindexerMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"spindexer")
+    private val spindexerMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"spindexer")
     //breakServo
-    private val breakServo: Servo = hardwareMap.get(Servo::class.java,"break")
-    private val transfer: Servo = hardwareMap.get(Servo::class.java,"transfer")
+    private val breakServo: Servo? = hardwareMap.tryGet(Servo::class.java,"break")
+    private val transferServo: CRServo? = hardwareMap.tryGet(CRServo::class.java,"transfer")
 
     //sensors
     private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
+    private val distanceSensor: DistanceSensor? = hardwareMap.tryGet(DistanceSensor::class.java, "dist")
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
     val imu: IMU? = hardwareMap.tryGet(IMU::class.java,"imu")
 
@@ -63,7 +64,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var turretAngle: Double = 0.0
     override var spindexer: Double = 0.0
     override var breakPower: Double = 0.0
-    var transferPower: Double = 0.0
+    override var transfer: Double = 0.0
 
     private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
             getX(DistanceUnit.METER),
@@ -97,7 +98,20 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun flywheelVelocity(): Double {
-        return flyWheelMotor0?.getVelocity(AngleUnit.RADIANS) ?: 0.0
+        // seems to be in ticks/s for some reason...
+        return (flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
+    }
+
+    override fun turretPosition(): Double {
+        return turretMotor?.currentPosition?.toDouble() ?: 0.0
+    }
+
+    override fun spindexerPosition(): Double {
+        return spindexerMotor?.currentPosition?.toDouble() ?: 0.0
+    }
+
+    override fun distance(): Double {
+        return distanceSensor?.getDistance(DistanceUnit.METER) ?: 0.0
     }
 
     var posOffset = Pose2d()
@@ -119,14 +133,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
 
         //updating power values of auxilery motors
-        flyWheelMotor0?.power = shooter
+        flywheelMotor?.power = shooter
         intakeMotor?.power = intake
-        turretMotor.power = turret
-        spindexerMotor.power = spindexer
+        turretMotor?.power = turret
+        spindexerMotor?.power = spindexer
         //updating the positions of all the servos
-        turretServo.position = turretAngle
-        breakServo.position = breakPower
-        transfer.position = transferPower
+        breakServo?.position = breakPower
+        transferServo?.power = transfer
 
         pinpoint?.update()
     }
@@ -140,14 +153,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     override fun configurePinpoint() {
         //setting encoder resolution
-        pinpoint?.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD)
+        pinpoint?.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD)
 
-        pinpoint?.setOffsets(9.5,-9.5, DistanceUnit.CM)
+        pinpoint?.setOffsets(-8.89,12.7, DistanceUnit.CM)
 
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(
-            GoBildaPinpointDriver.EncoderDirection.REVERSED,
-            GoBildaPinpointDriver.EncoderDirection.FORWARD
+            GoBildaPinpointDriver.EncoderDirection.FORWARD,
+            GoBildaPinpointDriver.EncoderDirection.REVERSED
         )
 
         //resetting the positions for the IMU
@@ -167,7 +180,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBRMotor.direction = DcMotorSimple.Direction.FORWARD
 
         //flywheel and intake motors(auxilery) direction declarations
-        flyWheelMotor0?.direction = DcMotorSimple.Direction.FORWARD
+        flywheelMotor?.direction = DcMotorSimple.Direction.FORWARD
+        turretMotor?.direction = DcMotorSimple.Direction.FORWARD
         intakeMotor?.direction = DcMotorSimple.Direction.FORWARD
 
         //declaring driveMode's for drive motors( which will be run without encoder for now)
@@ -179,12 +193,18 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBRMotor.mode = driveMode
 
         //stoping and resetting the encoders for the auxilery motors( stop and reset)
-        flyWheelMotor0?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        flywheelMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        turretMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        spindexerMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
 
         //declaring the driveMode's for auxilery motors(which will be run without encoder for now)
-        flyWheelMotor0?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        flywheelMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        spindexerMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+
+        transferServo?.direction = DcMotorSimple.Direction.REVERSE
 
         // configuring pinpoint
         configurePinpoint()
