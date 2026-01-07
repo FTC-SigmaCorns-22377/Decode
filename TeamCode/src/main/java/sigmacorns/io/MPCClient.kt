@@ -70,6 +70,10 @@ class MPCClient(
 
         val horizon = DT*N
 
+        // Choreo uses bottom-left origin, but this project uses center origin
+        // FTC field is 3.6576m (12 feet), so we subtract half to center the coordinates
+        private const val FIELD_HALF_SIZE = 1.8288 // meters
+
         fun load(traj: Trajectory<MecanumSample>): List<Contour> {
             if (traj.samples.isEmpty()) return emptyList()
 
@@ -79,7 +83,8 @@ class MPCClient(
             var lastTheta = samples.first().heading
 
             for ((i,s) in samples.withIndex()) {
-                val p = Vector2d(s.x, s.y)
+                // Transform from Choreo's bottom-left origin to center origin
+                val p = Vector2d(s.x - FIELD_HALF_SIZE, s.y - FIELD_HALF_SIZE)
                 val v = Vector2d(s.vx, s.vy)
                 val a = Vector2d(s.ax, s.ay)
 
@@ -350,8 +355,8 @@ class MPCClient(
                 sample.vx,
                 sample.vy,
                 sample.omega,
-                sample.x,
-                sample.y,
+                sample.x - FIELD_HALF_SIZE,  // Transform from Choreo's bottom-left origin to center origin
+                sample.y - FIELD_HALF_SIZE,  // Transform from Choreo's bottom-left origin to center origin
                 theta,
             )
         }

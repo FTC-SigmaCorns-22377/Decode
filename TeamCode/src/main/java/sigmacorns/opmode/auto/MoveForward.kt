@@ -8,6 +8,23 @@ import sigmacorns.globalFieldState
 import sigmacorns.opmode.SigmaOpMode
 
 
+
+fun aaa() {
+    val list = listOf<Double?>(null,null,null)
+
+    if(list.all { it == null}) {}
+
+    if(list[0] == null && list[1] == null && list[2] == null) {}
+    fun f(item: Double?): Boolean { return item == null }
+    val f = { item: Double? -> item == null }
+    if(list.all(f)) {}
+
+    if(list.all({ item -> item == null })) {}
+    if(list.all { item -> item == null } ) {}
+    if(list.all { it == null } ) {}
+}
+
+
 @Autonomous
 class MoveForward: SigmaOpMode() {
 
