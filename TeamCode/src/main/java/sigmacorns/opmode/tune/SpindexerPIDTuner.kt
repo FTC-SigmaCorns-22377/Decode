@@ -30,7 +30,7 @@ object SpindexerPIDConfig {
     @JvmField var kD_3 = 0.002
     @JvmField var kI_3 = 0.0
 
-    @JvmField var slewRate = 1.7
+    @JvmField var slewRate = 4.5
 
     fun getKp(ballCount: Int) = when (ballCount) {
         0 -> kP_0
@@ -60,7 +60,7 @@ object SpindexerPIDConfig {
 @TeleOp(name = "Spindexer PID Tuner", group = "Test")
 class SpindexerPIDTuner : SigmaOpMode() {
 
-    private val ticksPerRev = (1.0 + (46.0 / 11.0)) * 28.0
+    private val ticksPerRev = (((1.0+(46.0/17.0))) * (1.0+(46.0/11.0))) * 28.0
     private val ticksPerRadian = ticksPerRev / (2 * PI)
 
     private val discreteStep = (2 * PI) / 3  // 120 degrees (spindexer slot)
@@ -170,6 +170,8 @@ class SpindexerPIDTuner : SigmaOpMode() {
             telemetry.addLine("  Right Stick Y: Adjust target")
             telemetry.addLine("  D-Pad Up/Down: Step +/- 120°")
             telemetry.addLine("  A: Reset to 0")
+            telemetry.addLine("${io.spindexer}")
+            telemetry.update()
             telemetry.update()
 
             false // continue loop
