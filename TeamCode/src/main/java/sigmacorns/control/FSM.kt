@@ -13,8 +13,7 @@ import java.util.PriorityQueue
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.min
 
-// a coroutine dispatcher that can run on the main thread without blocking it with an explicit update method
-// aka concurrency without worrying ab thread safety
+// a coroutine dispatcher that can run on the main thread with an explicit update method
 @OptIn(InternalCoroutinesApi::class)
 class PollableDispatcher(val io: SigmaIO): CoroutineDispatcher(), Delay {
     private val q = ArrayDeque<Runnable>()
@@ -61,13 +60,13 @@ class FSM<S,E>(
     var curState: S = initialState
 
     private val dispatcher = PollableDispatcher(io)
+    val scope = CoroutineScope(dispatcher)
 
-    var job: Job = CoroutineScope(dispatcher).launch { curState = behaviors(curState)() }
+    var job: Job = scope.launch { curState = behaviors(curState)() }
 
     private val sentEvents = ArrayDeque<E>()
     private val eventHandlers = mutableMapOf<E, suspend () -> Unit>()
 
-    val scope = CoroutineScope(dispatcher)
 
     fun onEvent(event: E, handler: suspend () -> Unit) {
         eventHandlers[event] = handler
@@ -87,12 +86,12 @@ class FSM<S,E>(
             val e = sentEvents.removeFirstOrNull() ?: break
             val handler = eventHandlers[e]
             if (handler != null) {
-                CoroutineScope(dispatcher).launch {
+                scope.launch {
                     val oldState = curState
                     handler()
 
                     // if state was changed by event, cancel the state behavior from running
-                    if(curState != oldState && !(job.isCompleted ?: true)) job.cancel()
+                    if(curState != oldState && !job.isCompleted) job.cancel()
                 }
             }
             i++
@@ -105,7 +104,7 @@ class FSM<S,E>(
             if(!job.isCompleted) job.cancel()
 
             // start new state behavior
-            job = CoroutineScope(dispatcher).launch { curState = behaviors(curState)() }
+            job = scope.launch { curState = behaviors(curState)() }
         }
 
         oldState = curState

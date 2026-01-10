@@ -33,8 +33,6 @@ class SimpleAuto : SigmaOpMode() {
     )
 
     override fun runOpMode() {
-        val voltageSensor = hardwareMap.voltageSensor.iterator().next()
-
         spindexerLogic = SpindexerLogic(io)
         dispatcher = PollableDispatcher(io)
         turret = Turret(turretRange, io)
@@ -100,7 +98,7 @@ class SimpleAuto : SigmaOpMode() {
         waitForStart()
 
         ioLoop { state, dt ->
-            val voltage = voltageSensor.voltage
+            val voltage = io.voltage()
             val dVoltage = 12.0 / voltage
 
             // Update dispatcher (runs the coroutine)

@@ -73,14 +73,11 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         autoAim = AutoAim(hardwareIO?.limelight, targetAprilTagIds = if(blue) setOf(20) else setOf(24))
         autoAim.configure()
 
-        val voltageSensor = hardwareMap.voltageSensor.iterator().next()
-
         waitForStart()
 
         ioLoop { state, dt ->
             // Update voltage compensation
-            val voltage = voltageSensor.voltage
-            dVoltage = 12.0 / voltage
+            dVoltage = 12.0 / io.voltage()
 
             // Update auto-aim system with odometry and turret angle for sensor fusion
             val robotPose = io.position()
@@ -91,8 +88,19 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
             processDrivetrain(dt)
             processTurret(dt)
             processIntakeAndShooting(dt)
-            processPracticeGame()
             updateTelemetry(state)
+
+            // Emergency stop
+            if (gm1.a) {
+                io.driveFL = 0.0
+                io.driveBL = 0.0
+                io.driveFR = 0.0
+                io.driveBR = 0.0
+                io.shooter = 0.0
+                io.intake = 0.0
+                io.turret = 0.0
+                io.spindexer = 0.0
+            }
 
             false // continue loop
         }
@@ -104,19 +112,6 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
             speedMultiplier = 1.0  // Full speed
         } else if (gm1.dpad_down) {
             speedMultiplier = 0.5  // Precision mode
-        }
-
-        // Emergency stop
-        if (gm1.a) {
-            io.driveFL = 0.0
-            io.driveBL = 0.0
-            io.driveFR = 0.0
-            io.driveBR = 0.0
-            io.shooter = 0.0
-            io.intake = 0.0
-            io.turret = 0.0
-            io.spindexer = 0.0
-            return
         }
 
         // Mecanum drive calculation
@@ -291,47 +286,6 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
 
         // Update spindexer FSM
         spindexerLogic.update(io.spindexerPosition(), dt, dVoltage)
-    }
-
-    private fun processPracticeGame() {
-        val rampArray = globalFieldState.ramp
-
-        // Add green ball (A button)
-        if (gm2.a && !gm2.start) {
-            for (i in 0 until 9) {
-                if (rampArray[i] == 0) {
-                    rampArray[i] = 1
-                    break
-                }
-            }
-        }
-
-        // Add purple ball (B button)
-        if (gm2.b && !gm2.start) {
-            for (i in 0 until 9) {
-                if (rampArray[i] == 0) {
-                    rampArray[i] = 2
-                    break
-                }
-            }
-        }
-
-        // Remove last ball (X button)
-        if (gm2.x && !gm2.start) {
-            for (i in 8 downTo 0) {
-                if (rampArray[i] != 0) {
-                    rampArray[i] = 0
-                    break
-                }
-            }
-        }
-
-        // Clear all (Y button)
-        if (gm2.y && !gm2.start) {
-            for (i in 0 until 9) {
-                rampArray[i] = 0
-            }
-        }
     }
 
     private fun updateTelemetry(state: sigmacorns.State) {

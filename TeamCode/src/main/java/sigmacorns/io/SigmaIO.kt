@@ -47,4 +47,6 @@ interface SigmaIO {
      */
     fun time(): Duration
     fun configurePinpoint()
+
+    fun voltage(): Double
 }

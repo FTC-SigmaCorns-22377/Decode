@@ -55,8 +55,6 @@ class ShotTuningOpMode : SigmaOpMode() {
     private var shootingPhase = ShootingPhase.IDLE
     private var shootingStartTime = 0L
     private var dVoltage = 1.0
-    private val voltageSensor by lazy { hardwareMap.voltageSensor.iterator().next() }
-
     private enum class ShootingPhase {
         IDLE,           // Waiting for shot trigger
         SPINNING_UP,    // Flywheel ramping up
@@ -107,10 +105,10 @@ class ShotTuningOpMode : SigmaOpMode() {
 
         try {
             ioLoop { state, dt ->
-                dVoltage = 12.0 / voltageSensor.voltage
+                dVoltage = 12.0 / io.voltage()
 
                 // Update vision
-                autoAim.update()
+                autoAim.update(io.position(),io.turretPosition())
 
                 // Get current distance
                 if (autoAim.hasTarget) {

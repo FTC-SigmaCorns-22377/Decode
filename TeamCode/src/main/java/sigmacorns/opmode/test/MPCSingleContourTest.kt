@@ -29,8 +29,6 @@ class MPCSingleContourTest(): SigmaOpMode() {
             if (LIMELIGHT_CONNECTED) Network.LIMELIGHT else Network.SIM_MPC
         )
 
-        val voltageSensor = hardwareMap.voltageSensor.iterator().next()
-
         RerunLogging.save("MPCSingleContourTest","/sdcard/FIRST/MPCSingleContourTest.rrd").use { rr ->
             mpc.setTargetContours(contours)
 
@@ -52,7 +50,7 @@ class MPCSingleContourTest(): SigmaOpMode() {
                 val t = io.time()
 
                 println("t=$t")
-                mpc.update(MecanumState(state.driveTrainVelocity,state.driveTrainPosition),voltageSensor.voltage,t)
+                mpc.update(MecanumState(state.driveTrainVelocity,state.driveTrainPosition),io.voltage(),t)
                 val u  = mpc.getU(t)
 
                 io.driveFL = u[0]

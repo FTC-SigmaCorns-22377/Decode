@@ -10,6 +10,7 @@ import kotlin.math.absoluteValue
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -82,12 +83,6 @@ class AutoAim(
     /** Camera mounting offset from turret center (radians) - adjust based on your robot */
     var cameraMountingOffsetYaw: Double = 0.0
 
-    /** Camera mounting height above ground (meters) */
-    var cameraMountingHeight: Double = 0.33
-
-    /** Goal height above ground (meters) */
-    var goalHeight: Double = 0.762
-
     /** Time in ms after which we stop using predicted target position */
     var predictionTimeoutMs: Long = 2000
 
@@ -100,13 +95,6 @@ class AutoAim(
 
     /** Deadband for tx - ignore vision corrections smaller than this (radians) */
     var txDeadband: Double = 0.01  // ~0.5 degrees
-
-    /** Maximum allowed deviation from predicted position (radians) - readings beyond this are rejected */
-    var maxInnovation: Double = 0.35  // ~20 degrees - reject wild readings
-
-    /** Whether the last reading was rejected as an outlier */
-    var lastReadingRejected: Boolean = false
-        private set
 
     // ===== Sensor Fusion State =====
 
@@ -146,14 +134,11 @@ class AutoAim(
     // Motion tracking for uncertainty estimation
     private var lastRobotPose: Pose2d? = null
     private var lastTurretAngle: Double = 0.0
-    private var robotAngularVelocity: Double = 0.0
-    private var turretAngularVelocity: Double = 0.0
     private var lastUpdateTimeMs: Long = 0
 
     // Uncertainty parameters
-    private val robotRotationUncertaintyGain = 2.0  // uncertainty per rad/s of robot rotation
-    private val turretRotationUncertaintyGain = 1.5 // uncertainty per rad/s of turret rotation
-    private val uncertaintyDecayRate = 0.85         // decay per update when stationary
+    private val turretRotationUncertaintyGain = 1.5 // uncertainty per rad/s of field-relative turret rotation
+    private val uncertaintyDecayRate = 0.01         // decay per update when stationary (1/second)
 
     /**
      * Updates the auto-aim state with full coordinate transforms and sensor fusion.
@@ -238,40 +223,31 @@ class AutoAim(
 
     /**
      * Updates the uncertainty estimate based on motion.
-     * High angular velocity of robot or turret = high uncertainty in vision.
+     * High field relative angular velocity of turret = high uncertainty in vision.
      */
     private fun updateUncertainty(robotPose: Pose2d, turretAngle: Double, dt: Double) {
         if (lastRobotPose != null && dt > 0) {
             // Compute angular velocities
-            val robotDeltaAngle = normalizeAngle(robotPose.rot - lastRobotPose!!.rot)
-            robotAngularVelocity = robotDeltaAngle.absoluteValue / dt
+            val robotAngVel = normalizeAngle(robotPose.rot - lastRobotPose!!.rot) / dt
+            val turretAngVel = normalizeAngle(turretAngle - lastTurretAngle) / dt
 
-            val turretDeltaAngle = normalizeAngle(turretAngle - lastTurretAngle)
-            turretAngularVelocity = turretDeltaAngle.absoluteValue / dt
+            val fieldRelTurretAngVel = robotAngVel + turretAngVel
 
             // Compute motion-induced uncertainty
-            val motionUncertainty = (robotAngularVelocity * robotRotationUncertaintyGain +
-                    turretAngularVelocity * turretRotationUncertaintyGain).coerceIn(0.0, 1.0)
+            val motionUncertainty = (fieldRelTurretAngVel * turretRotationUncertaintyGain).coerceIn(0.0, 1.0)
 
             // Blend: uncertainty increases immediately with motion, decays slowly when stationary
             uncertainty = if (motionUncertainty > uncertainty) {
                 motionUncertainty
             } else {
-                uncertainty * uncertaintyDecayRate + motionUncertainty * (1 - uncertaintyDecayRate)
+                // loop time independent
+                val decayFactor = uncertaintyDecayRate.pow(dt);
+                uncertainty * decayFactor + motionUncertainty * (1 - decayFactor)
             }
         }
 
         lastRobotPose = robotPose
         lastTurretAngle = turretAngle
-    }
-
-    /**
-     * Legacy update method for backwards compatibility.
-     * Use update(robotPose, turretAngle) for full sensor fusion.
-     */
-    fun update() {
-        updateVision()
-        hasTarget = hasVisionTarget
     }
 
     /**
@@ -285,9 +261,9 @@ class AutoAim(
             return
         }
 
-        val result: LLResult? = limelight.latestResult
+        val result: LLResult = limelight.latestResult
 
-        if (result == null || !result.isValid) {
+        if (!result.isValid) {
             hasVisionTarget = false
             lastResultValid = false
             detectedTagCount = 0
@@ -308,7 +284,7 @@ class AutoAim(
         if (targetFiducial != null) {
             hasVisionTarget = true
             trackedTagId = targetFiducial.fiducialId
-            lastDetectionTimeMs = System.currentTimeMillis()
+            lastDetectionTimeMs = result.controlHubTimeStamp
 
             // Store raw values for logging
             rawTxDegrees = targetFiducial.targetXDegrees
@@ -319,16 +295,9 @@ class AutoAim(
             targetTx = Math.toRadians(targetFiducial.targetXDegrees) + cameraMountingOffsetYaw
             targetTy = Math.toRadians(targetFiducial.targetYDegrees)
 
-            // Get distance from the 3D pose if available
-            val robotPoseInTargetSpace = targetFiducial.robotPoseTargetSpace
-            if (robotPoseInTargetSpace != null) {
-                // Compute Euclidean distance from the 3D position
-                val pos = robotPoseInTargetSpace.position
-                targetDistance = hypot(hypot(pos.x, pos.y), pos.z)
-            } else {
-                // Fallback: estimate distance from ty and known heights
-                targetDistance = estimateDistanceFromTy(targetTy)
-            }
+            // Compute Euclidean distance from the 3D position
+            val pos = targetFiducial.robotPoseTargetSpace.position
+            targetDistance = hypot(hypot(pos.x, pos.y), pos.z)
         } else {
             // No matching AprilTag found - ignore non-target tags.
             hasVisionTarget = false
@@ -409,18 +378,6 @@ class AutoAim(
     }
 
     /**
-     * Estimates distance to target based on vertical angle.
-     */
-    private fun estimateDistanceFromTy(ty: Double): Double {
-        val deltaHeight = goalHeight - cameraMountingHeight
-        return if (ty.absoluteValue > 0.01) {
-            (deltaHeight / kotlin.math.tan(ty)).absoluteValue
-        } else {
-            5.0 // Default distance when angle is too small
-        }
-    }
-
-    /**
      * Gets the turret yaw adjustment needed to center the target.
      * This is the direct vision feedback for fine-tuning when target is visible.
      * Applies sign multiplier and deadband.
@@ -458,16 +415,6 @@ class AutoAim(
             return null
         }
         return targetFieldAngle
-    }
-
-    /**
-     * Gets the recommended flywheel power based on target distance.
-     */
-    fun getRecommendedFlywheelPower(maxDistance: Double = 10.0): Double {
-        if (!enabled || !hasTarget) {
-            return 0.0
-        }
-        return (targetDistance / maxDistance).coerceIn(0.3, 1.0)
     }
 
     /**

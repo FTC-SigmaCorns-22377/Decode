@@ -52,13 +52,10 @@ class Turret(
     /** The raw robot-relative target before limiting (for goal tracking) */
     var goalTargetAngle: Double = 0.0
         private set
-    private var lastEffectiveTargetAngle: Double? = null
-
 
     fun update(dt: Duration) {
         val currentAngle = range.tickToPos(io.turretPosition())
         pos = currentAngle
-        val dtSeconds = dt.toDouble(DurationUnit.SECONDS)
 
         // Determine the raw target angle (field-relative or robot-relative)
         val rawTarget = if (fieldRelativeMode) {
@@ -99,30 +96,16 @@ class Turret(
             turretPower += staticPower * turretPower.sign
         }
 
-        val targetVelocity = if (dtSeconds > 0.0) {
-            val prevTarget = lastEffectiveTargetAngle ?: effectiveTargetAngle
-            (effectiveTargetAngle - prevTarget) / dtSeconds
-        } else {
-            0.0
-        }
-        val velocityFeedforward = TurretPIDConfig.kV * targetVelocity
         val robotAngularFeedforward = if (fieldRelativeMode) {
             -TurretPIDConfig.kVRobot * robotAngularVelocity
         } else {
             0.0
         }
-        turretPower = (turretPower + velocityFeedforward + robotAngularFeedforward).coerceIn(-1.0, 1.0)
-        lastEffectiveTargetAngle = effectiveTargetAngle
-
-        val flywheelPower = flywheelSpeed()
+        turretPower = (turretPower + robotAngularFeedforward).coerceIn(-1.0, 1.0)
 
         outputSlewRateLimiter.maxRate = TurretPIDConfig.outputSlewRate
-        io.turret = outputSlewRateLimiter.calculate(turretPower, dt)
-        //io.shooter = flywheelPower
-    }
+        val power = outputSlewRateLimiter.calculate(turretPower, dt)
 
-    private val MAX_LAUNCH_DIST = 10.0
-    private fun flywheelSpeed(): Double {
-        return (targetDistance/MAX_LAUNCH_DIST).coerceIn(0.0, 1.0)
+        io.turret = power / (io.voltage()/12.0)
     }
 }

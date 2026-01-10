@@ -33,8 +33,6 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
 
         val traj = Choreo().loadTrajectory<MecanumSample>(trajName).get()
 
-        val voltageSensor = hardwareMap?.voltageSensor?.iterator()?.next()
-
         MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2).use { mpc ->
             rerunSink("MPCTest($trajName)").use { rr ->
                 mpc.setTarget(traj, SolverRequestType.CONTOURING)
@@ -62,7 +60,7 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                     state.update(io)
                     mpc.update(
                         MecanumState(io.velocity(), io.position()),
-                        voltageSensor?.voltage ?: 12.0,
+                        io.voltage(),
                         t
                     )
                     val u = mpc.getU(t)

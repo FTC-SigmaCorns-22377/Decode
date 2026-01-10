@@ -360,7 +360,7 @@ class SpindexerLogic(val io: SigmaIO) {
         // Update spindexer control
         val count = spindexerState.count { it != null }
         spindexer.target = spindexerRotation
-        spindexer.update(deltaT, motorTick, count)
+        spindexer.update(deltaT, count)
 
         // Update Flywheel PID if in shooting state
         if (fsm.curState == State.SHOOTING || fsm.curState == State.MOVING_SHOOT) {

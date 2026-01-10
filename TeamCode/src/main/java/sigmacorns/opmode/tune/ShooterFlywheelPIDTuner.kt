@@ -33,10 +33,8 @@ class ShooterFlywheelPIDTuner : BasePIDTuner() {
         return io.flywheelVelocity()
     }
 
-    private val voltageSensor by lazy { hardwareMap.voltageSensor.iterator().next() }
-
     override fun applyMotorPower(power: Double) {
-        val voltage = voltageSensor.voltage
+        val voltage = io.voltage()
         val dVoltage = 12.0 / voltage
         io.shooter = power * dVoltage
     }

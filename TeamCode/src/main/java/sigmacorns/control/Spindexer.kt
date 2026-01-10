@@ -18,8 +18,8 @@ class Spindexer(
     var target: Double = 0.0
     var curRotation: Double = 0.0
 
-    fun update(dt: Duration, motorTick: Double, count: Int) {
-        curRotation = range.tickToPos(motorTick)
+    fun update(dt: Duration, count: Int) {
+        curRotation = range.tickToPos(io.spindexerPosition())
 
         val slewLimitedTarget = if (slewRateLimitingEnabled) {
             slewRateLimiter.maxRate = SpindexerPIDConfig.slewRate

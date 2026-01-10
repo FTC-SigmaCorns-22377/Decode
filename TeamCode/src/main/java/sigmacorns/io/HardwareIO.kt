@@ -54,6 +54,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //odometry
     var pinpoint: GoBildaPinpointDriver? = hardwareMap.tryGet(GoBildaPinpointDriver::class.java,"pinpoint")
 
+    val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
+
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
     override var driveFR: Double = 0.0
@@ -65,6 +67,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var spindexer: Double = 0.0
     override var breakPower: Double = 0.0
     override var transfer: Double = 0.0
+
+    private var savedVoltage: Double = 12.0
 
     private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
             getX(DistanceUnit.METER),
@@ -142,6 +146,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         transferServo?.power = transfer
 
         pinpoint?.update()
+        savedVoltage = voltageSensor?.voltage ?: 12.0
     }
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
@@ -166,6 +171,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //resetting the positions for the IMU
         pinpoint?.resetPosAndIMU()
     }
+
+    override fun voltage(): Double = savedVoltage
 
     fun configureLimelight() {
         limelight?.pipelineSwitch(0);

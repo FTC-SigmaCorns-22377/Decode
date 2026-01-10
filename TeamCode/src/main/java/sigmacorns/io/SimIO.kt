@@ -64,6 +64,10 @@ class SimIO : SigmaIO {
 
     }
 
+    override fun voltage(): Double {
+        return 12.0
+    }
+
 
     fun transfer(): Double {
         //return transferPower
