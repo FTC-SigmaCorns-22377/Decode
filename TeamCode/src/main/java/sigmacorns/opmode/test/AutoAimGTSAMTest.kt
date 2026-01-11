@@ -3,6 +3,7 @@ package sigmacorns.opmode.test
 import com.bylazar.configurables.annotations.Configurable
 import com.bylazar.panels.Panels
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
+import org.joml.Quaterniond
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.constants.FieldZones
@@ -34,8 +35,8 @@ class AutoAimGTSAMTest : SigmaOpMode() {
 
         @JvmField var priorSigmaXY = 5.0
         @JvmField var priorSigmaTheta = 5.0
-        @JvmField var odomSigmaXY = 0.02
-        @JvmField var odomSigmaTheta = 0.01
+        @JvmField var odomSigmaXY = 0.001
+        @JvmField var odomSigmaTheta = 0.001
         @JvmField var defaultPixelSigma = 2.0
         @JvmField var relinearizeThreshold = 0.01
         @JvmField var relinearizeSkip = 1
@@ -47,20 +48,23 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var enableTagGating = false
         @JvmField var minTagAreaPx = 50.0
         @JvmField var maxTagViewAngleDeg = 60.0
-        @JvmField var enablePostProcess = false
+        @JvmField var enableCheiralityCheck = true
+        @JvmField var cheiralitySigma = 0.1
+        @JvmField var minTagZDistance = 0.02
+        @JvmField var enablePostProcess = true
         @JvmField var postProcessVisionGapS = 0.4
-        @JvmField var postProcessSettleS = 2.0
+        @JvmField var postProcessSettleS = 1.0
         @JvmField var postProcessSettleUpdates = 3
         @JvmField var fx = 1221.445 / 2.0
         @JvmField var fy = 1223.398 / 2.0
         @JvmField var cx = 637.226 / 2.0
         @JvmField var cy = 502.549 / 2.0
-        @JvmField var k1 = 0.0
-        @JvmField var k2 = 0.0
-        @JvmField var k3 = 0.0
-        @JvmField var p1 = 0.0
-        @JvmField var p2 = 0.0
-        @JvmField var cameraOffsetX = 0.18312971*0.0
+        @JvmField var k1 = 0.177168
+        @JvmField var k2 = -0.457341
+        @JvmField var k3 = 0.178259
+        @JvmField var p1 = 0.000360
+        @JvmField var p2 = 0.002753
+        @JvmField var cameraOffsetX = 0.18312971
         @JvmField var cameraOffsetY = 0.0
         @JvmField var cameraOffsetZ = 0.32448638
         @JvmField var cameraRoll = -Math.toRadians(80.0)
@@ -92,6 +96,9 @@ class AutoAimGTSAMTest : SigmaOpMode() {
             enableTagGating = AutoAimGTSAMTestConfig.enableTagGating,
             minTagAreaPx = AutoAimGTSAMTestConfig.minTagAreaPx,
             maxTagViewAngleDeg = AutoAimGTSAMTestConfig.maxTagViewAngleDeg,
+            enableCheiralityCheck = AutoAimGTSAMTestConfig.enableCheiralityCheck,
+            cheiralitySigma = AutoAimGTSAMTestConfig.cheiralitySigma,
+            minTagZDistance = AutoAimGTSAMTestConfig.minTagZDistance,
             enablePostProcess = AutoAimGTSAMTestConfig.enablePostProcess,
             postProcessVisionGapS = AutoAimGTSAMTestConfig.postProcessVisionGapS,
             postProcessSettleS = AutoAimGTSAMTestConfig.postProcessSettleS,
@@ -133,24 +140,36 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         io.configurePinpoint()
         io.setPosition(Pose2d(0.0,0.0,PI/2.0))
 
+        val ll = (io as? HardwareIO)!!.limelight!!
+        ll.pipelineSwitch(0)
+        ll.start()
+
         val hardwareIO = io as? HardwareIO
         val turret = Turret(turretRange, io)
         turret.fieldRelativeMode = true
 
+        val q20 = Quaterniond().rotateX(-PI/2.0).rotateLocalZ(Math.toRadians(54.046000))
+        val ypr20 = Vector3d()
+        q20.getEulerAnglesZYX(ypr20)
+
+
+        val q24 = Quaterniond().rotateX(-PI/2.0).rotateLocalZ(-Math.toRadians(54.046000))
+        val ypr24 = Vector3d()
+        q24.getEulerAnglesZYX(ypr24)
         // Update these AprilTag positions (meters) to match your field layout.
         val landmarks = mapOf(
             20 to AutoAimGTSAM.LandmarkSpec(
                 Vector3d(-1.413321, 1.481870, 0.7493),
-                pitch = 0.0,
-                roll = PI / 2.0,
-                yaw = -Math.toRadians(54.046000) + PI,
+                pitch = ypr20.y,
+                roll = ypr20.x,
+                yaw = ypr20.z,
                 size = 0.165
             ),
             24 to AutoAimGTSAM.LandmarkSpec(
                 Vector3d(1.413321, 1.481870, 0.7493),
-                pitch = 0.0,
-                roll = PI / 2.0,
-                yaw = -Math.toRadians(54.046000) + PI,
+                pitch = ypr24.y,
+                roll = ypr24.x,
+                yaw = ypr24.z,
                 size = 0.165
             ),
             22 to AutoAimGTSAM.LandmarkSpec(
@@ -159,6 +178,7 @@ class AutoAimGTSAMTest : SigmaOpMode() {
                 roll = -PI/2.0,
                 pitch = 0.0,
                 yaw = 0.0,
+                size = 0.165
             )
         )
         val goalPosition = Vector2d(-1.480126, 1.598982)
