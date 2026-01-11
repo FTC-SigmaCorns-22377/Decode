@@ -1,4 +1,4 @@
-package sigmacorns.control
+package sigmacorns.control.aim
 
 object PoseEstimatorBridge {
     @JvmStatic external fun nativeCreate(): Long
@@ -79,4 +79,9 @@ object PoseEstimatorBridge {
     @JvmStatic external fun nativeIsInitialized(handle: Long): Boolean
     @JvmStatic external fun nativeGetLastSolveTimeMs(handle: Long): Double
     @JvmStatic external fun nativeGetAverageSolveTimeMs(handle: Long): Double
+    @JvmStatic external fun nativeGetLastMemoryUsage(handle: Long): LongArray
+    @JvmStatic external fun nativeGetDiagnosticsSnapshot(handle: Long): DoubleArray
+    @JvmStatic external fun nativeGetAllLandmarkCorners(handle: Long): DoubleArray
+    @JvmStatic external fun nativeGetLandmarkCorners(handle: Long, tagId: Int): DoubleArray
+    @JvmStatic external fun nativeGetCameraUnitVectors(handle: Long): DoubleArray
 }

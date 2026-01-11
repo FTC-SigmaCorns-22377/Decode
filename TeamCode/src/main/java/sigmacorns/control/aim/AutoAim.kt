@@ -1,4 +1,4 @@
-package sigmacorns.control
+package sigmacorns.control.aim
 
 import com.qualcomm.hardware.limelightvision.LLResult
 import com.qualcomm.hardware.limelightvision.LLResultTypes.FiducialResult

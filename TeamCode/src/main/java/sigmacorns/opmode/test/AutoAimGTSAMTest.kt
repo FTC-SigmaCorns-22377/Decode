@@ -1,13 +1,16 @@
 package sigmacorns.opmode.test
 
 import com.bylazar.configurables.annotations.Configurable
+import com.bylazar.panels.Panels
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.constants.FieldZones
-import sigmacorns.control.AutoAimGTSAM
+import sigmacorns.control.aim.AimConfig
+import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.Turret
+import sigmacorns.control.aim.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
@@ -29,10 +32,10 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var turretRotationUncertaintyGain = 1.5
         @JvmField var uncertaintyDecayRate = 0.01
 
-        @JvmField var priorSigmaXY = 0.05
-        @JvmField var priorSigmaTheta = 0.02
-        @JvmField var odomSigmaXY = 0.0002
-        @JvmField var odomSigmaTheta = 0.001
+        @JvmField var priorSigmaXY = 1.0
+        @JvmField var priorSigmaTheta = 0.5
+        @JvmField var odomSigmaXY = 0.02
+        @JvmField var odomSigmaTheta = 0.01
         @JvmField var defaultPixelSigma = 2.0
         @JvmField var relinearizeThreshold = 0.01
         @JvmField var relinearizeSkip = 1
@@ -41,10 +44,10 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var enableRobustTagLoss = false
         @JvmField var robustTagLoss = 0
         @JvmField var robustTagLossK = 1.5
-        @JvmField var enableTagGating = true
+        @JvmField var enableTagGating = false
         @JvmField var minTagAreaPx = 50.0
         @JvmField var maxTagViewAngleDeg = 60.0
-        @JvmField var enablePostProcess = true
+        @JvmField var enablePostProcess = false
         @JvmField var postProcessVisionGapS = 0.4
         @JvmField var postProcessSettleS = 2.0
         @JvmField var postProcessSettleUpdates = 3
@@ -60,9 +63,9 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var cameraOffsetX = 0.18312971
         @JvmField var cameraOffsetY = 0.0
         @JvmField var cameraOffsetZ = 0.32448638
-        @JvmField var cameraRoll = 0.0
-        @JvmField var cameraPitch = Math.toRadians(10.0)
-        @JvmField var cameraYaw = 0.0
+        @JvmField var cameraRoll = Math.toRadians(80.0)
+        @JvmField var cameraPitch = 0.0
+        @JvmField var cameraYaw = PI / 2.0
     }
 
     private val ticksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2 * PI) * 76 / 19
@@ -112,18 +115,21 @@ class AutoAimGTSAMTest : SigmaOpMode() {
     }
 
     private fun applyRuntimeConfig(autoAim: AutoAimGTSAM) {
-        autoAim.cameraMountingOffsetYaw = AutoAimGTSAMTestConfig.cameraMountingOffsetYaw
-        autoAim.txSignMultiplier = AutoAimGTSAMTestConfig.txSignMultiplier
-        autoAim.txDeadband = AutoAimGTSAMTestConfig.txDeadband
-        autoAim.maxAcceptableUncertainty = AutoAimGTSAMTestConfig.maxAcceptableUncertainty
-        autoAim.predictionTimeoutMs = AutoAimGTSAMTestConfig.predictionTimeoutMs
-        autoAim.visionPixelSigma = AutoAimGTSAMTestConfig.visionPixelSigma
-        autoAim.maxPoseDivergence = AutoAimGTSAMTestConfig.maxPoseDivergence
-        autoAim.turretRotationUncertaintyGain = AutoAimGTSAMTestConfig.turretRotationUncertaintyGain
-        autoAim.uncertaintyDecayRate = AutoAimGTSAMTestConfig.uncertaintyDecayRate
+        autoAim.aimConfig = AimConfig(
+            cameraMountingOffsetYaw = AutoAimGTSAMTestConfig.cameraMountingOffsetYaw,
+            txSignMultiplier = AutoAimGTSAMTestConfig.txSignMultiplier,
+            txDeadband = AutoAimGTSAMTestConfig.txDeadband,
+            maxAcceptableUncertainty = AutoAimGTSAMTestConfig.maxAcceptableUncertainty,
+            predictionTimeoutMs = AutoAimGTSAMTestConfig.predictionTimeoutMs,
+            visionPixelSigma = AutoAimGTSAMTestConfig.visionPixelSigma,
+            maxPoseDivergence = AutoAimGTSAMTestConfig.maxPoseDivergence,
+            turretRotationUncertaintyGain = AutoAimGTSAMTestConfig.turretRotationUncertaintyGain,
+            uncertaintyDecayRate = AutoAimGTSAMTestConfig.uncertaintyDecayRate
+        )
     }
 
     override fun runOpMode() {
+        Panels.config.enableLogs = false
         io.configurePinpoint()
         io.setPosition(Pose2d(0.0,0.0,PI/2.0))
 
@@ -135,37 +141,63 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         val landmarks = mapOf(
             20 to AutoAimGTSAM.LandmarkSpec(
                 Vector3d(-1.413321, 1.481870, 0.7493),
+                pitch = -PI/2.0,
+                roll = -PI/2.0,
+                yaw = -Math.toRadians(54.046000),
                 size = 0.165
             ),
             24 to AutoAimGTSAM.LandmarkSpec(
                 Vector3d(1.413321, 1.481870, 0.7493),
+                pitch = -PI/2.0,
+                roll = -PI/2.0,
+                yaw = -Math.toRadians(54.046000),
                 size = 0.165
             ),
+            22 to AutoAimGTSAM.LandmarkSpec(
+                position = Vector3d(0.0,1.818888,0.459341),
+                //position = Vector3d(0.0,0.0,0.459341),
+                roll = -PI/2.0,
+                pitch = 0.0,
+                yaw = 0.0,
+            )
         )
         val goalPosition = Vector2d(-1.480126, 1.598982)
 
-        val autoAim = AutoAimGTSAM(
-            limelight = hardwareIO?.limelight,
-            landmarkPositions = landmarks,
-            goalPosition = goalPosition,
-            initialPose = Pose2d(),
-            estimatorConfig = buildEstimatorConfig()
-        )
-        autoAim.logSink = { message -> telemetry.log().add(message) }
-
-        applyRuntimeConfig(autoAim)
-        autoAim.configure(pipeline = AutoAimGTSAMTestConfig.pipeline)
-        autoAim.enabled = true
-
-        telemetry.addLine("AutoAim GTSAM test ready")
-        telemetry.update()
-
-        waitForStart()
+        var autoAim: AutoAimGTSAM? = null
+        var visionTracker: VisionTracker? = null
 
         try {
+            autoAim = AutoAimGTSAM(
+                landmarkPositions = landmarks,
+                goalPosition = goalPosition,
+                initialPose = Pose2d(),
+                estimatorConfig = buildEstimatorConfig()
+            )
+            visionTracker = VisionTracker(
+                limelight = hardwareIO?.limelight,
+                allowedTagIds = landmarks.keys
+            )
+
+            applyRuntimeConfig(autoAim)
+            visionTracker.configure(pipeline = AutoAimGTSAMTestConfig.pipeline)
+            autoAim.enabled = true
+
+            telemetry.addLine("AutoAim GTSAM test ready")
+            telemetry.update()
+
+            waitForStart()
+            if (isStopRequested) {
+                return
+            }
+
             ioLoop { _, dt ->
                 applyRuntimeConfig(autoAim)
-                autoAim.update(io.position(), turret.pos)
+                val visionResult = visionTracker.read()
+                autoAim.update(io.position(), turret.pos, visionResult)
+
+                // Keep field-relative turret aiming aligned with the current robot heading.
+                turret.robotHeading = autoAim.fusedPose.rot
+                turret.robotAngularVelocity = io.velocity().rot
 
                 autoAim.getTargetFieldAngle()?.let { targetAngle ->
                     turret.fieldTargetAngle = targetAngle
@@ -189,10 +221,15 @@ class AutoAimGTSAMTest : SigmaOpMode() {
                 telemetry.addData("Prediction", autoAim.usingPrediction)
                 telemetry.update()
 
+                autoAim.logLandmarkCorners(22)
+                println("CALLING MANUALLY")
+                autoAim.logCameraUnitVectors()
+
                 false
             }
         } finally {
-            autoAim.close()
+            autoAim?.close()
+            visionTracker?.stop()
         }
     }
 }

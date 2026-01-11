@@ -69,7 +69,9 @@ abstract class SigmaOpMode(
 
     override fun waitForStart() {
         if (!SIM) {
-            super.waitForStart()
+            while (!opModeIsActive() && !isStopRequested) {
+                idle()
+            }
             return
         }
 

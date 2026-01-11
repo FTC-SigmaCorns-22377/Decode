@@ -1,7 +1,7 @@
 package sigmacorns.tuning
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import sigmacorns.control.AutoAim
+import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.Turret
 import sigmacorns.io.HardwareIO

@@ -4,7 +4,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import sigmacorns.control.AutoAim
+import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.ShotPowers

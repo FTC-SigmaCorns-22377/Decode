@@ -15,13 +15,11 @@
 
 buildscript {
     repositories {
+        mavenLocal()
         mavenCentral()
-        maven {
-            url "https://repo.dairy.foundation/releases"
-        }
     }
     dependencies {
-        classpath "dev.frozenmilk:Load:0.2.4"
+        classpath "dev.frozenmilk:Load:SNAPSHOT-1739c47"
     }
 }
 
@@ -39,6 +37,7 @@ android {
     compileSdk 35
     defaultConfig {
         minSdk 24
+        resValue "string", "sloth_teamcode_package", "sigmacorns"
     }
 
     testOptions {
@@ -123,6 +122,7 @@ local.load(project.rootProject.file('local.properties').newDataInputStream())
 
 repositories {
     mavenCentral()
+    mavenLocal()
     maven { url = "https://mymaven.bylazar.com/releases" }
 
     maven {
@@ -147,7 +147,7 @@ repositories {
 project.ext.jomlVersion = "1.10.8"
 
 dependencies {
-    implementation("dev.frozenmilk.sinister:Sloth:0.2.4")
+    implementation("dev.frozenmilk.sinister:Sloth:SNAPSHOT-0f3df49")
     implementation project(':FtcRobotController')
 
     implementation "org.joml:joml:${jomlVersion}"

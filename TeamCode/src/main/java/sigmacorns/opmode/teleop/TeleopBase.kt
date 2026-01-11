@@ -4,7 +4,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
 import org.joml.times
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.control.AutoAim
+import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
