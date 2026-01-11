@@ -1,5 +1,6 @@
 package sigmacorns.io
 
+import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.State
@@ -8,7 +9,16 @@ class RerunLogging private constructor(
     val name: String,
 ): AutoCloseable {
     init {
-        System.loadLibrary("rerun")
+        try {
+            val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("rerun")
+            if (resolvedPath != null) {
+                System.load(resolvedPath)
+            } else {
+                System.loadLibrary("rerun")
+            }
+        } catch (e: UnsatisfiedLinkError) {
+            System.err.println("RerunLogging: failed to load native library 'rerun': ${e.message}")
+        }
     }
 
     private external fun connect(name: String, url: String): Long
@@ -41,6 +51,30 @@ class RerunLogging private constructor(
         translation: FloatArray,
         quaternion: FloatArray,
         scale: FloatArray,
+    )
+    private external fun logPoints2D(
+        connection: Long,
+        name: String,
+        points: FloatArray,
+        color: Int,
+        radius: Double,
+    )
+    private external fun logPoints3D(
+        connection: Long,
+        name: String,
+        points: FloatArray,
+        color: Int,
+        radius: Double,
+    )
+    private external fun logText(
+        connection: Long,
+        name: String,
+        text: String,
+    )
+    private external fun logScalar(
+        connection: Long,
+        name: String,
+        value: Double,
     )
 
     private var ptr: Long = 0
@@ -109,7 +143,39 @@ class RerunLogging private constructor(
 
     fun logScalar(name: String, value: Number) {
         withConnection { handle ->
-            //logDouble(handle,name, value.toDouble())
+            logScalar(handle, name, value.toDouble())
+        }
+    }
+
+    fun logPoints2D(name: String, points: List<Vector2d>, color: Int = 0xFF00FF00.toInt(), radius: Float = 5f) {
+        if (points.isEmpty()) return
+        val payload = FloatArray(points.size * 2) { i ->
+            val pt = points[i / 2]
+            if (i % 2 == 0) pt.x.toFloat() else pt.y.toFloat()
+        }
+        withConnection { handle ->
+            logPoints2D(handle, name, payload, color, radius.toDouble())
+        }
+    }
+
+    fun logPoints3D(name: String, points: List<Vector3d>, color: Int = 0xFFFF8800.toInt(), radius: Float = 0.1f) {
+        if (points.isEmpty()) return
+        val payload = FloatArray(points.size * 3) { i ->
+            val pt = points[i / 3]
+            when (i % 3) {
+                0 -> pt.x.toFloat()
+                1 -> pt.y.toFloat()
+                else -> pt.z.toFloat()
+            }
+        }
+        withConnection { handle ->
+            logPoints3D(handle, name, payload, color, radius.toDouble())
+        }
+    }
+
+    fun logText(name: String, text: String) {
+        withConnection { handle ->
+            logText(handle, name, text)
         }
     }
 

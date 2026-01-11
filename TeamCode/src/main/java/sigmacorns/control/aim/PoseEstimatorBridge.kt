@@ -84,4 +84,10 @@ object PoseEstimatorBridge {
     @JvmStatic external fun nativeGetAllLandmarkCorners(handle: Long): DoubleArray
     @JvmStatic external fun nativeGetLandmarkCorners(handle: Long, tagId: Int): DoubleArray
     @JvmStatic external fun nativeGetCameraUnitVectors(handle: Long): DoubleArray
+    
+    // Visualization
+    @JvmStatic external fun nativeEnableVisualization(handle: Long, enabled: Boolean)
+    @JvmStatic external fun nativeConfigureVisualization(handle: Long, stream: Boolean, urlOrPath: String, appId: String)
+    @JvmStatic external fun nativeFlushVisualization(handle: Long)
+    @JvmStatic external fun nativeGetPredictedCorners(handle: Long, tagId: Int): DoubleArray
 }

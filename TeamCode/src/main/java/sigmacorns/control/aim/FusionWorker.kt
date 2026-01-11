@@ -1,6 +1,7 @@
 package sigmacorns.control.aim
 
 import sigmacorns.math.Pose2d
+import org.joml.Vector2d
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -110,6 +111,24 @@ class FusionWorker(
             )
         )
     }
+    
+    // New method to retrieve predicted corners
+    fun getPredictedCorners(tagId: Int): List<Vector2d> {
+        val handle = gtsamHandle
+        if (handle == 0L) return emptyList()
+        try {
+            val corners = PoseEstimatorBridge.nativeGetPredictedCorners(handle, tagId)
+            if (corners == null || corners.isEmpty()) return emptyList()
+            
+            val result = ArrayList<Vector2d>(corners.size / 2)
+            for (i in 0 until corners.size / 2) {
+                result.add(Vector2d(corners[2*i], corners[2*i+1]))
+            }
+            return result
+        } catch (e: Exception) {
+            return emptyList()
+        }
+    }
 
     fun tick() {
         tickQueue.offer(Tick)
@@ -148,6 +167,7 @@ class FusionWorker(
                         }
                         localHandle = createHandle()
                         gtsamHandle = localHandle
+                        
                         if (localHandle == 0L) {
                             lastError.set("Failed to create GTSAM handle")
                             isInitialized = false

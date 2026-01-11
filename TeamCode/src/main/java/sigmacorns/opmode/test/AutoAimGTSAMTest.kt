@@ -32,16 +32,16 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var turretRotationUncertaintyGain = 1.5
         @JvmField var uncertaintyDecayRate = 0.01
 
-        @JvmField var priorSigmaXY = 1.0
-        @JvmField var priorSigmaTheta = 0.5
+        @JvmField var priorSigmaXY = 5.0
+        @JvmField var priorSigmaTheta = 5.0
         @JvmField var odomSigmaXY = 0.02
         @JvmField var odomSigmaTheta = 0.01
         @JvmField var defaultPixelSigma = 2.0
         @JvmField var relinearizeThreshold = 0.01
         @JvmField var relinearizeSkip = 1
         @JvmField var enablePartialRelinearization = true
-        @JvmField var compactOdometry = true
-        @JvmField var enableRobustTagLoss = false
+        @JvmField var compactOdometry = false
+        @JvmField var enableRobustTagLoss = true
         @JvmField var robustTagLoss = 0
         @JvmField var robustTagLossK = 1.5
         @JvmField var enableTagGating = false
@@ -55,17 +55,17 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var fy = 1223.398 / 2.0
         @JvmField var cx = 637.226 / 2.0
         @JvmField var cy = 502.549 / 2.0
-        @JvmField var k1 = 0.177168
-        @JvmField var k2 = -0.457341
-        @JvmField var k3 = 0.178259
-        @JvmField var p1 = 0.000360
-        @JvmField var p2 = 0.002753
-        @JvmField var cameraOffsetX = 0.18312971
+        @JvmField var k1 = 0.0
+        @JvmField var k2 = 0.0
+        @JvmField var k3 = 0.0
+        @JvmField var p1 = 0.0
+        @JvmField var p2 = 0.0
+        @JvmField var cameraOffsetX = 0.18312971*0.0
         @JvmField var cameraOffsetY = 0.0
         @JvmField var cameraOffsetZ = 0.32448638
-        @JvmField var cameraRoll = Math.toRadians(80.0)
+        @JvmField var cameraRoll = -Math.toRadians(80.0)
         @JvmField var cameraPitch = 0.0
-        @JvmField var cameraYaw = PI / 2.0
+        @JvmField var cameraYaw = -PI / 2.0
     }
 
     private val ticksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2 * PI) * 76 / 19
@@ -141,16 +141,16 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         val landmarks = mapOf(
             20 to AutoAimGTSAM.LandmarkSpec(
                 Vector3d(-1.413321, 1.481870, 0.7493),
-                pitch = -PI/2.0,
-                roll = -PI/2.0,
-                yaw = -Math.toRadians(54.046000),
+                pitch = 0.0,
+                roll = PI / 2.0,
+                yaw = -Math.toRadians(54.046000) + PI,
                 size = 0.165
             ),
             24 to AutoAimGTSAM.LandmarkSpec(
                 Vector3d(1.413321, 1.481870, 0.7493),
-                pitch = -PI/2.0,
-                roll = -PI/2.0,
-                yaw = -Math.toRadians(54.046000),
+                pitch = 0.0,
+                roll = PI / 2.0,
+                yaw = -Math.toRadians(54.046000) + PI,
                 size = 0.165
             ),
             22 to AutoAimGTSAM.LandmarkSpec(
@@ -181,6 +181,7 @@ class AutoAimGTSAMTest : SigmaOpMode() {
             applyRuntimeConfig(autoAim)
             visionTracker.configure(pipeline = AutoAimGTSAMTestConfig.pipeline)
             autoAim.enabled = true
+            autoAim.enableDebugLogging()
 
             telemetry.addLine("AutoAim GTSAM test ready")
             telemetry.update()
@@ -203,6 +204,8 @@ class AutoAimGTSAMTest : SigmaOpMode() {
                     turret.fieldTargetAngle = targetAngle
                 }
                 turret.update(dt)
+
+                io.turret = 0.0
 
                 val fusedPose = autoAim.fusedPose
                 telemetry.addData(

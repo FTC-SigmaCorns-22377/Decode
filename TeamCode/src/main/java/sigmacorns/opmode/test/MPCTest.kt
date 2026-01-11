@@ -7,6 +7,7 @@ import org.joml.Vector2d
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.io.HardwareIO
 import sigmacorns.io.MPCClient
 import sigmacorns.io.RerunLogging
 import sigmacorns.io.SIM_UPDATE_TIME
@@ -32,6 +33,9 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
     override fun runOpMode() {
 
         val traj = Choreo().loadTrajectory<MecanumSample>(trajName).get()
+
+        val ll = (io as HardwareIO).limelight
+        ll?.pipelineSwitch(1)
 
         MPCClient(drivetrainParameters, solverIP(), sampleLookahead = 2).use { mpc ->
             rerunSink("MPCTest($trajName)").use { rr ->

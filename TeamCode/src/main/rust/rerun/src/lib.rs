@@ -5,8 +5,8 @@ use jni::{
 };
 use rerun::{components::RotationQuat, datatypes::{ChannelDatatype, ColorModel, Quaternion as RerunQuaternion}, external::re_grpc_client::write::ClientConnectionState};
 use rerun::{
-    Arrows3D, LineStrip3D, LineStrips3D, Mesh3D, RecordingStream, RecordingStreamBuilder,
-    Rotation3D, Vec3D,
+    Arrows3D, LineStrip3D, LineStrips3D, Mesh3D, Points2D, Points3D, RecordingStream,
+    RecordingStreamBuilder, Rotation3D, Vec2D, Vec3D,
 };
 
 pub fn string_from_jni(env: &mut JNIEnv, v: &JString) -> Result<String, jni::errors::Error> {
@@ -469,5 +469,151 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_logTransform(
 
     if let Err(err) = rec.log(name.as_str(), &transform) {
         eprintln!("rerun logTransform failed for {name}: {err}");
+    }
+}
+
+/// Log 2D points (for pixel-space visualization)
+/// points: flat array of [x1, y1, x2, y2, ...]
+/// color: ARGB packed integer
+/// radius: point radius in pixels
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logPoints2D(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    points: JFloatArray,
+    color: jint,
+    radius: jdouble,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = match string_from_jni(&mut env, &name) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("rerun logPoints2D JNI failed to read name: {err}");
+            return;
+        }
+    };
+
+    let values = match vec_from_java_float_arr(&env, points) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("rerun logPoints2D failed to read points for {name}: {err}");
+            return;
+        }
+    };
+
+    if values.len() % 2 != 0 {
+        eprintln!("rerun logPoints2D expected even number of floats for {name}, got {}", values.len());
+        return;
+    }
+
+    let pts: Vec<Vec2D> = values
+        .chunks(2)
+        .map(|chunk| Vec2D::new(chunk[0], chunk[1]))
+        .collect();
+
+    // Extract ARGB components
+    let a = ((color >> 24) & 0xFF) as u8;
+    let r = ((color >> 16) & 0xFF) as u8;
+    let g = ((color >> 8) & 0xFF) as u8;
+    let b = (color & 0xFF) as u8;
+
+    let points2d = Points2D::new(pts)
+        .with_colors([rerun::Color::from_unmultiplied_rgba(r, g, b, a)])
+        .with_radii([radius as f32]);
+
+    if let Err(err) = rec.log(name.as_str(), &points2d) {
+        eprintln!("rerun logPoints2D failed for {name}: {err}");
+    }
+}
+
+/// Log 3D points (for world-space visualization)
+/// points: flat array of [x1, y1, z1, x2, y2, z2, ...]
+/// color: ARGB packed integer
+/// radius: point radius in world units
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logPoints3D(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    points: JFloatArray,
+    color: jint,
+    radius: jdouble,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = match string_from_jni(&mut env, &name) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("rerun logPoints3D JNI failed to read name: {err}");
+            return;
+        }
+    };
+
+    let values = match vec_from_java_float_arr(&env, points) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("rerun logPoints3D failed to read points for {name}: {err}");
+            return;
+        }
+    };
+
+    if values.len() % 3 != 0 {
+        eprintln!("rerun logPoints3D expected multiple of 3 floats for {name}, got {}", values.len());
+        return;
+    }
+
+    let pts: Vec<Vec3D> = values
+        .chunks(3)
+        .map(|chunk| Vec3D::new(chunk[0], chunk[1], chunk[2]))
+        .collect();
+
+    // Extract ARGB components
+    let a = ((color >> 24) & 0xFF) as u8;
+    let r = ((color >> 16) & 0xFF) as u8;
+    let g = ((color >> 8) & 0xFF) as u8;
+    let b = (color & 0xFF) as u8;
+
+    let points3d = Points3D::new(pts)
+        .with_colors([rerun::Color::from_unmultiplied_rgba(r, g, b, a)])
+        .with_radii([radius as f32]);
+
+    if let Err(err) = rec.log(name.as_str(), &points3d) {
+        eprintln!("rerun logPoints3D failed for {name}: {err}");
+    }
+}
+
+/// Log a text message for debugging
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logText(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    text: JString,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = match string_from_jni(&mut env, &name) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("rerun logText JNI failed to read name: {err}");
+            return;
+        }
+    };
+
+    let text = match string_from_jni(&mut env, &text) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("rerun logText JNI failed to read text: {err}");
+            return;
+        }
+    };
+
+    if let Err(err) = rec.log(name.as_str(), &rerun::TextLog::new(text)) {
+        eprintln!("rerun logText failed for {name}: {err}");
     }
 }

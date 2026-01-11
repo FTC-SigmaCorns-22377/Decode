@@ -72,9 +72,9 @@ class AutoAimGTSAM(
         val cameraOffsetX: Double = 0.0,
         val cameraOffsetY: Double = 0.0,
         val cameraOffsetZ: Double = 0.5,
-        val cameraRoll: Double = 0.0,
+        val cameraRoll: Double = -PI / 2.0,
         val cameraPitch: Double = 0.0,
-        val cameraYaw: Double = 0.0
+        val cameraYaw: Double = -PI / 2.0
     )
 
     // ===== Native Library Loading =====
@@ -87,16 +87,12 @@ class AutoAimGTSAM(
                 "JNI load: classLoader=${javaClass.classLoader} nativeLibraryDir=${appInfo.nativeLibraryDir} " +
                     "sourceDir=${appInfo.sourceDir}"
             )
-            // Use resolveLatestHashedLibrary and call System.load() directly from this class.
-            // This ensures the native library is associated with SlothClassLoader (which loads this class),
-            // allowing JNI method linking to work correctly for hot-reloaded code.
             val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("decode_estimator_jni")
             if (resolvedPath != null) {
                 logger.log(LogLevel.INFO, "Loading native library from: $resolvedPath")
                 System.load(resolvedPath)
                 logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (resolved path)")
             } else {
-                // No hashed library found, fall back to standard loadLibrary
                 logger.log(LogLevel.INFO, "No hashed library found, using System.loadLibrary")
                 System.loadLibrary("decode_estimator_jni")
                 logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (System.loadLibrary)")
@@ -125,6 +121,9 @@ class AutoAimGTSAM(
     private var lastUpdateTimeMs: Long = 0
     private var lastRobotPoseForUncertainty: Pose2d? = null
     private var lastDiagLogMs: Long = 0
+    
+    // ===== Debug Logging =====
+    private var debugLogger: GTSAMDebugLogger? = null
 
     // ===== Public Interface =====
 
@@ -180,6 +179,16 @@ class AutoAimGTSAM(
     var enableDebugLogging: Boolean = true
 
     private var hasLoggedLandmarks: Boolean = false
+    
+    fun enableDebugLogging(recordingId: String = "gtsam_debug",
+                           savePath: String = "/sdcard/FIRST/kotlin_gtsam.rrd") {
+        if (debugLogger == null) {
+            debugLogger = GTSAMDebugLogger(recordingId, savePath).apply { 
+                enable() 
+                logLandmarks(landmarkPositions)
+            }
+        }
+    }
 
     // ===== Main Update Method =====
 
@@ -192,13 +201,14 @@ class AutoAimGTSAM(
             fusionWorker.requestInitialize(robotPose, landmarkPositions)
         }
 
-        // Log landmark corners and camera vectors after initialization
-        if (fusionWorker.isInitialized && !hasLoggedLandmarks) {
-            println("LOGGED CORNERS")
-            //logLandmarkCorners()
-            logCameraUnitVectors()
-            hasLoggedLandmarks = true
+        // Log raw odometry
+        val velocity = if (lastRobotPose != null) {
+            val dPose = robotPose.minus(lastRobotPose!!)
+            Pose2d(dPose.v.div(dt), dPose.rot / dt)
+        } else {
+            Pose2d(0.0, 0.0, 0.0)
         }
+        debugLogger?.logRawOdometry(robotPose, velocity, currentTime / 1000.0)
 
         if (lastRobotPose != null) {
             processOdometryDelta(robotPose)
@@ -209,6 +219,37 @@ class AutoAimGTSAM(
         fusionWorker.tick()
         fusedPoseInternal = fusionWorker.fusedPose
         fusedPose = fusedPoseInternal
+        
+        debugLogger?.logFusedPose(fusedPose)
+        
+        // Log frames
+        debugLogger?.logCoordinateFrames(
+            fusedPose,
+            turretAngle, 
+            Vector3d(estimatorConfig.cameraOffsetX, estimatorConfig.cameraOffsetY, estimatorConfig.cameraOffsetZ),
+            estimatorConfig.cameraRoll, estimatorConfig.cameraPitch, estimatorConfig.cameraYaw
+        )
+        
+        // Log predicted corners for visible tags
+        if (visionResult?.frame?.observations != null) {
+            for (obs in visionResult.frame.observations) {
+                val predicted = fusionWorker.getPredictedCorners(obs.tagId)
+                if (predicted.isNotEmpty()) {
+                    debugLogger?.logPredictedCorners(obs.tagId, predicted)
+
+                    // Calculate reprojection error
+                    var totalError = 0.0
+                    for (i in 0 until 4) {
+                        val px = obs.corners[i * 2]
+                        val py = obs.corners[i * 2 + 1]
+                        val dx = px - predicted[i].x
+                        val dy = py - predicted[i].y
+                        totalError += Math.sqrt(dx * dx + dy * dy)
+                    }
+                    debugLogger?.logReprojectionError(obs.tagId, totalError / 4.0)
+                }
+            }
+        }
 
         updateUncertainty(robotPose, turretAngle, dt)
 
@@ -254,6 +295,8 @@ class AutoAimGTSAM(
 
         fusionWorker.enqueueOdometry(dxLocal, dyLocal, dtheta, timestampSeconds)
         enqueuedOdomCount.incrementAndGet()
+        
+        debugLogger?.logOdometryDelta(dxLocal, dyLocal, dtheta, dxGlobal, dyGlobal, prevPose.rot)
     }
 
     // ===== Vision Processing =====
@@ -296,6 +339,9 @@ class AutoAimGTSAM(
                 turretYawRad = turretAngle
             )
             enqueuedVisionCount.incrementAndGet()
+
+            val corners = observation.corners.toList().chunked(2).map { Vector2d(it[0],it[1]) }
+            debugLogger?.logTagDetection(observation.tagId, corners, turretAngle)
         }
     }
 
@@ -558,5 +604,6 @@ class AutoAimGTSAM(
     override fun close() {
         logger.log(LogLevel.INFO, "Closing AutoAimGTSAM")
         fusionWorker.close()
+        debugLogger?.close()
     }
 }

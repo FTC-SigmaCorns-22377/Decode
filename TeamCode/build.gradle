@@ -68,33 +68,23 @@ cargo {
     cargoCommand = new File(homePath, ".cargo/bin/cargo")
 }
 
-afterEvaluate {
-    def cargoBuildArm = tasks.named("cargoBuildArm64")
-
-    tasks.matching { it.name.startsWith("cargoBuild") }.configureEach {
-        // Skip Gradle's up-to-date checks so cargo always produces a fresh shared object.
-        //outputs.upToDateWhen { false }
-    }
-
-    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
-        dependsOn(cargoBuildArm)
-    }
-    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }.configureEach {
-        dependsOn(cargoBuildArm)
-    }
-    tasks.matching { it.name.startsWith("package") }.configureEach {
-        dependsOn(cargoBuildArm)
-    }
-}
-
 def desktopCopyTargets = [
     "cargoBuildLinux-x86-64"      : ["desktop/linux-x86-64", "librerun.so"],
     "cargoBuildWin32-x86-64-msvc" : ["desktop/win32-x86-64-msvc", "librerun.dll"],
     "cargoBuildDarwin"            : ["desktop/darwin", "librerun.dylib"],
 ]
 
+def androidCopyTargets = [
+    "cargoBuildArm64": ["android/arm64-v8a", "librerun.so"],
+]
+
 tasks.configureEach { task ->
     def copySpec = desktopCopyTargets[task.name]
+    def targetDir = file("${projectDir}/src/test/jniLibs")
+    if (copySpec == null) {
+        copySpec = androidCopyTargets[task.name]
+        targetDir = file("${projectDir}/src/main/jniLibs/arm64-v8a")
+    }
     if (copySpec != null) {
         task.doLast {
             def (String relativeDir, String fileName) = copySpec
@@ -104,7 +94,6 @@ tasks.configureEach { task ->
                 return
             }
 
-            def targetDir = file("${projectDir}/src/test/jniLibs")
             if (!targetDir.exists()) {
                 targetDir.mkdirs()
             }
@@ -113,6 +102,7 @@ tasks.configureEach { task ->
                 from builtLib
                 into targetDir
             }
+            delete(builtLib)
         }
     }
 }
