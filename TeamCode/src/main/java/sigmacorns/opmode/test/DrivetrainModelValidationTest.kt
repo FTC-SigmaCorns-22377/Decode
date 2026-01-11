@@ -6,6 +6,7 @@ import org.firstinspires.ftc.robotcore.internal.opmode.TelemetryImpl
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.io.RerunLogging
+import sigmacorns.control.DriveController
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MECANUM_DT
@@ -23,6 +24,7 @@ import kotlin.time.DurationUnit
 @TeleOp(name = "Drivetrain Model Validation", group = "test")
 class DrivetrainModelValidationTest : SigmaOpMode() {
     private val dynamics = MecanumDynamics(drivetrainParameters)
+    private val driveController = DriveController()
 
     override fun runOpMode() {
         telemetry.addLine("Drivetrain model validation ready")
@@ -77,23 +79,7 @@ class DrivetrainModelValidationTest : SigmaOpMode() {
 
                 val boundedCommand = clampPose(normalizedCommand, 0.75)
 
-                val desiredVelocity = maxSpeed.componentMul(boundedCommand)
-                val wheelVelocities = dynamics.mecanumInverseVelKinematics(desiredVelocity)
-                val wheelPowers = DoubleArray(4) { index ->
-                    val velocity = wheelVelocities[index]
-                    velocity / dynamics.p.motor.freeSpeed
-                }
-                val maxAbs = wheelPowers.maxOf { abs(it) }.coerceAtLeast(1.0)
-                for (i in wheelPowers.indices) {
-                    wheelPowers[i] /= maxAbs
-                }
-
-                io.driveFL = wheelPowers[0]
-                io.driveBL = wheelPowers[1]
-                io.driveBR = wheelPowers[2]
-                io.driveFR = wheelPowers[3]
-
-                lastCommand = wheelPowers.copyOf()
+                lastCommand = driveController.drive(boundedCommand, io)
 
                 val poseError = state.driveTrainPosition - modelState.pos
                 val positionErrorNorm = hypot(poseError.v.x, poseError.v.y)

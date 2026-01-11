@@ -7,11 +7,11 @@ import sigmacorns.constants.drivetrainParameters
 import sigmacorns.io.RerunLogging
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.sim.MecanumDynamics
+import sigmacorns.control.DriveController
 
 @TeleOp(group = "test")
 class OdometryTest : SigmaOpMode() {
-    private val mecanumDynamics = MecanumDynamics(drivetrainParameters)
+    private val driveController = DriveController()
 
     override fun runOpMode() {
         io.configurePinpoint()
@@ -36,20 +36,7 @@ class OdometryTest : SigmaOpMode() {
                 wasResetPressed = resetPressed
 
                 val robotPower = Pose2d(-gamepad1.left_stick_y.toDouble(), -gamepad1.left_stick_x.toDouble(), -gamepad1.right_stick_x.toDouble())
-                val maxSpeed = mecanumDynamics.maxSpeed()
-                val robotVelocities = maxSpeed.componentMul(robotPower)
-                val wheelVelocities = mecanumDynamics.mecanumInverseVelKinematics(robotVelocities)
-                var wheelPowers = wheelVelocities * (1.0 / mecanumDynamics.p.motor.freeSpeed)
-                val maxComponents = wheelPowers[wheelPowers.maxComponent()]
-
-                if (maxComponents > 1.0) {
-                    wheelPowers *= (1.0 / maxComponents)
-                }
-
-                io.driveFL = wheelPowers[0]
-                io.driveBL = wheelPowers[1]
-                io.driveBR = wheelPowers[2]
-                io.driveFR = wheelPowers[3]
+                driveController.drive(robotPower, io)
 
                 telemetry.addData(
                     "pose (m, m, rad)",

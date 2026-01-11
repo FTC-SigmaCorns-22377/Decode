@@ -1,18 +1,12 @@
 package sigmacorns.opmode.test
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import org.joml.times
-import sigmacorns.constants.drivetrainParameters
-import sigmacorns.globalFieldState
-import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.sim.MecanumDynamics
 import sigmacorns.control.SpindexerLogic
-import sigmacorns.sim.Balls
 import kotlin.time.Duration.Companion.seconds
 
 @TeleOp
-class spindexerTestAndTune(): SigmaOpMode() {
+class SpindexerTestAndTune(): SigmaOpMode() {
 
     @Throws(InterruptedException::class)
     override fun runOpMode() {

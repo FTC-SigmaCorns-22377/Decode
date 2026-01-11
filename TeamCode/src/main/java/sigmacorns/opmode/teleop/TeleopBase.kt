@@ -13,7 +13,7 @@ import sigmacorns.globalFieldState
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.sim.MecanumDynamics
+import sigmacorns.control.DriveController
 import kotlin.math.PI
 import kotlin.math.absoluteValue
 import kotlin.time.Duration
@@ -31,7 +31,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
     private lateinit var spindexerLogic: SpindexerLogic
     private lateinit var turret: Turret
     private lateinit var autoAim: AutoAim
-    private val mecanumDynamics = MecanumDynamics(drivetrainParameters)
+    private val driveController = DriveController()
 
     val ticksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2*PI) * 76 / 19
 
@@ -42,7 +42,6 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
     )
 
     // State
-    private var speedMultiplier = 1.0
     private var targetDistance = 3.0  // default 3m for flywheel speed
     private var dVoltage = 1.0        // voltage compensation factor
     private var lockedShotPower: Double? = null
@@ -107,34 +106,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
     }
 
     private fun processDrivetrain(dt: Duration) {
-        // Speed mode toggle
-        if (gm1.dpad_up) {
-            speedMultiplier = 1.0  // Full speed
-        } else if (gm1.dpad_down) {
-            speedMultiplier = 0.5  // Precision mode
-        }
-
-        // Mecanum drive calculation
-        val robotPower = Pose2d(
-            -gm1.left_stick_y.toDouble() * speedMultiplier,
-            -gm1.left_stick_x.toDouble() * speedMultiplier,
-            -gm1.right_stick_x.toDouble() * speedMultiplier
-        )
-
-        val maxSpeed = mecanumDynamics.maxSpeed()
-        val robotVelocities = maxSpeed.componentMul(robotPower)
-        val wheelVelocities = mecanumDynamics.mecanumInverseVelKinematics(robotVelocities)
-        var wheelPowers = wheelVelocities * (1.0 / mecanumDynamics.p.motor.freeSpeed)
-
-        val maxComponent = wheelPowers[wheelPowers.maxComponent()]
-        if (maxComponent > 1.0) {
-            wheelPowers *= (1.0 / maxComponent)
-        }
-
-        io.driveFL = wheelPowers[0]
-        io.driveBL = wheelPowers[1]
-        io.driveBR = wheelPowers[2]
-        io.driveFR = wheelPowers[3]
+        driveController.update(gm1, io)
     }
 
     private fun processTurret(dt: Duration) {
@@ -296,7 +268,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         // Count balls in spindexer
         val ballCount = spindexerLogic.spindexerState.count { it != null }
         telemetry.addData("Balls", "$ballCount/3")
-        telemetry.addData("Speed", if (speedMultiplier == 1.0) "FULL" else "PRECISION")
+        telemetry.addData("Speed", if (driveController.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
 
         telemetry.addLine("")
 
