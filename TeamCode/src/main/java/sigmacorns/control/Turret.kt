@@ -53,6 +53,10 @@ class Turret(
     var goalTargetAngle: Double = 0.0
         private set
 
+    private var lastSaturatedTarget: Double? = null
+    private var lastSaturatedError: Double? = null
+    private val saturationHysteresis = 0.05  // rad - only switch if error improves by this much
+
     private fun normalizeAngle(angle: Double): Double {
         var normalized = angle
         while (normalized > kotlin.math.PI) normalized -= 2 * kotlin.math.PI
@@ -81,7 +85,7 @@ class Turret(
         val targetToUse = if (validCandidates.isNotEmpty()) {
             validCandidates.minByOrNull { kotlin.math.abs(it - currentAngle) }!!
         } else {
-            // Saturated
+            // Saturated - use hysteresis to prevent rapid switching
             val start = range.limits.start
             val end = range.limits.endInclusive
 
@@ -89,10 +93,26 @@ class Turret(
             val lookaheadTime = 0.5 // seconds
             val projectedTarget = normalizeAngle(rawTarget - robotAngularVelocity * lookaheadTime)
 
-            val distStart = kotlin.math.abs(normalizeAngle(projectedTarget - start))
-            val distEnd = kotlin.math.abs(normalizeAngle(projectedTarget - end))
+            val distStart = (normalizeAngle(projectedTarget - start)).absoluteValue
+            val distEnd = (normalizeAngle(projectedTarget - end)).absoluteValue
 
-            if (distStart < distEnd) start else end
+            val preferredTarget = if (distStart < distEnd) start else end
+            val preferredError = min(distStart, distEnd)
+
+            if (lastSaturatedTarget == null) {
+                // Initialize on first saturation
+                lastSaturatedTarget = preferredTarget
+                lastSaturatedError = preferredError
+                preferredTarget
+            } else if (preferredError < lastSaturatedError!! - saturationHysteresis) {
+                // Only switch if error improves by more than hysteresis threshold
+                lastSaturatedTarget = preferredTarget
+                lastSaturatedError = preferredError
+                preferredTarget
+            } else {
+                // Stay with current target to avoid oscillation
+                lastSaturatedTarget!!
+            }
         }
 
         val limitTarget = targetToUse.coerceIn(range.limits)
