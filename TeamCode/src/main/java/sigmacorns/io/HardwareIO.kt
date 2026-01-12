@@ -1,27 +1,30 @@
 package sigmacorns.io
 
+import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
 import com.qualcomm.hardware.limelightvision.Limelight3A
+import com.qualcomm.hardware.lynx.LynxModule
+import com.qualcomm.robotcore.hardware.CRServo
+import com.qualcomm.robotcore.hardware.ColorRangeSensor
 import com.qualcomm.robotcore.hardware.DcMotor
+import com.qualcomm.robotcore.hardware.DcMotorEx
+import com.qualcomm.robotcore.hardware.DcMotorSimple
+import com.qualcomm.robotcore.hardware.DistanceSensor
+import com.qualcomm.robotcore.hardware.HardwareMap
 import com.qualcomm.robotcore.hardware.IMU
 import com.qualcomm.robotcore.hardware.Servo
-import com.qualcomm.robotcore.hardware.ColorRangeSensor
-import com.qualcomm.robotcore.hardware.DistanceSensor
-import com.qualcomm.robotcore.hardware.DcMotorSimple
-import com.qualcomm.robotcore.hardware.HardwareMap
-import sigmacorns.math.Pose2d
-import kotlin.time.ComparableTimeMark
-import kotlin.time.Duration
-import kotlin.time.TimeSource
-import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
-import com.qualcomm.robotcore.hardware.CRServo
-import com.qualcomm.robotcore.hardware.DcMotorEx
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.joml.Vector2d
+import sigmacorns.math.Pose2d
+import sigmacorns.sim.Balls
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.time.ComparableTimeMark
+import kotlin.time.Duration
+import kotlin.time.TimeSource
+
 
 typealias FTCPose2d = org.firstinspires.ftc.robotcore.external.navigation.Pose2D
 
@@ -56,6 +59,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
 
+    private val allHubs: MutableList<LynxModule> = hardwareMap.getAll(LynxModule::class.java)
+
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
     override var driveFR: Double = 0.0
@@ -69,6 +74,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var transfer: Double = 0.0
 
     private var savedVoltage: Double = 12.0
+
+    // Cached motor values
+    private var cachedFlywheelVelocity: Double = 0.0
+    private var cachedTurretPosition: Double = 0.0
+    private var cachedSpindexerPosition: Double = 0.0
 
     private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
             getX(DistanceUnit.METER),
@@ -102,16 +112,15 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun flywheelVelocity(): Double {
-        // seems to be in ticks/s for some reason...
-        return (flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
+        return cachedFlywheelVelocity
     }
 
     override fun turretPosition(): Double {
-        return turretMotor?.currentPosition?.toDouble() ?: 0.0
+        return cachedTurretPosition
     }
 
     override fun spindexerPosition(): Double {
-        return spindexerMotor?.currentPosition?.toDouble() ?: 0.0
+        return cachedSpindexerPosition
     }
 
     override fun distance(): Double {
@@ -147,6 +156,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
+
+        // Cache motor positions and velocities
+
+        allHubs.map { it.clearBulkCache() }
+        cachedFlywheelVelocity = (flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
+        cachedTurretPosition = turretMotor?.currentPosition?.toDouble() ?: 0.0
+        cachedSpindexerPosition = spindexerMotor?.currentPosition?.toDouble() ?: 0.0
     }
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
@@ -177,6 +193,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun voltage(): Double = savedVoltage
+    override fun colorSensorDetectsBall(): Boolean {
+        return false
+    }
+
+    override fun colorSensorGetBallColor(): Balls? {
+        return null
+    }
 
     fun configureLimelight() {
         limelight?.pipelineSwitch(0);
@@ -194,6 +217,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flywheelMotor?.direction = DcMotorSimple.Direction.FORWARD
         turretMotor?.direction = DcMotorSimple.Direction.FORWARD
         intakeMotor?.direction = DcMotorSimple.Direction.FORWARD
+        spindexerMotor?.direction = DcMotorSimple.Direction.REVERSE
 
         //declaring driveMode's for drive motors( which will be run without encoder for now)
         val driveMode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
@@ -219,6 +243,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         // configuring pinpoint
         configurePinpoint()
+
+        for (hub in allHubs) {
+            hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL)
+        }
     }
 
 }

@@ -1,6 +1,7 @@
 package sigmacorns.io
 
 import sigmacorns.math.Pose2d
+import sigmacorns.sim.Balls
 import kotlin.time.Duration
 
 interface SigmaIO {
@@ -49,4 +50,8 @@ interface SigmaIO {
     fun configurePinpoint()
 
     fun voltage(): Double
+
+    // Color sensor for Decode-14b: Automatic ball detection
+    fun colorSensorDetectsBall(): Boolean
+    fun colorSensorGetBallColor(): Balls?
 }

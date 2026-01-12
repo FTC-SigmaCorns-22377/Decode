@@ -2,6 +2,7 @@ package sigmacorns.io
 
 import org.joml.Vector3d
 import sigmacorns.math.Pose2d
+import sigmacorns.sim.Balls
 //import sigmacorns.sim.ProjectileSnapshot
 import sigmacorns.sim.RobotModel
 import sigmacorns.sim.SpindexerState
@@ -66,6 +67,14 @@ class SimIO : SigmaIO {
 
     override fun voltage(): Double {
         return 12.0
+    }
+
+    override fun colorSensorDetectsBall(): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun colorSensorGetBallColor(): Balls? {
+        TODO("Not yet implemented")
     }
 
 

@@ -6,7 +6,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
-import sigmacorns.opmode.tune.SpindexerPIDConfig
 import sigmacorns.opmode.tune.ShooterFlywheelPIDConfig
 import kotlin.math.sign
 import kotlin.time.Duration
@@ -63,6 +62,7 @@ class SpindexerLogic(val io: SigmaIO) {
     //extra variables
     private var offsetActive: Boolean = false
     private var transferNeedsReset: Boolean = true  // Track if transfer needs to be reset
+    private var nudgeDirection: Double = 1.0  // Track the direction of the last nudge (1.0 for forward/CW, -1.0 for backward/CCW)
 
     /** Current calculated target velocity for flywheel */
     var targetFlywheelVelocity: Double = 0.0
@@ -97,7 +97,12 @@ class SpindexerLogic(val io: SigmaIO) {
     ).apply {
         // Event: start intaking (user input)
         onEvent(Event.START_INTAKING) {
-            if (curState == State.IDLE) {
+            if (curState == State.IDLE || curState == State.FULL) {
+                curState = State.INTAKING
+            }
+
+            if(curState == State.SHOOTING) {
+                if(transferNeedsReset) resetTransfer()
                 curState = State.INTAKING
             }
         }
@@ -113,6 +118,11 @@ class SpindexerLogic(val io: SigmaIO) {
         onEvent(Event.SHOOT) {
             when (curState) {
                 State.IDLE, State.FULL -> {
+                    curState = State.SHOOTING
+                }
+                State.INTAKING, State.MOVING -> {
+                    // Cancel intaking when user requests shooting
+                    io.intake = 0.0
                     curState = State.SHOOTING
                 }
                 else -> {}
@@ -193,6 +203,12 @@ class SpindexerLogic(val io: SigmaIO) {
 
         // Check for ball detection (polling)
         while (spindexerState[0] == null) {
+            // Poll color sensor for automatic ball detection
+            val ballDetected = io.colorSensorDetectsBall()
+            if (ballDetected) {
+                spindexerState[0] = io.colorSensorGetBallColor() ?: Balls.Green
+                break
+            }
             delay(10)
         }
 
@@ -203,16 +219,23 @@ class SpindexerLogic(val io: SigmaIO) {
     private fun movingBehavior(): suspend () -> State = suspend {
         // Stop intake while moving
         io.intake = 0.0
-        println("Entering Move State")
 
-        // Rotate spindexer to next position
-        spindexerRotation += ROTATE_ANGLE
+        // Rotate spindexer to next position based on nudge direction
+        val rotationAngle = nudgeDirection * ROTATE_ANGLE
+        spindexerRotation += rotationAngle
 
-        // Shift balls in spindexer
-        val temp = spindexerState[2]
-        spindexerState[2] = spindexerState[1]
-        spindexerState[1] = spindexerState[0]
-        spindexerState[0] = temp
+        // Shift balls in spindexer based on rotation direction
+        if (nudgeDirection > 0) {
+            val temp = spindexerState[2]
+            spindexerState[2] = spindexerState[1]
+            spindexerState[1] = spindexerState[0]
+            spindexerState[0] = temp
+        } else {
+            val temp = spindexerState[0]
+            spindexerState[0] = spindexerState[1]
+            spindexerState[1] = spindexerState[2]
+            spindexerState[2] = temp
+        }
 
         // Wait for spindexer to reach target position
         val startTime = io.time()
@@ -285,9 +308,8 @@ class SpindexerLogic(val io: SigmaIO) {
         }
 
         // Activate transfer to shoot ball (continuous servo - runs for set duration)
-        activateTransfer()
-
         transferNeedsReset = true
+        activateTransfer()
 
         // Mark current ball as shot
         spindexerState[0] = null
@@ -347,24 +369,14 @@ class SpindexerLogic(val io: SigmaIO) {
     fun shoot() = fsm.sendEvent(Event.SHOOT)
     fun rotate() = fsm.sendEvent(Event.BALL_DETECTED)
 
-    /** Manually rotate the spindexer by a specific angle (radians) */
-    fun nudge(angle: Double) {
-        if (currentState == State.INTAKING) {
-            spindexerState[0] = Balls.Purple
+    fun nudge(ccw: Boolean) {
+        if (currentState == State.INTAKING || currentState == State.IDLE || currentState == State.FULL) {
+//            spindexerState[0] = Balls.Purple
+            nudgeDirection = if(ccw) 1.0 else -1.0
 
-            if(angle.sign > 0) {
-                val temp = spindexerState[2]
-                spindexerState[2] = spindexerState[1]
-                spindexerState[1] = spindexerState[0]
-                spindexerState[0] = temp
-            } else {
-                val temp = spindexerState[0]
-                spindexerState[0] = spindexerState[1]
-                spindexerState[1] = spindexerState[2]
-                spindexerState[2] = temp
-            }
+            // Transition to MOVING state to execute the nudge with directionality
+            fsm.curState = State.MOVING
         }
-        spindexerRotation += angle
     }
 
     // Current state accessor
@@ -374,9 +386,8 @@ class SpindexerLogic(val io: SigmaIO) {
         fsm.update()
 
         // Update spindexer control
-        val count = spindexerState.count { it != null }
         spindexer.target = spindexerRotation
-        spindexer.update(deltaT, count)
+        spindexer.update(deltaT)
 
         // Update Flywheel PID if in shooting state
         if (fsm.curState == State.SHOOTING || fsm.curState == State.MOVING_SHOOT) {

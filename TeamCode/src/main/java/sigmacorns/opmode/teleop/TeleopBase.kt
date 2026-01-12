@@ -1,18 +1,15 @@
 package sigmacorns.opmode.teleop
 
-import com.bylazar.configurables.annotations.Configurable
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
 import org.joml.Quaterniond
 import org.joml.Vector2d
 import org.joml.Vector3d
-import sigmacorns.State
 import sigmacorns.control.DriveController
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
 import sigmacorns.control.Turret
-import sigmacorns.control.aim.AimConfig
 import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.aim.VisionTracker
 import sigmacorns.globalFieldState
@@ -25,6 +22,8 @@ import kotlin.math.PI
 import kotlin.math.absoluteValue
 import kotlin.math.hypot
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.DurationUnit
 
 @TeleOp(name = "TeleopBlue", group = "Competition")
 class TeleopBlue: TeleopBase(true)
@@ -63,6 +62,14 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
     private var wasFieldRelativeToggle = false
     private var wasLeftBumper = false
     private var wasRightBumper = false
+
+    // Profiling
+    private var profileVisionTime = 0L
+    private var profileDrivetrainTime = 0L
+    private var profileTurretTime = 0L
+    private var profileIntakeTime = 0L
+    private var profileTelemetryTime = 0L
+    private var profileTotalLoopTime = 0L
 
     private lateinit var gm1: Gamepad
     private lateinit var gm2: Gamepad
@@ -144,21 +151,38 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         try {
             waitForStart()
 
+            var loopStartTime = System.nanoTime()
             ioLoop { state, dt ->
+
                 // Update voltage compensation
                 dVoltage = 12.0 / io.voltage()
-                
+
                 applyRuntimeConfig(autoAim)
 
-                // Update auto-aim system
+                // Update auto-aim system with profiling
+                val visionStartTime = System.nanoTime()
                 val visionResult = visionTracker.read()
                 autoAim.update(io.position(), turret.pos, visionResult)
+                profileVisionTime = (System.nanoTime() - visionStartTime) / 1_000_000  // convert to ms
 
-                // Process all controls
+                // Process all controls with profiling
+                val driveStartTime = System.nanoTime()
                 processDrivetrain(dt)
+                profileDrivetrainTime = (System.nanoTime() - driveStartTime) / 1_000_000
+
+                val turretStartTime = System.nanoTime()
                 processTurret(dt)
+                profileTurretTime = (System.nanoTime() - turretStartTime) / 1_000_000
+
+                val intakeStartTime = System.nanoTime()
                 processIntakeAndShooting(dt)
+                profileIntakeTime = (System.nanoTime() - intakeStartTime) / 1_000_000
+
+                val telemetryStartTime = System.nanoTime()
                 updateTelemetry(state)
+                profileTelemetryTime = (System.nanoTime() - telemetryStartTime) / 1_000_000
+
+                profileTotalLoopTime = (System.nanoTime() - loopStartTime) / 1_000_000
 
                 // Emergency stop
                 if (gm1.a) {
@@ -172,6 +196,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
                     io.spindexer = 0.0
                 }
 
+                loopStartTime = System.nanoTime()
                 false // continue loop
             }
         } finally {
@@ -214,7 +239,11 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         }
 
         // Turret yaw control
-        if (autoAim.enabled && autoAim.hasTarget && !gm2.left_stick_button) {
+        // Check for manual control input
+        val yawInput = -gm2.left_stick_x.toDouble()
+        val isManualControl = yawInput.absoluteValue > 0.1 || gm2.left_stick_button
+
+        if (autoAim.enabled && autoAim.hasTarget && !isManualControl) {
             // Auto-aim mode: use sensor fusion for target tracking
             if (turret.fieldRelativeMode) {
                 // Use field-relative target angle from sensor fusion
@@ -229,16 +258,13 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
             }
             // Limit target distance for flywheel calculations
             targetDistance = targetDistance.coerceIn(0.1, 10.0)
-        } else {
-            // Manual turret yaw control (operator left stick Y)
-            val yawInput = -gm2.left_stick_x.toDouble()
-            if (yawInput.absoluteValue > 0.1) {
-                if (turret.fieldRelativeMode) {
-                    // In field-relative mode, adjust field target angle
-                    turret.fieldTargetAngle += yawInput * 0.03  // radians per loop
-                } else {
-                    turret.targetAngle += yawInput * 0.03  // radians per loop
-                }
+        } else if (isManualControl) {
+            // Manual turret yaw control (operator left stick X)
+            if (turret.fieldRelativeMode) {
+                // In field-relative mode, adjust field target angle
+                turret.fieldTargetAngle += yawInput * Math.toRadians(60.0) * dt.toDouble(DurationUnit.SECONDS)
+            } else {
+                turret.targetAngle += yawInput * Math.toRadians(60.0) * dt.toDouble(DurationUnit.SECONDS)
             }
         }
 
@@ -304,12 +330,12 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
 
         // Spindexer Nudge Controls (Driver Bumpers)
         if (gm1.left_bumper && !wasLeftBumper) {
-            spindexerLogic.nudge(-2 * PI / 3) // 120 deg Left
+            spindexerLogic.nudge(true)
         }
         wasLeftBumper = gm1.left_bumper
 
         if (gm1.right_bumper && !wasRightBumper) {
-            spindexerLogic.nudge(2 * PI / 3) // 120 deg Right
+            spindexerLogic.nudge(false)
         }
         wasRightBumper = gm1.right_bumper
 
@@ -339,6 +365,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         spindexerLogic.update(io.spindexerPosition(), dt, dVoltage)
     }
 
+    private var lastTimestep = 0.milliseconds
     private fun updateTelemetry(state: sigmacorns.State) {
         // Driver telemetry (essential info)
         telemetry.addLine("=== DRIVER ===")
@@ -348,6 +375,10 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         val ballCount = spindexerLogic.spindexerState.count { it != null }
         telemetry.addData("Balls", "$ballCount/3")
         telemetry.addData("Speed", if (driveController.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
+
+        val looptime = state.timestamp-lastTimestep
+        lastTimestep = state.timestamp
+        telemetry.addData("Looptime", "%.1f ms", looptime.inWholeMilliseconds.toDouble())
 
         telemetry.addLine("")
 
@@ -374,6 +405,20 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         telemetry.addData("Manual Override", if (manualOverridePower != null) "YES" else "NO")
         
         telemetry.addData("Flywheel", "%.0f%%", io.shooter * 100)
+
+        telemetry.addLine("")
+
+        // Profiling section
+        telemetry.addLine("=== LOOP PROFILING ===")
+        telemetry.addData("Total Loop", "%d ms", profileTotalLoopTime)
+        telemetry.addData("Vision+AutoAim", "%d ms", profileVisionTime)
+        telemetry.addData("Drivetrain", "%d ms", profileDrivetrainTime)
+        telemetry.addData("Turret", "%d ms", profileTurretTime)
+        telemetry.addData("Intake/Shoot", "%d ms", profileIntakeTime)
+        telemetry.addData("Telemetry", "%d ms", profileTelemetryTime)
+        val profilerSum = profileVisionTime + profileDrivetrainTime + profileTurretTime + profileIntakeTime + profileTelemetryTime
+        telemetry.addData("Sum Measured", "%d ms", profilerSum)
+        telemetry.addData("IO+Other", "%d ms", profileTotalLoopTime - profilerSum)
 
         telemetry.addLine("")
 
