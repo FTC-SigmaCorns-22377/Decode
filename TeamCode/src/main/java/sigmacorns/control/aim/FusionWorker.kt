@@ -328,7 +328,15 @@ class FusionWorker(
             config.cameraOffsetZ,
             config.cameraRoll,
             config.cameraPitch,
-            config.cameraYaw
+            config.cameraYaw,
+            config.enableViewingGeometryInflation,
+            config.viewingHistoryWindowS,
+            config.maxViewingHistoryPerTag,
+            config.similarityDistanceWeight,
+            config.similarityAngleWeight,
+            config.similarityOrientationWeight,
+            config.maxNoiseInflationFactor,
+            config.similarityThresholdForInflation
         )
     }
 

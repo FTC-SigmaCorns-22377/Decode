@@ -39,7 +39,15 @@ object PoseEstimatorBridge {
         cameraOffsetZ: Double,
         cameraRoll: Double,
         cameraPitch: Double,
-        cameraYaw: Double
+        cameraYaw: Double,
+        enableViewingGeometryInflation: Boolean,
+        viewingHistoryWindowS: Double,
+        maxViewingHistoryPerTag: Int,
+        similarityDistanceWeight: Double,
+        similarityAngleWeight: Double,
+        similarityOrientationWeight: Double,
+        maxNoiseInflationFactor: Double,
+        similarityThresholdForInflation: Double
     ): Long
 
     @JvmStatic external fun nativeDestroy(handle: Long)

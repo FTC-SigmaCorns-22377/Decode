@@ -53,6 +53,13 @@ class Turret(
     var goalTargetAngle: Double = 0.0
         private set
 
+    private fun normalizeAngle(angle: Double): Double {
+        var normalized = angle
+        while (normalized > kotlin.math.PI) normalized -= 2 * kotlin.math.PI
+        while (normalized < -kotlin.math.PI) normalized += 2 * kotlin.math.PI
+        return normalized
+    }
+
     fun update(dt: Duration) {
         val currentAngle = range.tickToPos(io.turretPosition())
         pos = currentAngle
@@ -60,13 +67,35 @@ class Turret(
         // Determine the raw target angle (field-relative or robot-relative)
         val rawTarget = if (fieldRelativeMode) {
             // Convert field-relative to robot-relative
-            fieldTargetAngle - robotHeading
+            normalizeAngle(fieldTargetAngle - robotHeading)
         } else {
-            targetAngle
+            normalizeAngle(targetAngle)
         }
 
         goalTargetAngle = rawTarget
-        val limitTarget = rawTarget.coerceIn(range.limits)
+
+        // Check aliases
+        val candidates = listOf(rawTarget, rawTarget - 2 * kotlin.math.PI, rawTarget + 2 * kotlin.math.PI)
+        val validCandidates = candidates.filter { it in range.limits }
+
+        val targetToUse = if (validCandidates.isNotEmpty()) {
+            validCandidates.minByOrNull { kotlin.math.abs(it - currentAngle) }!!
+        } else {
+            // Saturated
+            val start = range.limits.start
+            val end = range.limits.endInclusive
+
+            // Lookahead based on robot angular velocity
+            val lookaheadTime = 0.5 // seconds
+            val projectedTarget = normalizeAngle(rawTarget - robotAngularVelocity * lookaheadTime)
+
+            val distStart = kotlin.math.abs(normalizeAngle(projectedTarget - start))
+            val distEnd = kotlin.math.abs(normalizeAngle(projectedTarget - end))
+
+            if (distStart < distEnd) start else end
+        }
+
+        val limitTarget = targetToUse.coerceIn(range.limits)
 
         // Apply slew rate limiting to the target if enabled
         val slewLimitedTarget = if (slewRateLimitingEnabled) {

@@ -77,7 +77,15 @@ class AutoAimGTSAM(
         val cameraOffsetZ: Double = 0.5,
         val cameraRoll: Double = -PI / 2.0,
         val cameraPitch: Double = 0.0,
-        val cameraYaw: Double = -PI / 2.0
+        val cameraYaw: Double = -PI / 2.0,
+        val enableViewingGeometryInflation: Boolean = false,
+        val viewingHistoryWindowS: Double = 2.0,
+        val maxViewingHistoryPerTag: Int = 20,
+        val similarityDistanceWeight: Double = 0.3,
+        val similarityAngleWeight: Double = 0.4,
+        val similarityOrientationWeight: Double = 0.3,
+        val maxNoiseInflationFactor: Double = 10.0,
+        val similarityThresholdForInflation: Double = 0.7
     )
 
     // ===== Native Library Loading =====
@@ -392,14 +400,14 @@ class AutoAimGTSAM(
         if (!enabled || !hasTarget) {
             return null
         }
-        return turretTargeting.computeAngles(fusedPose).robotAngle
+        return normalizeAngle(turretTargeting.computeAngles(fusedPose).robotAngle)
     }
 
     fun getTargetFieldAngle(): Double? {
         if (!enabled || !hasTarget) {
             return null
         }
-        return turretTargeting.computeAngles(fusedPose).fieldAngle
+        return normalizeAngle(turretTargeting.computeAngles(fusedPose).fieldAngle)
     }
 
     fun resetTarget(newPose: Pose2d? = null) {

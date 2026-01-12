@@ -7,6 +7,7 @@ import org.joml.Quaterniond
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.constants.FieldZones
+import sigmacorns.control.DriveController
 import sigmacorns.control.aim.AimConfig
 import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.MotorRangeMapper
@@ -28,7 +29,7 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var txDeadband = 0.01
         @JvmField var maxAcceptableUncertainty = Double.MAX_VALUE
         @JvmField var predictionTimeoutMs = 2000L
-        @JvmField var visionPixelSigma = 1.0
+        @JvmField var visionPixelSigma = 3.0
         @JvmField var maxPoseDivergence = 2.0
         @JvmField var turretRotationUncertaintyGain = 1.5
         @JvmField var uncertaintyDecayRate = 0.01
@@ -41,7 +42,7 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var relinearizeThreshold = 0.01
         @JvmField var relinearizeSkip = 1
         @JvmField var enablePartialRelinearization = true
-        @JvmField var compactOdometry = false
+        @JvmField var compactOdometry = true
         @JvmField var enableRobustTagLoss = true
         @JvmField var robustTagLoss = 0
         @JvmField var robustTagLossK = 1.5
@@ -55,10 +56,10 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var postProcessVisionGapS = 0.4
         @JvmField var postProcessSettleS = 1.0
         @JvmField var postProcessSettleUpdates = 3
-        @JvmField var fx = 1221.445 / 2.0
-        @JvmField var fy = 1223.398 / 2.0
-        @JvmField var cx = 637.226 / 2.0
-        @JvmField var cy = 502.549 / 2.0
+        @JvmField var fx = 1221.445
+        @JvmField var fy = 1223.398
+        @JvmField var cx = 637.226
+        @JvmField var cy = 502.549
         @JvmField var k1 = 0.177168
         @JvmField var k2 = -0.457341
         @JvmField var k3 = 0.178259
@@ -70,6 +71,15 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var cameraRoll = -Math.toRadians(80.0)
         @JvmField var cameraPitch = 0.0
         @JvmField var cameraYaw = -PI / 2.0
+
+        @JvmField var enableViewingGeometryInflation = false
+        @JvmField var viewingHistoryWindowS = 2.0
+        @JvmField var maxViewingHistoryPerTag = 20
+        @JvmField var similarityDistanceWeight = 0.3
+        @JvmField var similarityAngleWeight = 0.4
+        @JvmField var similarityOrientationWeight = 0.3
+        @JvmField var maxNoiseInflationFactor = 10.0
+        @JvmField var similarityThresholdForInflation = 0.7
     }
 
     private val ticksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2 * PI) * 76 / 19
@@ -79,64 +89,77 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         slowdownDist = 0.3
     )
 
-    private fun buildEstimatorConfig(): AutoAimGTSAM.EstimatorConfig {
-        return AutoAimGTSAM.EstimatorConfig(
-            priorSigmaXY = AutoAimGTSAMTestConfig.priorSigmaXY,
-            priorSigmaTheta = AutoAimGTSAMTestConfig.priorSigmaTheta,
-            odomSigmaXY = AutoAimGTSAMTestConfig.odomSigmaXY,
-            odomSigmaTheta = AutoAimGTSAMTestConfig.odomSigmaTheta,
-            defaultPixelSigma = AutoAimGTSAMTestConfig.defaultPixelSigma,
-            relinearizeThreshold = AutoAimGTSAMTestConfig.relinearizeThreshold,
-            relinearizeSkip = AutoAimGTSAMTestConfig.relinearizeSkip,
-            enablePartialRelinearization = AutoAimGTSAMTestConfig.enablePartialRelinearization,
-            compactOdometry = AutoAimGTSAMTestConfig.compactOdometry,
-            enableRobustTagLoss = AutoAimGTSAMTestConfig.enableRobustTagLoss,
-            robustTagLoss = AutoAimGTSAMTestConfig.robustTagLoss,
-            robustTagLossK = AutoAimGTSAMTestConfig.robustTagLossK,
-            enableTagGating = AutoAimGTSAMTestConfig.enableTagGating,
-            minTagAreaPx = AutoAimGTSAMTestConfig.minTagAreaPx,
-            maxTagViewAngleDeg = AutoAimGTSAMTestConfig.maxTagViewAngleDeg,
-            enableCheiralityCheck = AutoAimGTSAMTestConfig.enableCheiralityCheck,
-            cheiralitySigma = AutoAimGTSAMTestConfig.cheiralitySigma,
-            minTagZDistance = AutoAimGTSAMTestConfig.minTagZDistance,
-            enablePostProcess = AutoAimGTSAMTestConfig.enablePostProcess,
-            postProcessVisionGapS = AutoAimGTSAMTestConfig.postProcessVisionGapS,
-            postProcessSettleS = AutoAimGTSAMTestConfig.postProcessSettleS,
-            postProcessSettleUpdates = AutoAimGTSAMTestConfig.postProcessSettleUpdates,
-            fx = AutoAimGTSAMTestConfig.fx,
-            fy = AutoAimGTSAMTestConfig.fy,
-            cx = AutoAimGTSAMTestConfig.cx,
-            cy = AutoAimGTSAMTestConfig.cy,
-            k1 = AutoAimGTSAMTestConfig.k1,
-            k2 = AutoAimGTSAMTestConfig.k2,
-            k3 = AutoAimGTSAMTestConfig.k3,
-            p1 = AutoAimGTSAMTestConfig.p1,
-            p2 = AutoAimGTSAMTestConfig.p2,
-            cameraOffsetX = AutoAimGTSAMTestConfig.cameraOffsetX,
-            cameraOffsetY = AutoAimGTSAMTestConfig.cameraOffsetY,
-            cameraOffsetZ = AutoAimGTSAMTestConfig.cameraOffsetZ,
-            cameraRoll = AutoAimGTSAMTestConfig.cameraRoll,
-            cameraPitch = AutoAimGTSAMTestConfig.cameraPitch,
-            cameraYaw = AutoAimGTSAMTestConfig.cameraYaw
-        )
+    companion object {
+        fun buildEstimatorConfig(): AutoAimGTSAM.EstimatorConfig {
+            return AutoAimGTSAM.EstimatorConfig(
+                priorSigmaXY = AutoAimGTSAMTestConfig.priorSigmaXY,
+                priorSigmaTheta = AutoAimGTSAMTestConfig.priorSigmaTheta,
+                odomSigmaXY = AutoAimGTSAMTestConfig.odomSigmaXY,
+                odomSigmaTheta = AutoAimGTSAMTestConfig.odomSigmaTheta,
+                defaultPixelSigma = AutoAimGTSAMTestConfig.defaultPixelSigma,
+                relinearizeThreshold = AutoAimGTSAMTestConfig.relinearizeThreshold,
+                relinearizeSkip = AutoAimGTSAMTestConfig.relinearizeSkip,
+                enablePartialRelinearization = AutoAimGTSAMTestConfig.enablePartialRelinearization,
+                compactOdometry = AutoAimGTSAMTestConfig.compactOdometry,
+                enableRobustTagLoss = AutoAimGTSAMTestConfig.enableRobustTagLoss,
+                robustTagLoss = AutoAimGTSAMTestConfig.robustTagLoss,
+                robustTagLossK = AutoAimGTSAMTestConfig.robustTagLossK,
+                enableTagGating = AutoAimGTSAMTestConfig.enableTagGating,
+                minTagAreaPx = AutoAimGTSAMTestConfig.minTagAreaPx,
+                maxTagViewAngleDeg = AutoAimGTSAMTestConfig.maxTagViewAngleDeg,
+                enableCheiralityCheck = AutoAimGTSAMTestConfig.enableCheiralityCheck,
+                cheiralitySigma = AutoAimGTSAMTestConfig.cheiralitySigma,
+                minTagZDistance = AutoAimGTSAMTestConfig.minTagZDistance,
+                enablePostProcess = AutoAimGTSAMTestConfig.enablePostProcess,
+                postProcessVisionGapS = AutoAimGTSAMTestConfig.postProcessVisionGapS,
+                postProcessSettleS = AutoAimGTSAMTestConfig.postProcessSettleS,
+                postProcessSettleUpdates = AutoAimGTSAMTestConfig.postProcessSettleUpdates,
+                fx = AutoAimGTSAMTestConfig.fx,
+                fy = AutoAimGTSAMTestConfig.fy,
+                cx = AutoAimGTSAMTestConfig.cx,
+                cy = AutoAimGTSAMTestConfig.cy,
+                k1 = AutoAimGTSAMTestConfig.k1,
+                k2 = AutoAimGTSAMTestConfig.k2,
+                k3 = AutoAimGTSAMTestConfig.k3,
+                p1 = AutoAimGTSAMTestConfig.p1,
+                p2 = AutoAimGTSAMTestConfig.p2,
+                cameraOffsetX = AutoAimGTSAMTestConfig.cameraOffsetX,
+                cameraOffsetY = AutoAimGTSAMTestConfig.cameraOffsetY,
+                cameraOffsetZ = AutoAimGTSAMTestConfig.cameraOffsetZ,
+                cameraRoll = AutoAimGTSAMTestConfig.cameraRoll,
+                cameraPitch = AutoAimGTSAMTestConfig.cameraPitch,
+                cameraYaw = AutoAimGTSAMTestConfig.cameraYaw,
+                enableViewingGeometryInflation = AutoAimGTSAMTestConfig.enableViewingGeometryInflation,
+                viewingHistoryWindowS = AutoAimGTSAMTestConfig.viewingHistoryWindowS,
+                maxViewingHistoryPerTag = AutoAimGTSAMTestConfig.maxViewingHistoryPerTag,
+                similarityDistanceWeight = AutoAimGTSAMTestConfig.similarityDistanceWeight,
+                similarityAngleWeight = AutoAimGTSAMTestConfig.similarityAngleWeight,
+                similarityOrientationWeight = AutoAimGTSAMTestConfig.similarityOrientationWeight,
+                maxNoiseInflationFactor = AutoAimGTSAMTestConfig.maxNoiseInflationFactor,
+                similarityThresholdForInflation = AutoAimGTSAMTestConfig.similarityThresholdForInflation
+            )
+        }
+
+        fun applyRuntimeConfig(autoAim: AutoAimGTSAM) {
+            autoAim.aimConfig = AimConfig(
+                cameraMountingOffsetYaw = AutoAimGTSAMTestConfig.cameraMountingOffsetYaw,
+                txSignMultiplier = AutoAimGTSAMTestConfig.txSignMultiplier,
+                txDeadband = AutoAimGTSAMTestConfig.txDeadband,
+                maxAcceptableUncertainty = AutoAimGTSAMTestConfig.maxAcceptableUncertainty,
+                predictionTimeoutMs = AutoAimGTSAMTestConfig.predictionTimeoutMs,
+                visionPixelSigma = AutoAimGTSAMTestConfig.visionPixelSigma,
+                maxPoseDivergence = AutoAimGTSAMTestConfig.maxPoseDivergence,
+                turretRotationUncertaintyGain = AutoAimGTSAMTestConfig.turretRotationUncertaintyGain,
+                uncertaintyDecayRate = AutoAimGTSAMTestConfig.uncertaintyDecayRate
+            )
+        }
     }
 
-    private fun applyRuntimeConfig(autoAim: AutoAimGTSAM) {
-        autoAim.aimConfig = AimConfig(
-            cameraMountingOffsetYaw = AutoAimGTSAMTestConfig.cameraMountingOffsetYaw,
-            txSignMultiplier = AutoAimGTSAMTestConfig.txSignMultiplier,
-            txDeadband = AutoAimGTSAMTestConfig.txDeadband,
-            maxAcceptableUncertainty = AutoAimGTSAMTestConfig.maxAcceptableUncertainty,
-            predictionTimeoutMs = AutoAimGTSAMTestConfig.predictionTimeoutMs,
-            visionPixelSigma = AutoAimGTSAMTestConfig.visionPixelSigma,
-            maxPoseDivergence = AutoAimGTSAMTestConfig.maxPoseDivergence,
-            turretRotationUncertaintyGain = AutoAimGTSAMTestConfig.turretRotationUncertaintyGain,
-            uncertaintyDecayRate = AutoAimGTSAMTestConfig.uncertaintyDecayRate
-        )
-    }
 
     override fun runOpMode() {
         Panels.config.enableLogs = false
+
+        val driveController = DriveController()
         io.configurePinpoint()
         io.setPosition(Pose2d(0.0,0.0,PI/2.0))
 
@@ -225,7 +248,7 @@ class AutoAimGTSAMTest : SigmaOpMode() {
                 }
                 turret.update(dt)
 
-                io.turret = 0.0
+                driveController.update(gamepad1,io)
 
                 val fusedPose = autoAim.fusedPose
                 telemetry.addData(

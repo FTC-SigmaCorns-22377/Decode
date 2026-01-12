@@ -12,13 +12,13 @@ import kotlin.math.PI
 /**
  * Modern Robotics 12v DC motor top speed in rad/s
  */
-private val bareMotorTopSpeed = 617.84
+val bareMotorTopSpeed = 617.84
 
 
 /**
  * Modern Robotics 12v DC motor stall torque in N*m
  */
-private val bareMotorStallTorque = 0.187
+val bareMotorStallTorque = 0.187
 
 
 /**

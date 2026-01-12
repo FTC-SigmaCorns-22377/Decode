@@ -8,6 +8,7 @@ import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
 import sigmacorns.opmode.tune.SpindexerPIDConfig
 import sigmacorns.opmode.tune.ShooterFlywheelPIDConfig
+import kotlin.math.sign
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -17,8 +18,8 @@ object ShotPowers {
     @JvmField var shortShotPower = 0.6
     @JvmField var midShotPower = 0.75
     @JvmField var longShotPower = 0.94
-    @JvmField var shortDistanceLimit = 0.5
-    @JvmField var midDistanceLimit = 1.2
+    @JvmField var shortDistanceLimit = 1.0
+    @JvmField var midDistanceLimit = 2.3
 }
 
 class SpindexerLogic(val io: SigmaIO) {
@@ -246,7 +247,7 @@ class SpindexerLogic(val io: SigmaIO) {
     private fun shootingBehavior(): suspend () -> State = suspend {
         // Flywheel control is handled in update() based on state
 
-        if (offsetActive == false) {
+        if (!offsetActive) {
             spindexerRotation += MODE_CHANGE_ANGLE
             offsetActive = true
 
@@ -348,6 +349,21 @@ class SpindexerLogic(val io: SigmaIO) {
 
     /** Manually rotate the spindexer by a specific angle (radians) */
     fun nudge(angle: Double) {
+        if (currentState == State.INTAKING) {
+            spindexerState[0] = Balls.Purple
+
+            if(angle.sign > 0) {
+                val temp = spindexerState[2]
+                spindexerState[2] = spindexerState[1]
+                spindexerState[1] = spindexerState[0]
+                spindexerState[0] = temp
+            } else {
+                val temp = spindexerState[0]
+                spindexerState[0] = spindexerState[1]
+                spindexerState[1] = spindexerState[2]
+                spindexerState[2] = temp
+            }
+        }
         spindexerRotation += angle
     }
 
