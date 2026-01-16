@@ -329,14 +329,17 @@ class FusionWorker(
             config.cameraRoll,
             config.cameraPitch,
             config.cameraYaw,
-            config.enableViewingGeometryInflation,
-            config.viewingHistoryWindowS,
-            config.maxViewingHistoryPerTag,
-            config.similarityDistanceWeight,
-            config.similarityAngleWeight,
-            config.similarityOrientationWeight,
-            config.maxNoiseInflationFactor,
-            config.similarityThresholdForInflation
+            config.pixelSigmaAngleK,
+            config.enableSpatialCorrelation,
+            config.correlationDistanceM,
+            config.correlationDownweightFactor,
+            config.correlationHistorySize,
+            config.enableBiasCorrection,
+            config.radialBiasK,
+            config.enableMultiHypothesisInit,
+            config.multiHypothesisThetaThreshold,
+            config.enableHeadingFlipRecovery,
+            config.headingFlipMinTags
         )
     }
 

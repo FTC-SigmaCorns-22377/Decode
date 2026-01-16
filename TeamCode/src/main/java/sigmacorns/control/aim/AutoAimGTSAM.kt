@@ -78,14 +78,17 @@ class AutoAimGTSAM(
         val cameraRoll: Double = -PI / 2.0,
         val cameraPitch: Double = 0.0,
         val cameraYaw: Double = -PI / 2.0,
-        val enableViewingGeometryInflation: Boolean = false,
-        val viewingHistoryWindowS: Double = 2.0,
-        val maxViewingHistoryPerTag: Int = 20,
-        val similarityDistanceWeight: Double = 0.3,
-        val similarityAngleWeight: Double = 0.4,
-        val similarityOrientationWeight: Double = 0.3,
-        val maxNoiseInflationFactor: Double = 10.0,
-        val similarityThresholdForInflation: Double = 0.7
+        val pixelSigmaAngleK: Double = 2.0,
+        val enableSpatialCorrelation: Boolean = true,
+        val correlationDistanceM: Double = 0.3,
+        val correlationDownweightFactor: Double = 2.0,
+        val correlationHistorySize: Int = 100,
+        val enableBiasCorrection: Boolean = true,
+        val radialBiasK: Double = 0.01,
+        val enableMultiHypothesisInit: Boolean = true,
+        val multiHypothesisThetaThreshold: Double = 1.0,
+        val enableHeadingFlipRecovery: Boolean = true,
+        val headingFlipMinTags: Int = 1
     )
 
     // ===== Native Library Loading =====

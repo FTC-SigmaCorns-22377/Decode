@@ -40,14 +40,17 @@ object PoseEstimatorBridge {
         cameraRoll: Double,
         cameraPitch: Double,
         cameraYaw: Double,
-        enableViewingGeometryInflation: Boolean,
-        viewingHistoryWindowS: Double,
-        maxViewingHistoryPerTag: Int,
-        similarityDistanceWeight: Double,
-        similarityAngleWeight: Double,
-        similarityOrientationWeight: Double,
-        maxNoiseInflationFactor: Double,
-        similarityThresholdForInflation: Double
+        pixelSigmaAngleK: Double,
+        enableSpatialCorrelation: Boolean,
+        correlationDistanceM: Double,
+        correlationDownweightFactor: Double,
+        correlationHistorySize: Int,
+        enableBiasCorrection: Boolean,
+        radialBiasK: Double,
+        enableMultiHypothesisInit: Boolean,
+        multiHypothesisThetaThreshold: Double,
+        enableHeadingFlipRecovery: Boolean,
+        headingFlipMinTags: Int
     ): Long
 
     @JvmStatic external fun nativeDestroy(handle: Long)

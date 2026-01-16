@@ -72,14 +72,17 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var cameraPitch = 0.0
         @JvmField var cameraYaw = -PI / 2.0
 
-        @JvmField var enableViewingGeometryInflation = false
-        @JvmField var viewingHistoryWindowS = 2.0
-        @JvmField var maxViewingHistoryPerTag = 20
-        @JvmField var similarityDistanceWeight = 0.3
-        @JvmField var similarityAngleWeight = 0.4
-        @JvmField var similarityOrientationWeight = 0.3
-        @JvmField var maxNoiseInflationFactor = 10.0
-        @JvmField var similarityThresholdForInflation = 0.7
+        @JvmField var pixelSigmaAngleK = 2.0
+        @JvmField var enableSpatialCorrelation = true
+        @JvmField var correlationDistanceM = 0.3
+        @JvmField var correlationDownweightFactor = 2.0
+        @JvmField var correlationHistorySize = 100
+        @JvmField var enableBiasCorrection = true
+        @JvmField var radialBiasK = 0.01
+        @JvmField var enableMultiHypothesisInit = true
+        @JvmField var multiHypothesisThetaThreshold = 1.0
+        @JvmField var enableHeadingFlipRecovery = true
+        @JvmField var headingFlipMinTags = 1
     }
 
     private val ticksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2 * PI) * 76 / 19
@@ -129,14 +132,17 @@ class AutoAimGTSAMTest : SigmaOpMode() {
                 cameraRoll = AutoAimGTSAMTestConfig.cameraRoll,
                 cameraPitch = AutoAimGTSAMTestConfig.cameraPitch,
                 cameraYaw = AutoAimGTSAMTestConfig.cameraYaw,
-                enableViewingGeometryInflation = AutoAimGTSAMTestConfig.enableViewingGeometryInflation,
-                viewingHistoryWindowS = AutoAimGTSAMTestConfig.viewingHistoryWindowS,
-                maxViewingHistoryPerTag = AutoAimGTSAMTestConfig.maxViewingHistoryPerTag,
-                similarityDistanceWeight = AutoAimGTSAMTestConfig.similarityDistanceWeight,
-                similarityAngleWeight = AutoAimGTSAMTestConfig.similarityAngleWeight,
-                similarityOrientationWeight = AutoAimGTSAMTestConfig.similarityOrientationWeight,
-                maxNoiseInflationFactor = AutoAimGTSAMTestConfig.maxNoiseInflationFactor,
-                similarityThresholdForInflation = AutoAimGTSAMTestConfig.similarityThresholdForInflation
+                pixelSigmaAngleK = AutoAimGTSAMTestConfig.pixelSigmaAngleK,
+                enableSpatialCorrelation = AutoAimGTSAMTestConfig.enableSpatialCorrelation,
+                correlationDistanceM = AutoAimGTSAMTestConfig.correlationDistanceM,
+                correlationDownweightFactor = AutoAimGTSAMTestConfig.correlationDownweightFactor,
+                correlationHistorySize = AutoAimGTSAMTestConfig.correlationHistorySize,
+                enableBiasCorrection = AutoAimGTSAMTestConfig.enableBiasCorrection,
+                radialBiasK = AutoAimGTSAMTestConfig.radialBiasK,
+                enableMultiHypothesisInit = AutoAimGTSAMTestConfig.enableMultiHypothesisInit,
+                multiHypothesisThetaThreshold = AutoAimGTSAMTestConfig.multiHypothesisThetaThreshold,
+                enableHeadingFlipRecovery = AutoAimGTSAMTestConfig.enableHeadingFlipRecovery,
+                headingFlipMinTags = AutoAimGTSAMTestConfig.headingFlipMinTags
             )
         }
 
