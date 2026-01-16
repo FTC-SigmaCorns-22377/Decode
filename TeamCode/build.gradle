@@ -15,11 +15,22 @@
 
 buildscript {
     repositories {
-        mavenLocal()
         mavenCentral()
+
+        maven {
+            name = "sloth"
+            url = uri("https://maven.pkg.github.com/Veratay/sloth")
+            credentials {
+                Properties local = new Properties()
+                local.load(project.rootProject.file('local.properties').newDataInputStream())
+
+                username = local.getProperty('username')
+                password = local.getProperty('apiKey')
+            }
+        }
     }
     dependencies {
-        classpath "dev.frozenmilk:Load:SNAPSHOT-1739c47"
+        classpath 'dev.frozenmilk:load:SNAPSHOT-371b2c6'
     }
 }
 
@@ -112,7 +123,6 @@ local.load(project.rootProject.file('local.properties').newDataInputStream())
 
 repositories {
     mavenCentral()
-    mavenLocal()
     maven { url = "https://mymaven.bylazar.com/releases" }
 
     maven {
@@ -124,20 +134,25 @@ repositories {
         }
     }
 
+    maven {
+        name = "sloth"
+        url = uri("https://maven.pkg.github.com/Veratay/sloth")
+        credentials {
+            username = local.getProperty('username')
+            password = local.getProperty('apiKey')
+        }
+    }
+
     // Dairy releases repository
     maven {
         url = "https://repo.dairy.foundation/releases"
-    }
-    // Dairy snapshots repository
-    maven {
-        url = "https://repo.dairy.foundation/snapshots"
     }
 }
 
 project.ext.jomlVersion = "1.10.8"
 
 dependencies {
-    implementation("dev.frozenmilk.sinister:Sloth:SNAPSHOT-0f3df49")
+    implementation("dev.frozenmilk.sinister:sloth:snapshot-fe26442")
     implementation project(':FtcRobotController')
 
     implementation "org.joml:joml:${jomlVersion}"
