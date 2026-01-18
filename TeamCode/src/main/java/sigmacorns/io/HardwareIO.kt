@@ -80,6 +80,26 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private var cachedTurretPosition: Double = 0.0
     private var cachedSpindexerPosition: Double = 0.0
 
+    // Last sent values for threshold checking
+    private var lastDriveFL: Double = Double.NaN
+    private var lastDriveFR: Double = Double.NaN
+    private var lastDriveBL: Double = Double.NaN
+    private var lastDriveBR: Double = Double.NaN
+    private var lastShooter: Double = Double.NaN
+    private var lastIntake: Double = Double.NaN
+    private var lastTurret: Double = Double.NaN
+    private var lastSpindexer: Double = Double.NaN
+    private var lastBreakPower: Double = Double.NaN
+    private var lastTransfer: Double = Double.NaN
+
+    companion object {
+        const val UPDATE_THRESHOLD = 0.001
+    }
+
+    private fun shouldUpdate(current: Double, last: Double): Boolean {
+        return last.isNaN() || kotlin.math.abs(current - last) >= UPDATE_THRESHOLD
+    }
+
     private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
             getX(DistanceUnit.METER),
             getY(DistanceUnit.METER),
@@ -138,28 +158,52 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun update() {
-        //updating power values of driveMotors
-        driveFLMotor.power = driveFL
-        driveFRMotor.power = driveFR
-        driveBLMotor.power = driveBL
-        driveBRMotor.power = driveBR
+        if (shouldUpdate(driveFL, lastDriveFL)) {
+            driveFLMotor.power = driveFL
+            lastDriveFL = driveFL
+        }
+        if (shouldUpdate(driveFR, lastDriveFR)) {
+            driveFRMotor.power = driveFR
+            lastDriveFR = driveFR
+        }
+        if (shouldUpdate(driveBL, lastDriveBL)) {
+            driveBLMotor.power = driveBL
+            lastDriveBL = driveBL
+        }
+        if (shouldUpdate(driveBR, lastDriveBR)) {
+            driveBRMotor.power = driveBR
+            lastDriveBR = driveBR
+        }
 
-
-        //updating power values of auxilery motors
-        flywheelMotor?.power = shooter
-        intakeMotor?.power = intake
-        turretMotor?.power = turret
-        spindexerMotor?.power = spindexer
-        //updating the positions of all the servos
-        breakServo?.position = breakPower
-        transferServo?.power = transfer
-
-        pinpoint?.update()
-        savedVoltage = voltageSensor?.voltage ?: 12.0
-
-        // Cache motor positions and velocities
+        if (shouldUpdate(shooter, lastShooter)) {
+            flywheelMotor?.power = shooter
+            lastShooter = shooter
+        }
+        if (shouldUpdate(intake, lastIntake)) {
+            intakeMotor?.power = intake
+            lastIntake = intake
+        }
+        if (shouldUpdate(turret, lastTurret)) {
+            turretMotor?.power = turret
+            lastTurret = turret
+        }
+        if (shouldUpdate(spindexer, lastSpindexer)) {
+            spindexerMotor?.power = spindexer
+            lastSpindexer = spindexer
+        }
+        //updating the positions of all the servos (only if changed beyond threshold)
+        if (shouldUpdate(breakPower, lastBreakPower)) {
+            breakServo?.position = breakPower
+            lastBreakPower = breakPower
+        }
+        if (shouldUpdate(transfer, lastTransfer)) {
+            transferServo?.power = transfer
+            lastTransfer = transfer
+        }
 
         allHubs.map { it.clearBulkCache() }
+        pinpoint?.update()
+        savedVoltage = voltageSensor?.voltage ?: 12.0
         cachedFlywheelVelocity = (flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
         cachedTurretPosition = turretMotor?.currentPosition?.toDouble() ?: 0.0
         cachedSpindexerPosition = spindexerMotor?.currentPosition?.toDouble() ?: 0.0
