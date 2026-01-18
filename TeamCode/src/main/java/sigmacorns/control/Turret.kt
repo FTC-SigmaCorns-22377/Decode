@@ -1,6 +1,7 @@
 package sigmacorns.control
 
 import sigmacorns.io.SigmaIO
+import sigmacorns.math.normalizeAngle
 import sigmacorns.opmode.tune.TurretPIDConfig
 import kotlin.math.absoluteValue
 import kotlin.math.max
@@ -56,13 +57,6 @@ class Turret(
     private var lastSaturatedTarget: Double? = null
     private var lastSaturatedError: Double? = null
     private val saturationHysteresis = 0.05  // rad - only switch if error improves by this much
-
-    private fun normalizeAngle(angle: Double): Double {
-        var normalized = angle
-        while (normalized > kotlin.math.PI) normalized -= 2 * kotlin.math.PI
-        while (normalized < -kotlin.math.PI) normalized += 2 * kotlin.math.PI
-        return normalized
-    }
 
     fun update(dt: Duration) {
         val currentAngle = range.tickToPos(io.turretPosition())
