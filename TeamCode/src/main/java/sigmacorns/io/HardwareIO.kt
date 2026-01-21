@@ -18,6 +18,8 @@ import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.joml.Vector2d
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.Balls
+import sigmacorns.math.toPose2d
+import sigmacorns.math.toFtcPose2d
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -100,19 +102,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         return last.isNaN() || kotlin.math.abs(current - last) >= UPDATE_THRESHOLD
     }
 
-    private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
-            getX(DistanceUnit.METER),
-            getY(DistanceUnit.METER),
-            getHeading(AngleUnit.RADIANS)
-    )
-
-    private fun Pose2d.toFtcPose2d(): FTCPose2d = FTCPose2d(
-        DistanceUnit.METER,
-        v.x,
-        v.y,
-        AngleUnit.RADIANS,
-        rot
-    )
 
     override fun position(): Pose2d {
         val sensorPose = pinpoint?.position?.toPose2d()

@@ -49,13 +49,58 @@ enum class SolverRequestType(val wireValue: Short) {
     TRACKING(3),
 }
 
+enum class ContourSelectionMode {
+    POSITION,
+    TIME,
+}
+
+data class MPCTuning(
+    // Contouring weights (indices 0-6)
+    var contourProgressWeight: Double = 0.0,
+    var contourPosErrWeight: Double = 30000.0,
+    var contourVelWeight: Double = 1000.0,
+    var contourThetaWeight: Double = 1000.0,
+    var contourWWeight: Double = 5.0,
+    var contourUDiffWeight: Double = 0.0,
+    var contourFutureDecay: Double = 0.3,
+    // Tracking weights (indices 7-14)
+    var trackStateWeight: Double = 250.0,
+    var trackTerminalWeightScale: Double = 1.0,
+    var trackUDiffWeight: Double = 20.0,
+    var trackFutureDecay: Double = 0.5,
+    var trackVW: Double = 1.0,
+    var trackPW: Double = 100.0,
+    var trackThetaW: Double = 50.0,
+    var trackOmegaW: Double = 1.0,
+) {
+    fun toArray(): DoubleArray = doubleArrayOf(
+        contourProgressWeight,
+        contourPosErrWeight,
+        contourVelWeight,
+        contourThetaWeight,
+        contourWWeight,
+        contourUDiffWeight,
+        contourFutureDecay,
+        trackStateWeight,
+        trackTerminalWeightScale,
+        trackUDiffWeight,
+        trackFutureDecay,
+        trackVW,
+        trackPW,
+        trackThetaW,
+        trackOmegaW,
+    )
+}
+
 class MPCClient(
     val parameters: MecanumParameters,
     SOLVER_IP: String = "172.29.0.1",
     SOLVER_PORT: Int = 5000,
     ROBOT_PORT: Int = 22377,
     val sampleLookahead: Int = 0,
-    val preIntegrate: Duration = 30.milliseconds
+    val preIntegrate: Duration = 40.milliseconds,
+    var contourSelectionMode: ContourSelectionMode = ContourSelectionMode.POSITION,
+    var tuning: MPCTuning = MPCTuning(),
 ): AutoCloseable {
 
     companion object {
@@ -64,6 +109,7 @@ class MPCClient(
         val NU: Int = 4
         val NT: Int = 10
         val NP: Int = 7
+        val NTUNING: Int = 15
         val DT: Duration = 40.milliseconds
 
         val horizon = DT*N
@@ -152,7 +198,10 @@ class MPCClient(
 
     private var trackingReferenceStates: List<DoubleArray> = emptyList()
     private var contourReferencePositions: List<Vector2d> = emptyList()
-    private var trackingReferencePositions: List<Vector2d> = emptyList()
+    private var contourTimestamps: List<Double> = emptyList()
+     var trackingReferencePositions: List<Vector2d> = emptyList()
+    private var trackingTimestamps: List<Double> = emptyList()
+    private var trajectoryStartTime: Duration? = null
 
     private var sentTargetContours: MutableList<Pair<Long, Contour?>> = mutableListOf()
     private var curTime = 0.seconds
@@ -160,8 +209,8 @@ class MPCClient(
     private val HEADER_SIZE: Int = 4 + 2 + 2 + 4 + 8
     private val DOUBLE_SIZE: Int = 8
     private val TRACKING_STATE_COUNT: Int = (N + 1) * NX
-    private val CONTOURING_REQUEST_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (NT + NX + NU + NP)
-    private val TRACKING_REQUEST_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (TRACKING_STATE_COUNT + NX + NU + NP)
+    private val CONTOURING_REQUEST_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (NT + NX + NU + NP + NTUNING)
+    private val TRACKING_REQUEST_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (TRACKING_STATE_COUNT + NX + NU + NP + NTUNING)
     private val RESPONSE_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (1 + N * NU)
 
     private var x0: MecanumState? = null
@@ -170,7 +219,8 @@ class MPCClient(
     private var latestU: DoubleArray = DoubleArray(N*NU)
     private var latestUTime = 0L
 
-    private var latestSampleI = 0
+    var latestSampleI = 0
+        private set
 
     private val channel = DatagramChannel.open()
     private val solverAddr = InetSocketAddress(SOLVER_IP, SOLVER_PORT)
@@ -205,7 +255,7 @@ class MPCClient(
         val contour: Contour?,
     )
 
-    private fun selectTarget(state: DoubleArray): TargetSelection? {
+    private fun selectTarget(state: DoubleArray, time: Duration): TargetSelection? {
         val positions = when (solverRequestType) {
             SolverRequestType.CONTOURING -> contourReferencePositions
             SolverRequestType.TRACKING -> trackingReferencePositions
@@ -215,11 +265,28 @@ class MPCClient(
             return null
         }
 
-        val closestIndex = positions.withIndex().minBy { (_, ref) ->
-            val dx = ref.x() - state[3]
-            val dy = ref.y() - state[4]
-            dx * dx + dy * dy
-        }.index
+        val timestamps = when (solverRequestType) {
+            SolverRequestType.CONTOURING -> contourTimestamps
+            SolverRequestType.TRACKING -> trackingTimestamps
+        }
+
+        val closestIndex = when {
+            contourSelectionMode == ContourSelectionMode.TIME &&
+            timestamps.isNotEmpty() -> {
+                if (trajectoryStartTime == null) {
+                    trajectoryStartTime = time
+                }
+                val elapsed = (time - trajectoryStartTime!!).toDouble(DurationUnit.SECONDS)
+                timestamps.withIndex().minBy { (_, t) ->
+                    abs(t - elapsed)
+                }.index
+            }
+            else -> positions.withIndex().minBy { (_, ref) ->
+                val dx = ref.x() - state[3]
+                val dy = ref.y() - state[4]
+                dx * dx + dy * dy
+            }.index
+        }
 
         latestSampleI = closestIndex
 
@@ -282,7 +349,7 @@ class MPCClient(
             return
         }
 
-        val selection = selectTarget(x0!!.toDoubleArray()) ?: return
+        val selection = selectTarget(x0!!.toDoubleArray(), time.nanoseconds) ?: return
         val targetContour = selection.contour
 
         if (solverRequestType == SolverRequestType.CONTOURING && targetContour == null) {
@@ -324,6 +391,7 @@ class MPCClient(
         putArray(buf, predictedX.toDoubleArray())
         putArray(buf, predictedU)
         putArray(buf, p)
+        putArray(buf, tuning.toArray())
 
         buf.flip()
 
@@ -408,28 +476,34 @@ class MPCClient(
     ) {
         solverRequestType = requestType
         when (requestType) {
-            SolverRequestType.CONTOURING -> setTargetContours(load(traj))
-            SolverRequestType.TRACKING -> setTargetTracking(buildTrackingReferenceStates(traj))
+            SolverRequestType.CONTOURING -> setTargetContours(load(traj), traj.samples.map { it.timestamp })
+            SolverRequestType.TRACKING -> setTargetTracking(buildTrackingReferenceStates(traj), traj.samples.map { it.timestamp })
         }
     }
 
-    fun setTargetContours(path: List<Contour>) {
+    fun setTargetContours(path: List<Contour>, timestamps: List<Double> = emptyList()) {
         this.path = path
         solverRequestType = SolverRequestType.CONTOURING
         trackingReferenceStates = emptyList()
         contourReferencePositions = path.map { Vector2d(it.pos.v) }
+        contourTimestamps = timestamps
         trackingReferencePositions = emptyList()
+        trackingTimestamps = emptyList()
+        trajectoryStartTime = null
         latestSampleI = 0
         lastTargetContour = null
         latestU = DoubleArray(N * NU)
     }
 
-    fun setTargetTracking(states: List<DoubleArray>) {
+    fun setTargetTracking(states: List<DoubleArray>, timestamps: List<Double> = emptyList()) {
         solverRequestType = SolverRequestType.TRACKING
         this.path = null
         trackingReferenceStates = states.map { it.copyOf() }
         trackingReferencePositions = trackingReferenceStates.map { Vector2d(it[3], it[4]) }
+        trackingTimestamps = timestamps
         contourReferencePositions = emptyList()
+        contourTimestamps = emptyList()
+        trajectoryStartTime = null
         latestSampleI = 0
         lastTargetContour = null
         latestU = DoubleArray(N * NU)
@@ -442,6 +516,10 @@ class MPCClient(
                 Pose2d(it[3],it[4],it[5])
             }
         }
+    }
+
+    fun resetTrajectoryStartTime() {
+        trajectoryStartTime = null
     }
 
     fun update(state: MecanumState, v: Number, time: Duration) {
@@ -462,7 +540,7 @@ class MPCClient(
 
         println("MPC DELAY: ${delay.inWholeMilliseconds}ms (true) ${(delay-preIntegrate).inWholeMilliseconds}ms (effective)")
 
-        val i = ((delay-preIntegrate)/DT).toInt().coerceIn(0, N-1)
+        val i = ((delay-preIntegrate-10.milliseconds)/DT).toInt().coerceIn(0, N-1)
 
         val res =  latestU.copyOfRange(i*NU, (i+1)*NU)
 

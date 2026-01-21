@@ -586,6 +586,82 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_logPoints3D(
     }
 }
 
+/// Log 3D points with per-point colors (for velocity-based coloring)
+/// points: flat array of [x1, y1, z1, x2, y2, z2, ...]
+/// colors: flat array of ARGB packed integers, one per point
+/// radius: point radius in world units
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logPoints3DWithColors(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    points: JFloatArray,
+    colors: jni::objects::JIntArray,
+    radius: jdouble,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = match string_from_jni(&mut env, &name) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("rerun logPoints3DWithColors JNI failed to read name: {err}");
+            return;
+        }
+    };
+
+    let values = match vec_from_java_float_arr(&env, points) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("rerun logPoints3DWithColors failed to read points for {name}: {err}");
+            return;
+        }
+    };
+
+    if values.len() % 3 != 0 {
+        eprintln!("rerun logPoints3DWithColors expected multiple of 3 floats for {name}, got {}", values.len());
+        return;
+    }
+
+    let color_len = match env.get_array_length(&colors) {
+        Ok(len) => len as usize,
+        Err(err) => {
+            eprintln!("rerun logPoints3DWithColors failed to get colors length for {name}: {err}");
+            return;
+        }
+    };
+
+    let mut color_buf = vec![0i32; color_len];
+    if let Err(err) = env.get_int_array_region(&colors, 0, &mut color_buf) {
+        eprintln!("rerun logPoints3DWithColors failed to read colors for {name}: {err}");
+        return;
+    }
+
+    let pts: Vec<Vec3D> = values
+        .chunks(3)
+        .map(|chunk| Vec3D::new(chunk[0], chunk[1], chunk[2]))
+        .collect();
+
+    let point_colors: Vec<rerun::Color> = color_buf
+        .iter()
+        .map(|&color| {
+            let a = ((color >> 24) & 0xFF) as u8;
+            let r = ((color >> 16) & 0xFF) as u8;
+            let g = ((color >> 8) & 0xFF) as u8;
+            let b = (color & 0xFF) as u8;
+            rerun::Color::from_unmultiplied_rgba(r, g, b, a)
+        })
+        .collect();
+
+    let points3d = Points3D::new(pts)
+        .with_colors(point_colors)
+        .with_radii([radius as f32]);
+
+    if let Err(err) = rec.log(name.as_str(), &points3d) {
+        eprintln!("rerun logPoints3DWithColors failed for {name}: {err}");
+    }
+}
+
 /// Log a text message for debugging
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]

@@ -123,6 +123,7 @@ local.load(project.rootProject.file('local.properties').newDataInputStream())
 
 repositories {
     mavenCentral()
+    mavenLocal()
     maven { url = "https://mymaven.bylazar.com/releases" }
 
     maven {
@@ -157,7 +158,7 @@ dependencies {
 
     implementation "org.joml:joml:${jomlVersion}"
 
-    implementation("nullftc:common:1.3-snapshot") {
+    implementation("nullftc:common:1.4-snapshot") {
         exclude group: "com.google.code.gson", module: "gson"
     }
 
