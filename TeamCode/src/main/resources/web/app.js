@@ -9,6 +9,7 @@ console.log("App starting...");
 const statusDisplay = document.getElementById('status');
 const errorDisplay = document.getElementById('error-msg');
 const timeDisplay = document.getElementById('time-display');
+const gamepadStatusDisplay = document.getElementById('gamepad-status');
 const btnReplay = document.getElementById('btn-replay');
 const btnLive = document.getElementById('btn-live');
 const btnPlayPause = document.getElementById('btn-play-pause');
@@ -24,7 +25,7 @@ const errorChartContainer = document.getElementById('error-chart-container');
 const errorChartTitle = document.getElementById('error-chart-title');
 
 // --- State ---
-let history = []; 
+let history = [];
 let isLive = true;
 let isPaused = false;
 let playbackIndex = 0;
@@ -54,6 +55,11 @@ const robotPoint = new THREE.Mesh(
 const robotHeading = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.2, 0xffaa00);
 robotPoint.visible = false;
 robotHeading.visible = false;
+
+// --- Gamepad State ---
+let gamepadConnected = false;
+let gamepadIndex = -1;
+const GAMEPAD_DEADZONE = 0.01;
 
 // --- Scene Setup ---
 const scene = new THREE.Scene();
@@ -126,12 +132,23 @@ stlLoader.load('/assets/Ramp Assembly - am-5715 (1).stl', geometry => {
 
 // Balls
 const ballGeo = new THREE.SphereGeometry(0.05, 16, 16);
-const ballMat = new THREE.MeshPhongMaterial({ color: 0xff8800 });
-for (let i = 0; i < 10; i++) {
-    const b = new THREE.Mesh(ballGeo, ballMat);
-    b.position.set(0, 0, -100);
-    scene.add(b);
-    balls.push(b);
+const ballMaterials = {
+    green: new THREE.MeshPhongMaterial({ color: 0x00ff00 }),
+    purple: new THREE.MeshPhongMaterial({ color: 0x9932cc }),
+    orange: new THREE.MeshPhongMaterial({ color: 0xff8800 })
+};
+
+function ensureBallCount(count) {
+    while (balls.length < count) {
+        const b = new THREE.Mesh(ballGeo, ballMaterials.orange);
+        b.position.set(0, 0, -100);
+        scene.add(b);
+        balls.push(b);
+    }
+    // Hide excess balls
+    for (let i = count; i < balls.length; i++) {
+        balls[i].position.set(0, 0, -100);
+    }
 }
 
 scene.add(robotPoint);
@@ -216,6 +233,96 @@ function setMpcTarget(points) {
     scene.add(mpcTargetLine);
 }
 
+// --- Gamepad Functions ---
+function updateGamepadStatusDisplay() {
+    if (gamepadConnected) {
+        gamepadStatusDisplay.textContent = "🎮 Connected";
+        gamepadStatusDisplay.style.color = "green";
+    } else {
+        gamepadStatusDisplay.textContent = "🎮 No Gamepad";
+        gamepadStatusDisplay.style.color = "gray";
+    }
+}
+
+function applyDeadzone(value, deadzone = GAMEPAD_DEADZONE) {
+    return Math.abs(value) < deadzone ? 0.0 : value;
+}
+
+function readGamepadState(gamepad) {
+    if (!gamepad) return null;
+
+    console.log(gamepad)
+
+    return {
+        left_stick_x: applyDeadzone(gamepad.axes[0] || 0),
+        left_stick_y: applyDeadzone(gamepad.axes[1] || 0),
+        right_stick_x: applyDeadzone(gamepad.axes[3] || 0),
+        right_stick_y: applyDeadzone(gamepad.axes[4] || 0),
+        left_trigger: applyDeadzone(gamepad.axes[2] || 0),
+        right_trigger: applyDeadzone(gamepad.axes[5] || 0),
+        a: gamepad.buttons[0] ? gamepad.buttons[0].pressed : false,
+        b: gamepad.buttons[1] ? gamepad.buttons[1].pressed : false,
+        x: gamepad.buttons[2] ? gamepad.buttons[2].pressed : false,
+        y: gamepad.buttons[3] ? gamepad.buttons[3].pressed : false,
+        left_bumper: gamepad.buttons[4] ? gamepad.buttons[4].pressed : false,
+        right_bumper: gamepad.buttons[5] ? gamepad.buttons[5].pressed : false,
+        back: gamepad.buttons[6] ? gamepad.buttons[6].pressed : false,
+        start: gamepad.buttons[7] ? gamepad.buttons[7].pressed : false,
+        left_stick_button: gamepad.buttons[9] ? gamepad.buttons[9].pressed : false,
+        right_stick_button: gamepad.buttons[10] ? gamepad.buttons[10].pressed : false,
+        dpad_up: gamepad.axes[7] < 0.0,
+        dpad_down: gamepad.axes[7] > 0.0,
+        dpad_left: gamepad.axes[6] < 0.0,
+        dpad_right: gamepad.axes[6] > 0.0
+    };
+}
+
+function sendGamepadState(ws, gamepadId, state) {
+    if (ws.readyState === WebSocket.OPEN && state) {
+        const message = {
+            type: "gamepad",
+            gamepadId: gamepadId,
+            timestamp: Date.now(),
+            input: state
+        };
+        ws.send(JSON.stringify(message));
+    }
+}
+
+function pollGamepads(ws) {
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+
+    // Find first connected gamepad
+    let foundGamepad = null;
+    for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i]) {
+            foundGamepad = gamepads[i];
+            if (gamepadIndex !== i) {
+                gamepadIndex = i;
+                console.log(`Gamepad connected: ${foundGamepad.id} at index ${i}`);
+                gamepadConnected = true;
+                updateGamepadStatusDisplay();
+            }
+            gamepadConnected = true;
+            break;
+        }
+    }
+
+    if (!foundGamepad) {
+        if (gamepadConnected) {
+            console.log("Gamepad disconnected");
+            gamepadConnected = false;
+            gamepadIndex = -1;
+            updateGamepadStatusDisplay();
+        }
+        return;
+    }
+
+    // Read and send gamepad state (always as gamepad1 for now)
+    const state = readGamepadState(foundGamepad);
+    sendGamepadState(ws, 1, state);
+}
+
 // --- Visual Updates ---
 function updateVisuals(state) {
     if (!state) return;
@@ -237,7 +344,15 @@ function updateVisuals(state) {
         }
     }
     if (state.balls) {
-        state.balls.forEach((b, i) => { if (balls[i]) balls[i].position.set(b.x, b.y, b.z); });
+        ensureBallCount(state.balls.length);
+        state.balls.forEach((b, i) => {
+            if (balls[i]) {
+                balls[i].position.set(b.x, b.y, b.z);
+                // Set ball color based on state
+                const colorName = b.color || 'orange';
+                balls[i].material = ballMaterials[colorName] || ballMaterials.orange;
+            }
+        });
     }
     if (state.wheelForces && robot && toggleForces.checked) {
         wheelForceConfig.forEach((cfg, i) => {
@@ -356,6 +471,25 @@ fetch('/history').then(r => r.json()).then(data => {
         syncCharts(history.length - 1);
     }
 }).catch(console.error);
+
+// --- Gamepad Polling ---
+// Poll gamepads at ~50Hz for responsive input
+setInterval(() => pollGamepads(ws), 20);
+
+// Gamepad connection events
+window.addEventListener("gamepadconnected", (e) => {
+    console.log(`Gamepad connected: ${e.gamepad.id}`);
+    gamepadConnected = true;
+    gamepadIndex = e.gamepad.index;
+    updateGamepadStatusDisplay();
+});
+
+window.addEventListener("gamepaddisconnected", (e) => {
+    console.log(`Gamepad disconnected: ${e.gamepad.id}`);
+    gamepadConnected = false;
+    gamepadIndex = -1;
+    updateGamepadStatusDisplay();
+});
 
 fetch('/path').then(r => r.json()).then(setPath).catch(console.error);
 setInterval(() => { fetch('/path').then(r => r.json()).then(setPath).catch(() => {}); }, 2000);

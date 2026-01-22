@@ -5,12 +5,15 @@ import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
 import org.joml.Vector3d
 import sigmacorns.io.SigmaIO
+import sigmacorns.constants.drivetrainParameters
 
 class DrakeRobotModel(urdfPath: String) {
     private var simPtr: Long = 0
 
     init {
         simPtr = DrakeNative.createSim(urdfPath)
+        // Set mecanum parameters from RobotModelConstants
+        DrakeNative.setMecanumParameters(simPtr, drivetrainParameters.toArray())
     }
 
     // Mirroring RobotModel properties for compatibility
@@ -23,6 +26,7 @@ class DrakeRobotModel(urdfPath: String) {
     var jointPositions = mutableMapOf<String, Double>()
     var jointVelocities = mutableMapOf<String, Double>()
     var ballPositions = mutableListOf<Vector3d>()
+    var ballColors = mutableListOf<Balls>()
     var wheelForces = MutableList(4) { Vector3d() }
 
     fun advanceSim(t: Double, io: SigmaIO) {
@@ -117,6 +121,29 @@ class DrakeRobotModel(urdfPath: String) {
 
     fun spawnBall(x: Double, y: Double, z: Double) {
         DrakeNative.spawnBall(simPtr, x, y, z)
+        ballColors.add(Balls.Green)  // Default color
+    }
+
+    fun spawnBall(x: Double, y: Double, z: Double, color: Balls) {
+        DrakeNative.spawnBall(simPtr, x, y, z)
+        ballColors.add(color)
+    }
+
+    fun removeBall(index: Int) {
+        DrakeNative.removeBall(simPtr, index)
+        // Note: ballPositions will be updated on next getState()
+        if (index < ballColors.size) {
+            ballColors.removeAt(index)
+        }
+    }
+
+    fun spawnBallWithVelocity(
+        x: Double, y: Double, z: Double,
+        vx: Double, vy: Double, vz: Double,
+        color: Balls
+    ) {
+        DrakeNative.spawnBallWithVelocity(simPtr, x, y, z, vx, vy, vz)
+        ballColors.add(color)
     }
 
     fun setPosition(p: Pose2d) {

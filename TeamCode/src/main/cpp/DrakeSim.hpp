@@ -18,6 +18,10 @@ public:
     DrakeSim(const std::string& urdf_path);
     ~DrakeSim();
 
+    // Set mecanum drivetrain parameters from RobotModelConstants
+    // params: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia]
+    void SetMecanumParameters(const std::vector<double>& params);
+
     // inputs: [fl, bl, br, fr, intake, spindexer, turret, flywheel, hood] (power -1..1)
     void Step(double dt, const std::vector<double>& inputs);
 
@@ -27,6 +31,14 @@ public:
     
     // Spawns a ball at the given position
     void SpawnBall(double x, double y, double z);
+
+    // Spawns a ball at the given position with initial velocity
+    void SpawnBallWithVelocity(double x, double y, double z,
+                               double vx, double vy, double vz);
+
+    // Removes a ball by index
+    void RemoveBall(int index);
+
     void SetPosition(double x, double y, double yaw);
 
 private:
@@ -119,6 +131,9 @@ public:
     void Step(double dt, const std::vector<double>& inputs);
     std::vector<double> GetState();
     void SpawnBall(double x, double y, double z);
+    void SpawnBallWithVelocity(double x, double y, double z,
+                               double vx, double vy, double vz);
+    void RemoveBall(int index);
     void SetPosition(double x, double y, double yaw);
 };
 #endif

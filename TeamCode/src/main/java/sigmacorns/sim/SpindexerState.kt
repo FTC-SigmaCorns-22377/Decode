@@ -1,9 +1,15 @@
 package sigmacorns.sim
 
-enum class Balls() {
+enum class Balls {
     Green,
     Purple,
-    Empty
+    Empty;
+
+    fun toVizColor(): String = when (this) {
+        Green -> "green"
+        Purple -> "purple"
+        Empty -> "orange"
+    }
 }
 
 data class SpindexerState (

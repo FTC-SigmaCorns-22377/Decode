@@ -262,6 +262,10 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
           SpatialVelocity<double>(Eigen::Vector3d(ball.wx, ball.wy, ball.wz),
                                   Eigen::Vector3d(ball.vx, ball.vy, ball.vz)));
     }
+
+    // Re-initialize the simulator after modifying context time and state
+    // This updates Drake's internal time tracking to match the restored state
+    simulator_->Initialize();
   } else {
     // Set initial pose
     const auto &base_body = plant_->get_body(base_body_index_);

@@ -14,6 +14,27 @@ Java_sigmacorns_sim_DrakeNative_createSim(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_sigmacorns_sim_DrakeNative_setMecanumParameters(
+        JNIEnv* env,
+        jobject /* this */,
+        jlong simPtr,
+        jdoubleArray params) {
+    DrakeSim* sim = reinterpret_cast<DrakeSim*>(simPtr);
+    if (!sim) return;
+
+    jsize len = env->GetArrayLength(params);
+    if (len != 7) {
+        // Expected: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia]
+        return;
+    }
+    jdouble* body = env->GetDoubleArrayElements(params, 0);
+    std::vector<double> paramVec(body, body + len);
+    env->ReleaseDoubleArrayElements(params, body, 0);
+
+    sim->SetMecanumParameters(paramVec);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_sigmacorns_sim_DrakeNative_step(
         JNIEnv* env,
         jobject /* this */,
@@ -57,6 +78,35 @@ Java_sigmacorns_sim_DrakeNative_spawnBall(
     DrakeSim* sim = reinterpret_cast<DrakeSim*>(simPtr);
     if (sim) {
         sim->SpawnBall(x, y, z);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_sigmacorns_sim_DrakeNative_spawnBallWithVelocity(
+        JNIEnv* env,
+        jobject /* this */,
+        jlong simPtr,
+        jdouble x,
+        jdouble y,
+        jdouble z,
+        jdouble vx,
+        jdouble vy,
+        jdouble vz) {
+    DrakeSim* sim = reinterpret_cast<DrakeSim*>(simPtr);
+    if (sim) {
+        sim->SpawnBallWithVelocity(x, y, z, vx, vy, vz);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_sigmacorns_sim_DrakeNative_removeBall(
+        JNIEnv* env,
+        jobject /* this */,
+        jlong simPtr,
+        jint index) {
+    DrakeSim* sim = reinterpret_cast<DrakeSim*>(simPtr);
+    if (sim) {
+        sim->RemoveBall(index);
     }
 }
 

@@ -46,6 +46,7 @@ abstract class SigmaOpMode(
                  if (urdfFile != null) {
                      println("Initializing DrakeSimIO with ${urdfFile.absolutePath}")
                      val drakeIO = DrakeSimIO(urdfFile.absolutePath)
+                     drakeIO.setGamepads(super.gamepad1, super.gamepad2)
                      createdIO = drakeIO
                      return@lazy drakeIO
                  }
@@ -102,17 +103,6 @@ abstract class SigmaOpMode(
             t.printStackTrace()
         }
         return false
-    }
-
-    override fun waitForStart() {
-        if (!SIM) {
-            super.waitForStart()
-            return
-        }
-
-        if (!internalState.isStarted()) {
-            internalState.markStarted()
-        }
     }
 
     private val internalState = OpModeReflection(this)

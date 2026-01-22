@@ -81,6 +81,36 @@ void DrakeSim::SpawnBall(double x, double y, double z) {
   BuildSimulator(&state);
 }
 
+void DrakeSim::SpawnBallWithVelocity(double x, double y, double z,
+                                      double vx, double vy, double vz) {
+  RefreshBallStates();
+  RobotState state = CaptureRobotState();
+
+  BallState ball;
+  ball.x = x;
+  ball.y = y;
+  ball.z = z;
+  ball.vx = vx;
+  ball.vy = vy;
+  ball.vz = vz;
+  balls_.push_back(ball);
+
+  BuildSimulator(&state);
+}
+
+void DrakeSim::RemoveBall(int index) {
+  if (index < 0 || index >= static_cast<int>(balls_.size())) {
+    return;
+  }
+
+  RefreshBallStates();
+  RobotState state = CaptureRobotState();
+
+  balls_.erase(balls_.begin() + index);
+
+  BuildSimulator(&state);
+}
+
 void DrakeSim::SetPosition(double x, double y, double yaw) {
   auto &context = simulator_->get_mutable_context();
   auto &plant_context = diagram_->GetMutableSubsystemContext(*plant_, &context);
@@ -99,4 +129,19 @@ void DrakeSim::SetPosition(double x, double y, double yaw) {
   mecanum_state_.vel.x = 0.0;
   mecanum_state_.vel.y = 0.0;
   mecanum_state_.vel.theta = 0.0;
+}
+
+void DrakeSim::SetMecanumParameters(const std::vector<double>& params) {
+  if (params.size() != 7) {
+    return;
+  }
+
+  // params: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia]
+  mecanum_params_.drive_motor.free_speed = params[0];
+  mecanum_params_.drive_motor.stall_torque = params[1];
+  mecanum_params_.lx = params[2];
+  mecanum_params_.ly = params[3];
+  mecanum_params_.wheel_radius = params[4];
+  mecanum_params_.mass = params[5];
+  mecanum_params_.rot_inertia = params[6];
 }

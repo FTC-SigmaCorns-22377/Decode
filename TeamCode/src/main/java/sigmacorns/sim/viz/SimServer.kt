@@ -12,6 +12,8 @@ class SimServer(private val port: Int = 8000) {
     private val mapper = ObjectMapper()
     private val history = java.util.Collections.synchronizedList(mutableListOf<SimState>())
     @Volatile private var choreoPath: List<PathPoint> = emptyList()
+    @Volatile private var gamepad1State: GamepadState = GamepadState()
+    @Volatile private var gamepad2State: GamepadState = GamepadState()
 
     fun start() {
         val path1 = "TeamCode/src/main/resources/web"
@@ -96,7 +98,43 @@ class SimServer(private val port: Int = 8000) {
                 println("WebSocket error: ${ctx.error()}")
             }
             ws.onMessage { ctx ->
-                // println("Received WS message: ${ctx.message()}")
+                try {
+                    val message = ctx.message()
+                    val node = mapper.readTree(message)
+                    if (node.has("type") && node.get("type").asText() == "gamepad") {
+                        val gamepadId = node.get("gamepadId").asInt()
+                        val input = node.get("input")
+                        val state = GamepadState(
+                            left_stick_x = input.get("left_stick_x").asDouble(),
+                            left_stick_y = input.get("left_stick_y").asDouble(),
+                            right_stick_x = input.get("right_stick_x").asDouble(),
+                            right_stick_y = input.get("right_stick_y").asDouble(),
+                            left_trigger = input.get("left_trigger").asDouble(),
+                            right_trigger = input.get("right_trigger").asDouble(),
+                            a = input.get("a").asBoolean(),
+                            b = input.get("b").asBoolean(),
+                            x = input.get("x").asBoolean(),
+                            y = input.get("y").asBoolean(),
+                            back = input.get("back").asBoolean(),
+                            start = input.get("start").asBoolean(),
+                            left_bumper = input.get("left_bumper").asBoolean(),
+                            right_bumper = input.get("right_bumper").asBoolean(),
+                            left_stick_button = input.get("left_stick_button").asBoolean(),
+                            right_stick_button = input.get("right_stick_button").asBoolean(),
+                            dpad_up = input.get("dpad_up").asBoolean(),
+                            dpad_down = input.get("dpad_down").asBoolean(),
+                            dpad_left = input.get("dpad_left").asBoolean(),
+                            dpad_right = input.get("dpad_right").asBoolean()
+                        )
+                        if (gamepadId == 1) {
+                            gamepad1State = state
+                        } else if (gamepadId == 2) {
+                            gamepad2State = state
+                        }
+                    }
+                } catch (e: Exception) {
+                    println("Error parsing gamepad message: ${e.message}")
+                }
             }
         }
 
@@ -127,6 +165,9 @@ class SimServer(private val port: Int = 8000) {
     fun setChoreoPath(path: List<PathPoint>) {
         choreoPath = path
     }
+
+    fun getGamepad1(): GamepadState = gamepad1State
+    fun getGamepad2(): GamepadState = gamepad2State
 }
 
 data class SimState(
@@ -140,7 +181,12 @@ data class SimState(
     val mpcTarget: List<PathPoint> = emptyList()
 )
 
-data class BallState(val x: Double, val y: Double, val z: Double)
+data class BallState(
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val color: String = "orange"  // "green", "purple", or "orange" (default/field)
+)
 data class ForceState(val x: Double, val y: Double, val z: Double)
 data class ErrorState(
     val x: Double,
@@ -168,4 +214,27 @@ data class TelemetryState(
     val br: Double,
     val flywheel: Double,
     val turret: Double
+)
+
+data class GamepadState(
+    val left_stick_x: Double = 0.0,
+    val left_stick_y: Double = 0.0,
+    val right_stick_x: Double = 0.0,
+    val right_stick_y: Double = 0.0,
+    val left_trigger: Double = 0.0,
+    val right_trigger: Double = 0.0,
+    val a: Boolean = false,
+    val b: Boolean = false,
+    val x: Boolean = false,
+    val y: Boolean = false,
+    val back: Boolean = false,
+    val start: Boolean = false,
+    val left_bumper: Boolean = false,
+    val right_bumper: Boolean = false,
+    val left_stick_button: Boolean = false,
+    val right_stick_button: Boolean = false,
+    val dpad_up: Boolean = false,
+    val dpad_down: Boolean = false,
+    val dpad_left: Boolean = false,
+    val dpad_right: Boolean = false
 )

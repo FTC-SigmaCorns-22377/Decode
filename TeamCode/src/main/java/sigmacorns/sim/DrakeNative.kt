@@ -11,9 +11,13 @@ object DrakeNative {
     }
 
     external fun createSim(urdfPath: String): Long
+    external fun setMecanumParameters(simPtr: Long, params: DoubleArray)
     external fun step(simPtr: Long, dt: Double, inputs: DoubleArray)
     external fun getState(simPtr: Long): DoubleArray
     external fun spawnBall(simPtr: Long, x: Double, y: Double, z: Double)
+    external fun spawnBallWithVelocity(simPtr: Long, x: Double, y: Double, z: Double,
+                                        vx: Double, vy: Double, vz: Double)
+    external fun removeBall(simPtr: Long, index: Int)
     external fun setPosition(simPtr: Long, x: Double, y: Double, yaw: Double)
     external fun destroySim(simPtr: Long)
 }

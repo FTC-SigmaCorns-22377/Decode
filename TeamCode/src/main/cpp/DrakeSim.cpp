@@ -57,16 +57,31 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
     RigidTransformd X_W_Base =
         plant_->EvalBodyPoseInWorld(plant_context, base_body);
     double yaw = RollPitchYaw<double>(X_W_Base.rotation()).yaw_angle();
+
+    // Get current robot velocity
     SpatialVelocity<double> V_WB =
         plant_->EvalBodySpatialVelocityInWorld(plant_context, base_body);
     Eigen::Vector3d v_world = V_WB.translational();
+    double omega_world = V_WB.rotational().z();
+
+    // Transform world velocity to robot body frame
     double c = std::cos(yaw);
     double s = std::sin(yaw);
     const double v_body_x = v_world.x() * c + v_world.y() * s;
     const double v_body_y = -v_world.x() * s + v_world.y() * c;
-    const double omega_body = V_WB.rotational().z();
+    const double omega_body = omega_world;
+
     const double l = mecanum_params_.lx + mecanum_params_.ly;
+    const double l2 = std::sqrt(mecanum_params_.lx * mecanum_params_.lx +
+                                mecanum_params_.ly * mecanum_params_.ly);
     const double r = mecanum_params_.wheel_radius;
+
+    // ACCURATE MECANUM DYNAMICS MODEL
+    // Based on MecanumDynamics.kt - uses inverse kinematics to get wheel velocities
+    // from current robot velocity, then calculates motor torques
+
+    // Inverse velocity kinematics: robot velocity → wheel velocities
+    // [FL, BL, BR, FR] = inverseVel * [vx, vy, omega, 0]
     const std::array<double, 4> wheel_omegas = {
         (v_body_x - v_body_y - l * omega_body) / r,  // FL
         (v_body_x + v_body_y - l * omega_body) / r,  // BL
@@ -74,6 +89,63 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
         (v_body_x + v_body_y + l * omega_body) / r   // FR
     };
 
+    // Get motor power commands
+    std::array<double, 4> motor_powers = {0, 0, 0, 0};
+    for (size_t i = 0; i < 4; ++i) {
+      motor_powers[i] = (i < inputs.size()) ? std::clamp(inputs[i], -1.0, 1.0) : 0.0;
+    }
+
+    // Calculate motor torques using DC motor model
+    // τ = τ_stall * (power - ω/ω_free)
+    std::array<double, 4> motor_torques;
+    for (size_t i = 0; i < 4; ++i) {
+      motor_torques[i] = MotorTorque(mecanum_params_.drive_motor, motor_powers[i], wheel_omegas[i]);
+    }
+
+    // Forward acceleration kinematics: wheel torques → robot acceleration
+    // This uses the forwardAcc matrix from MecanumDynamics.kt
+    // acc = forwardAcc * torques
+    // forwardAcc is scaled by (1/r)/sqrt(2) * [1/m, 1/m, 1/I]
+    const double force_scale = (1.0 / r) / std::sqrt(2.0);
+    const double acc_x = force_scale * (motor_torques[0] + motor_torques[1] + motor_torques[2] + motor_torques[3]) / mecanum_params_.mass;
+    const double acc_y = force_scale * (-motor_torques[0] + motor_torques[1] - motor_torques[2] + motor_torques[3]) / mecanum_params_.mass;
+    const double alpha = force_scale * (-l2 * motor_torques[0] - l2 * motor_torques[1] + l2 * motor_torques[2] + l2 * motor_torques[3]) / mecanum_params_.rot_inertia;
+
+    // Transform acceleration from body frame to world frame
+    const double acc_world_x = acc_x * c - acc_y * s;
+    const double acc_world_y = acc_x * s + acc_y * c;
+
+    // Apply acceleration by computing forces
+    // F = m * a, τ = I * α
+    const Eigen::Vector3d base_force(
+        acc_world_x * mecanum_params_.mass,
+        acc_world_y * mecanum_params_.mass,
+        0.0
+    );
+    const Eigen::Vector3d base_torque(
+        0.0,
+        0.0,
+        alpha * mecanum_params_.rot_inertia
+    );
+
+    // Apply spatial force to base
+    std::vector<ExternallyAppliedSpatialForce<double>> spatial_forces;
+    spatial_forces.push_back({
+        base_body_index_,
+        Eigen::Vector3d::Zero(),  // Applied at COM
+        SpatialForce<double>(base_torque, base_force)
+    });
+
+    // Store wheel forces for visualization (convert torques to forces)
+    for (size_t i = 0; i < 4; ++i) {
+      const double f_mag = (motor_torques[i] * std::sqrt(2.0)) / r;
+      Eigen::Vector3d traction_dir_world =
+          Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) * traction_dirs[i];
+      Eigen::Vector3d force_W = f_mag * traction_dir_world;
+      last_wheel_forces_W_[i] = {force_W.x(), force_W.y(), force_W.z()};
+    }
+
+    // Set wheel joint velocities for visualization
     for (size_t i = 0; i < wheel_omegas.size(); ++i) {
       const JointActuator<double> &joint_actuator =
           plant_->get_joint_actuator(actuators_[i].index);
@@ -84,73 +156,28 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
     }
     plant_->SetVelocities(&plant_context, velocities);
 
-    // 1. Calculate Motor Torques for ALL actuators
+    // Calculate Motor Torques for NON-WHEEL actuators (intake, shooter, etc.)
     for (const auto &actuator : actuators_) {
-      const double command =
-          actuator.input_index < static_cast<int>(inputs.size())
-              ? inputs[actuator.input_index]
-              : 0.0;
-      const JointActuator<double> &joint_actuator =
-          plant_->get_joint_actuator(actuator.index);
-      const Joint<double> &joint = joint_actuator.joint();
-      double joint_vel = 0.0;
-      if (joint.num_velocities() == 1) {
-        if (actuator.input_index >= 0 && actuator.input_index < 4) {
-          joint_vel = wheel_omegas[actuator.input_index];
-        } else {
+      if (actuator.input_index >= 4) {  // Skip wheels (indices 0-3)
+        const double command =
+            actuator.input_index < static_cast<int>(inputs.size())
+                ? inputs[actuator.input_index]
+                : 0.0;
+        const JointActuator<double> &joint_actuator =
+            plant_->get_joint_actuator(actuator.index);
+        const Joint<double> &joint = joint_actuator.joint();
+        double joint_vel = 0.0;
+        if (joint.num_velocities() == 1) {
           joint_vel = velocities[joint.velocity_start()];
         }
+        torques[actuator.index] = MotorTorque(actuator.motor, command, joint_vel);
       }
-      torques[actuator.index] = MotorTorque(actuator.motor, command, joint_vel);
     }
     plant_->get_actuation_input_port().FixValue(&plant_context, torques);
 
-    // 2. Apply Ground Reaction Forces for Wheels (direct torque -> force)
-    std::vector<ExternallyAppliedSpatialForce<double>> spatial_forces;
-    spatial_forces.reserve(4);
-
-    for (size_t i = 0; i < wheel_names.size(); ++i) {
-      const auto &wheel_body = plant_->GetBodyByName(wheel_names[i]);
-      RigidTransformd X_W_Wheel =
-          plant_->EvalBodyPoseInWorld(plant_context, wheel_body);
-
-      // Only generate traction if on/near ground
-      if (X_W_Wheel.translation().z() < mecanum_params_.wheel_radius * 1.2) {
-        // Get torque calculated in step 1
-        double T = torques[actuators_[i].index];
-        double f_mag = (T * std::sqrt(2)) / mecanum_params_.wheel_radius;
-
-        // force safety checks
-        if (std::fabs(f_mag) > 200.0) {
-          std::cout << "WARNING: clamping wheel force of " << f_mag
-                    << std::endl;
-          f_mag = std::clamp(f_mag, -200.0, 200.0);
-        }
-        if (std::isnan(f_mag)) {
-          std::cout << "WARNING: wheel force is NaN. defaulting to 0."
-                    << std::endl;
-          f_mag = 0;
-        }
-
-        Eigen::Vector3d traction_dir_world =
-            Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) * traction_dirs[i];
-
-        Eigen::Vector3d force_W = f_mag * traction_dir_world;
-
-        // Apply to base_link at wheel center position (expressed in base frame)
-        Eigen::Vector3d p_Wheel_W = X_W_Wheel.translation();
-        Eigen::Vector3d p_BoBq_B = X_W_Base.inverse() * p_Wheel_W;
-
-        spatial_forces.push_back(
-            {base_body_index_, p_BoBq_B,
-             SpatialForce<double>(Eigen::Vector3d::Zero(), force_W)});
-
-        last_wheel_forces_W_[i] = {force_W.x(), force_W.y(), force_W.z()};
-      }
-    }
-
     plant_->get_applied_spatial_force_input_port().FixValue(&plant_context,
                                                             spatial_forces);
+
     simulator_->AdvanceTo(context.get_time() + sub_dt);
   }
 

@@ -5,6 +5,7 @@ import org.joml.Vector3d
 import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import org.firstinspires.ftc.robotcore.internal.system.AppUtil
 import sigmacorns.math.Pose2d
+import sigmacorns.opmode.SigmaOpMode
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.PI
 import kotlin.math.abs
@@ -31,6 +32,9 @@ class AutoAimGTSAM(
     companion object {
         private const val LOG_TAG = "AutoAimGTSAM"
     }
+
+    // Track whether native library loaded successfully
+    private var nativeLibraryLoaded = false
 
     data class LandmarkSpec(
         val position: Vector3d,
@@ -106,14 +110,18 @@ class AutoAimGTSAM(
                 logger.log(LogLevel.INFO, "Loading native library from: $resolvedPath")
                 System.load(resolvedPath)
                 logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (resolved path)")
+                nativeLibraryLoaded = true
             } else {
                 logger.log(LogLevel.INFO, "No hashed library found, using System.loadLibrary")
                 System.loadLibrary("decode_estimator_jni")
                 logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (System.loadLibrary)")
+                nativeLibraryLoaded = true
             }
         } catch (e: UnsatisfiedLinkError) {
             logger.log(LogLevel.ERROR, "Failed to load decode_estimator library: ${e.message}")
             logger.log(LogLevel.ERROR, "JNI load failed: classLoader=${javaClass.classLoader}")
+            logger.log(LogLevel.WARN, "GTSAM fusion will not be available - will use odometry fallback in sim mode")
+            nativeLibraryLoaded = false
         }
     }
 
@@ -177,11 +185,15 @@ class AutoAimGTSAM(
         private set
 
     val hasTarget: Boolean
-        get() = turretTargeting.hasTarget(
-            gtsamInitialized = fusionWorker.isInitialized,
-            lastDetectionTimeMs = lastDetectionTimeMs,
-            predictionTimeoutMs = aimConfig.predictionTimeoutMs
-        )
+        get() {
+            val effectivelyInitialized = fusionWorker.isInitialized ||
+                (SigmaOpMode.SIM && !nativeLibraryLoaded)
+            return turretTargeting.hasTarget(
+                gtsamInitialized = effectivelyInitialized,
+                lastDetectionTimeMs = lastDetectionTimeMs,
+                predictionTimeoutMs = aimConfig.predictionTimeoutMs
+            )
+        }
 
     val usingPrediction: Boolean
         get() = turretTargeting.usingPrediction(
@@ -210,29 +222,40 @@ class AutoAimGTSAM(
         val currentTime = System.currentTimeMillis()
         val dt = if (lastUpdateTimeMs > 0) (currentTime - lastUpdateTimeMs) / 1000.0 else 0.02
 
-        if (!fusionWorker.isInitialized && !fusionWorker.hasPendingInit()) {
-            logger.log(LogLevel.INFO, "Queueing GTSAM initialization")
-            fusionWorker.requestInitialize(robotPose, landmarkPositions)
-        }
+        // Check if we should use odometry fallback (sim mode + no native library)
+        val useOdometryFallback = SigmaOpMode.SIM && !nativeLibraryLoaded
 
-        // Log raw odometry
-        val velocity = if (lastRobotPose != null) {
-            val dPose = robotPose.minus(lastRobotPose!!)
-            Pose2d(dPose.v.div(dt), dPose.rot / dt)
+        if (useOdometryFallback) {
+            // Fallback mode: use odometry directly instead of GTSAM fusion
+            fusedPoseInternal = robotPose
+            fusedPose = robotPose
+            logger.log(LogLevel.DEBUG, "Using odometry fallback (native library not available in sim mode)")
         } else {
-            Pose2d(0.0, 0.0, 0.0)
-        }
-        debugLogger?.logRawOdometry(robotPose, velocity, currentTime / 1000.0)
+            // Normal mode: use GTSAM fusion
+            if (!fusionWorker.isInitialized && !fusionWorker.hasPendingInit()) {
+                logger.log(LogLevel.INFO, "Queueing GTSAM initialization")
+                fusionWorker.requestInitialize(robotPose, landmarkPositions)
+            }
 
-        if (lastRobotPose != null) {
-            processOdometryDelta(robotPose)
+            // Log raw odometry
+            val velocity = if (lastRobotPose != null) {
+                val dPose = robotPose.minus(lastRobotPose!!)
+                Pose2d(dPose.v.div(dt), dPose.rot / dt)
+            } else {
+                Pose2d(0.0, 0.0, 0.0)
+            }
+            debugLogger?.logRawOdometry(robotPose, velocity, currentTime / 1000.0)
+
+            if (lastRobotPose != null) {
+                processOdometryDelta(robotPose)
+            }
+
+            fusionWorker.tick()
+            fusedPoseInternal = fusionWorker.fusedPose
+            fusedPose = fusedPoseInternal
         }
 
         updateVision(visionResult, turretAngle)
-
-        fusionWorker.tick()
-        fusedPoseInternal = fusionWorker.fusedPose
-        fusedPose = fusedPoseInternal
         
         debugLogger?.logFusedPose(fusedPose)
         
@@ -244,8 +267,8 @@ class AutoAimGTSAM(
             estimatorConfig.cameraRoll, estimatorConfig.cameraPitch, estimatorConfig.cameraYaw
         )
         
-        // Log predicted corners for visible tags
-        if (visionResult?.frame?.observations != null) {
+        // Log predicted corners for visible tags (only in GTSAM mode)
+        if (!useOdometryFallback && visionResult?.frame?.observations != null) {
             for (obs in visionResult.frame.observations) {
                 val predicted = fusionWorker.getPredictedCorners(obs.tagId)
                 if (predicted.isNotEmpty()) {
@@ -271,23 +294,34 @@ class AutoAimGTSAM(
         lastTurretAngle = turretAngle
         lastUpdateTimeMs = currentTime
 
-        fusionWorker.pollError()?.let { error ->
-            logger.log(LogLevel.ERROR, error)
+        // Poll for errors only in GTSAM mode
+        if (!useOdometryFallback) {
+            fusionWorker.pollError()?.let { error ->
+                logger.log(LogLevel.ERROR, error)
+            }
         }
 
         if (enableDebugLogging && currentTime - lastDiagLogMs > 1000) {
-            val memorySummary = formatMemoryUsage(fusionWorker.lastMemoryUsage)
-            val diagnosticsSummary = formatDiagnosticsSnapshot(fusionWorker.lastDiagnosticsSnapshot)
-            logger.log(
-                LogLevel.INFO,
-                "Diag: odom=${enqueuedOdomCount.get()} vision=${enqueuedVisionCount.get()} " +
-                    "hasVision=$hasVisionTarget uncertainty=%.2f solveMs=%.3f %s %s".format(
-                        uncertainty,
-                        fusionWorker.lastSolveTimeMs,
-                        memorySummary,
-                        diagnosticsSummary
-                    )
-            )
+            if (useOdometryFallback) {
+                logger.log(
+                    LogLevel.INFO,
+                    "Diag (odometry fallback): odom=N/A vision=${enqueuedVisionCount.get()} " +
+                        "hasVision=$hasVisionTarget uncertainty=%.2f".format(uncertainty)
+                )
+            } else {
+                val memorySummary = formatMemoryUsage(fusionWorker.lastMemoryUsage)
+                val diagnosticsSummary = formatDiagnosticsSnapshot(fusionWorker.lastDiagnosticsSnapshot)
+                logger.log(
+                    LogLevel.INFO,
+                    "Diag: odom=${enqueuedOdomCount.get()} vision=${enqueuedVisionCount.get()} " +
+                        "hasVision=$hasVisionTarget uncertainty=%.2f solveMs=%.3f %s %s".format(
+                            uncertainty,
+                            fusionWorker.lastSolveTimeMs,
+                            memorySummary,
+                            diagnosticsSummary
+                        )
+                )
+            }
             lastDiagLogMs = currentTime
         }
     }
