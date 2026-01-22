@@ -14,6 +14,7 @@ import sigmacorns.sim.viz.ErrorState
 import sigmacorns.sim.viz.ForceState
 import sigmacorns.sim.viz.PathPoint
 import com.qualcomm.robotcore.hardware.Gamepad
+import sigmacorns.sim.viz.GamepadState
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -21,7 +22,7 @@ import kotlin.time.DurationUnit
 
 class DrakeSimIO(urdfPath: String) : SigmaIO {
     val model = DrakeRobotModel(urdfPath)
-    val server = SimServer(8080)
+    val server: Any
     private val ballSim = BallInteractionSimulator(model)
     private var trackingError: ErrorState? = null
     private var trackingTarget: List<PathPoint> = emptyList()
@@ -33,7 +34,22 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     private val SIM_UPDATE_TIME = 30.milliseconds
 
     init {
-        server.start()
+        // Try to use RealSimServer if available (test environment), otherwise use stub
+        server = try {
+            val realServerClass = Class.forName("sigmacorns.sim.viz.RealSimServer")
+            val constructor = realServerClass.getConstructor(Int::class.java)
+            val instance = constructor.newInstance(8080)
+            val startMethod = realServerClass.getMethod("start")
+            startMethod.invoke(instance)
+            println("DrakeSimIO: Using RealSimServer (test environment)")
+            instance
+        } catch (e: ClassNotFoundException) {
+            println("DrakeSimIO: RealSimServer not available, using stub SimServer (robot deployment)")
+            val stubServer = SimServer(8080)
+            stubServer.start()
+            stubServer
+        }
+
         // Spawn initial field balls at artifact pickup locations
         // Based on DECODE field positions (converted to meters from Pedro inches)
         spawnInitialBalls()
@@ -150,7 +166,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
             balls = allBalls,
             mpcTarget = trackingTarget
         )
-        server.broadcast(vizState)
+        broadcastState(vizState)
 
         // Real-time sync: sleep only for remaining time
         val elapsedNanos = System.nanoTime() - startTime
@@ -172,9 +188,36 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         this.gamepad2 = gp2
     }
 
+    private fun getGamepad1State(): GamepadState {
+        return try {
+            val method = server.javaClass.getMethod("getGamepad1")
+            method.invoke(server) as GamepadState
+        } catch (e: Exception) {
+            GamepadState()
+        }
+    }
+
+    private fun getGamepad2State(): GamepadState {
+        return try {
+            val method = server.javaClass.getMethod("getGamepad2")
+            method.invoke(server) as GamepadState
+        } catch (e: Exception) {
+            GamepadState()
+        }
+    }
+
+    private fun broadcastState(vizState: SimState) {
+        try {
+            val method = server.javaClass.getMethod("broadcast", SimState::class.java)
+            method.invoke(server, vizState)
+        } catch (e: Exception) {
+            // Silently fail on stub server
+        }
+    }
+
     private fun updateGamepadsFromServer() {
         gamepad1?.let { gp ->
-            val state = server.getGamepad1()
+            val state = getGamepad1State()
             gp.left_stick_x = state.left_stick_x.toFloat()
             gp.left_stick_y = state.left_stick_y.toFloat()
             gp.right_stick_x = state.right_stick_x.toFloat()
@@ -198,7 +241,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         }
 
         gamepad2?.let { gp ->
-            val state = server.getGamepad2()
+            val state = getGamepad2State()
             gp.left_stick_x = state.left_stick_x.toFloat()
             gp.left_stick_y = state.left_stick_y.toFloat()
             gp.right_stick_x = state.right_stick_x.toFloat()
@@ -241,7 +284,12 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     fun close() {
         model.destroy()
-        server.stop()
+        try {
+            val method = server.javaClass.getMethod("stop")
+            method.invoke(server)
+        } catch (e: Exception) {
+            // Silently fail on stub server
+        }
     }
 
     fun setTrackingError(error: ErrorState?) {
@@ -249,7 +297,12 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     }
 
     fun setChoreoPath(path: List<PathPoint>) {
-        server.setChoreoPath(path)
+        try {
+            val method = server.javaClass.getMethod("setChoreoPath", List::class.java)
+            method.invoke(server, path)
+        } catch (e: Exception) {
+            // Silently fail on stub server
+        }
     }
 
     fun setTrackingTarget(path: List<PathPoint>) {

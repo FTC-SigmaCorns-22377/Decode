@@ -1,7 +1,7 @@
 package sigmacorns.sim
 
 import org.junit.jupiter.api.Test
-import sigmacorns.sim.viz.SimServer
+import sigmacorns.sim.viz.RealSimServer
 import sigmacorns.sim.viz.SimState
 import sigmacorns.sim.viz.BaseState
 import sigmacorns.sim.viz.TelemetryState
@@ -71,7 +71,7 @@ class DrakeSimTest {
 
         val robot = DrakeRobotModel(urdfFile.absolutePath)
         val io = SimIO()
-        val server = SimServer(8080)
+        val server = RealSimServer(8080)
         server.start()
         
         println("Simulation running. Open http://localhost:8080")

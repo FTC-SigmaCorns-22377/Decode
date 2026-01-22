@@ -128,6 +128,7 @@ public:
     DrakeSim(const std::string& urdf_path);
     ~DrakeSim();
 
+    void SetMecanumParameters(const std::vector<double>& params);
     void Step(double dt, const std::vector<double>& inputs);
     std::vector<double> GetState();
     void SpawnBall(double x, double y, double z);
