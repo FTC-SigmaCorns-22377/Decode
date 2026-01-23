@@ -59,6 +59,10 @@ class Turret(
     private val saturationHysteresis = 0.05  // rad - only switch if error improves by this much
 
     fun update(dt: Duration) {
+        // When sim time hasn't advanced (dt = 0), skip the update entirely
+        // to prevent overwriting valid motor commands with stale/NaN outputs.
+        if (dt.toDouble(DurationUnit.SECONDS) <= 0.0) return
+
         val currentAngle = range.tickToPos(io.turretPosition())
         pos = currentAngle
 

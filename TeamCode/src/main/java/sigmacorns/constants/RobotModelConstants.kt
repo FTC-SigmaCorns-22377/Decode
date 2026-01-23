@@ -37,26 +37,34 @@ val drivetrainParameters = MecanumParameters(
     0.2,
     0.2,
     0.048,
-    15.0,
-    0.5
+    20.0,
+    1.0,
+    0.4
 )
 
-val flywheelGearRatio = 13.7
+// Gear ratios for all robot mechanisms
+val flywheelGearRatio = 1.0
+val spindexerGearRatio = (1.0 + 46.0/17.0) * (1.0 + 46.0/11.0)
+val turretGearRatio = (1.0 + 46.0/11.0) * (76.0/19.0)
+val intakeHoodGearRatio = 10.0
+
+// Motor configurations
 val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio,bareMotorStallTorque*flywheelGearRatio)
-val spindexerGearRatio = 10.0
-val spinMotor = LinearDcMotor(bareMotorTopSpeed/spindexerGearRatio,bareMotorStallTorque*spindexerGearRatio)
+val spindexerMotor = LinearDcMotor(bareMotorTopSpeed/spindexerGearRatio,bareMotorStallTorque*spindexerGearRatio)
+val turretMotor = LinearDcMotor(bareMotorTopSpeed/turretGearRatio,bareMotorStallTorque*turretGearRatio)
+val spinMotor = LinearDcMotor(bareMotorTopSpeed/intakeHoodGearRatio,bareMotorStallTorque*intakeHoodGearRatio)
 
 /**
  * Parameters of the dual-motor flywheel used in the simulator
  */
 val flywheelParameters = FlywheelParameters(
     flywheelMotor,
-    0.025,
+    0.004,
     0.0001,
 )
 
 val spindexerParameters = SpindexerParameters(
-    spinMotor,
+    spindexerMotor,
     6.0,
     7.0
 )

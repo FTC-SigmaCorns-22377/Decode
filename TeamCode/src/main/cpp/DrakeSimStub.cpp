@@ -6,6 +6,8 @@ DrakeSim::~DrakeSim() {}
 
 void DrakeSim::SetMecanumParameters(const std::vector<double>& /* params */) {}
 
+void DrakeSim::SetMotorParameters(const std::vector<double>& /* params */) {}
+
 void DrakeSim::Step(double /* dt */, const std::vector<double>& /* inputs */) {}
 
 std::vector<double> DrakeSim::GetState() {

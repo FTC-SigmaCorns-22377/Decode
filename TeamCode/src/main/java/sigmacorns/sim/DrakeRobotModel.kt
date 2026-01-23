@@ -6,6 +6,7 @@ import sigmacorns.math.Pose2d
 import org.joml.Vector3d
 import sigmacorns.io.SigmaIO
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.constants.*
 
 class DrakeRobotModel(urdfPath: String) {
     private var simPtr: Long = 0
@@ -14,6 +15,20 @@ class DrakeRobotModel(urdfPath: String) {
         simPtr = DrakeNative.createSim(urdfPath)
         // Set mecanum parameters from RobotModelConstants
         DrakeNative.setMecanumParameters(simPtr, drivetrainParameters.toArray())
+        // Set motor parameters from RobotModelConstants
+        // params: [bare_motor_free_speed, bare_motor_stall_torque,
+        //          drive_gear_ratio, spindexer_gear_ratio, turret_gear_ratio,
+        //          intake_hood_gear_ratio, flywheel_gear_ratio]
+        val motorParams = doubleArrayOf(
+            bareMotorTopSpeed,
+            bareMotorStallTorque,
+            driveGearRatio,
+            spindexerGearRatio,
+            turretGearRatio,
+            intakeHoodGearRatio,
+            flywheelGearRatio
+        )
+        DrakeNative.setMotorParameters(simPtr, motorParams)
     }
 
     // Mirroring RobotModel properties for compatibility

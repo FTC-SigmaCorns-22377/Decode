@@ -19,7 +19,7 @@ class PIDController(
 
         // Derivative on measurement (not error) to prevent derivative kick on setpoint changes
         // This is critical for field-relative control where setpoint changes continuously
-        val dMeasurement = if(lastMeasurement!=null) (measured_state - lastMeasurement!!)/t else 0.0
+        val dMeasurement = if(lastMeasurement!=null && t > 0.0) (measured_state - lastMeasurement!!)/t else 0.0
 
         lastMeasurement = measured_state
 

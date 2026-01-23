@@ -19,8 +19,14 @@ public:
     ~DrakeSim();
 
     // Set mecanum drivetrain parameters from RobotModelConstants
-    // params: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia]
+    // params: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia, mu]
     void SetMecanumParameters(const std::vector<double>& params);
+
+    // Set motor parameters for all actuators
+    // params: [bare_motor_free_speed, bare_motor_stall_torque,
+    //          drive_gear_ratio, spindexer_gear_ratio, turret_gear_ratio,
+    //          intake_hood_gear_ratio, flywheel_gear_ratio]
+    void SetMotorParameters(const std::vector<double>& params);
 
     // inputs: [fl, bl, br, fr, intake, spindexer, turret, flywheel, hood] (power -1..1)
     void Step(double dt, const std::vector<double>& inputs);
@@ -75,6 +81,7 @@ private:
         double wheel_radius = 0.048;
         double mass = 15.0;
         double rot_inertia = 0.5;
+        double mu = 1.0;  // Wheel-ground friction coefficient
         MotorConfig drive_motor;
     };
     struct RobotState {
@@ -117,6 +124,24 @@ private:
     std::string urdf_path_;
     std::array<std::array<double, 3>, 4> last_wheel_forces_W_{};
 
+    // Motor configurations from RobotModelConstants
+    struct MotorConfigs {
+        double bare_motor_free_speed = 617.84;
+        double bare_motor_stall_torque = 0.187;
+        double drive_gear_ratio = 19.2;
+        double spindexer_gear_ratio = 19.2;
+        double turret_gear_ratio = 20.7;
+        double intake_hood_gear_ratio = 10.0;
+        double flywheel_gear_ratio = 13.7;
+    };
+    MotorConfigs motor_configs_;
+
+    // Performance tracking
+    double total_sim_time_ = 0.0;
+    double total_wall_time_ = 0.0;
+    int step_count_ = 0;
+    double last_log_time_ = 0.0;
+
     double MotorTorque(const MotorConfig& motor, double power, double omega) const;
     void BuildSimulator(const RobotState* state);
     RobotState CaptureRobotState() const;
@@ -129,6 +154,7 @@ public:
     ~DrakeSim();
 
     void SetMecanumParameters(const std::vector<double>& params);
+    void SetMotorParameters(const std::vector<double>& params);
     void Step(double dt, const std::vector<double>& inputs);
     std::vector<double> GetState();
     void SpawnBall(double x, double y, double z);

@@ -132,11 +132,11 @@ void DrakeSim::SetPosition(double x, double y, double yaw) {
 }
 
 void DrakeSim::SetMecanumParameters(const std::vector<double>& params) {
-  if (params.size() != 7) {
+  if (params.size() < 7) {
     return;
   }
 
-  // params: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia]
+  // params: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia, mu]
   mecanum_params_.drive_motor.free_speed = params[0];
   mecanum_params_.drive_motor.stall_torque = params[1];
   mecanum_params_.lx = params[2];
@@ -144,4 +144,24 @@ void DrakeSim::SetMecanumParameters(const std::vector<double>& params) {
   mecanum_params_.wheel_radius = params[4];
   mecanum_params_.mass = params[5];
   mecanum_params_.rot_inertia = params[6];
+  if (params.size() >= 8) {
+    mecanum_params_.mu = params[7];
+  }
+}
+
+void DrakeSim::SetMotorParameters(const std::vector<double>& params) {
+  if (params.size() < 7) {
+    return;
+  }
+
+  // params: [bare_motor_free_speed, bare_motor_stall_torque,
+  //          drive_gear_ratio, spindexer_gear_ratio, turret_gear_ratio,
+  //          intake_hood_gear_ratio, flywheel_gear_ratio]
+  motor_configs_.bare_motor_free_speed = params[0];
+  motor_configs_.bare_motor_stall_torque = params[1];
+  motor_configs_.drive_gear_ratio = params[2];
+  motor_configs_.spindexer_gear_ratio = params[3];
+  motor_configs_.turret_gear_ratio = params[4];
+  motor_configs_.intake_hood_gear_ratio = params[5];
+  motor_configs_.flywheel_gear_ratio = params[6];
 }

@@ -38,6 +38,11 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     private var running = true
     private val drakeThread: Thread
     private val vizThread: Thread
+
+    // Step synchronization: update() requests a step, Drake thread executes it
+    private val stepLock = Object()
+    @Volatile private var stepRequested = false
+    @Volatile private var stepComplete = false
     @Volatile
     private var currentDriveFL = 0.0
     @Volatile
@@ -78,12 +83,19 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         // Based on DECODE field positions (converted to meters from Pedro inches)
         spawnInitialBalls()
 
-        // Start Drake simulation thread
+        // Start Drake simulation thread (step-on-demand)
         drakeThread = Thread {
             println("DrakeSimIO: Drake simulation thread started")
             while (running) {
                 try {
-                    val startTime = System.nanoTime()
+                    // Wait for update() to request a step
+                    synchronized(stepLock) {
+                        while (!stepRequested && running) {
+                            (stepLock as Object).wait()
+                        }
+                        if (!running) break
+                        stepRequested = false
+                    }
 
                     // Update gamepads from server
                     updateGamepadsFromServer()
@@ -113,12 +125,8 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                         override var breakPower: Double = 0.0
                         override var transfer: Double = snapshotTransfer
 
-                        // Cached state to avoid reentrant locks
-                        private var cachedPos: Pose2d? = null
-                        private var cachedVel: Pose2d? = null
-
-                        override fun position(): Pose2d = cachedPos ?: Pose2d(0.0, 0.0, 0.0)
-                        override fun velocity(): Pose2d = cachedVel ?: Pose2d(0.0, 0.0, 0.0)
+                        override fun position(): Pose2d = Pose2d(0.0, 0.0, 0.0)
+                        override fun velocity(): Pose2d = Pose2d(0.0, 0.0, 0.0)
                         override fun flywheelVelocity(): Double = 0.0
                         override fun turretPosition(): Double = 0.0
                         override fun spindexerPosition(): Double = 0.0
@@ -140,8 +148,6 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                                 println("WARNING: Invalid motor commands detected, skipping step")
                                 println("  FL=$snapshotFL BL=$snapshotBL FR=$snapshotFR BR=$snapshotBR")
                             } else {
-                                // Cache current state for tmpIO callbacks if needed
-                                // (Though advanceSim shouldn't need to call these methods)
                                 model.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS), tmpIO)
                                 t += SIM_UPDATE_TIME
 
@@ -162,16 +168,12 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                     } catch (e: Exception) {
                         System.err.println("ERROR in Drake simulation step: ${e.message}")
                         e.printStackTrace()
-                        // Continue running despite errors to allow debugging
                     }
 
-                    // Real-time sync
-                    val elapsedNanos = System.nanoTime() - startTime
-                    val elapsedMillis = elapsedNanos / 1_000_000
-                    val sleepTime = SIM_UPDATE_TIME.inWholeMilliseconds - elapsedMillis
-
-                    if (sleepTime > 0) {
-                        Thread.sleep(sleepTime)
+                    // Signal step completion
+                    synchronized(stepLock) {
+                        stepComplete = true
+                        (stepLock as Object).notifyAll()
                     }
                 } catch (e: InterruptedException) {
                     break
@@ -338,9 +340,23 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     }
 
     override fun update() {
-        // With threaded simulation, update() is now a no-op.
-        // The Drake thread and visualization thread handle all updates continuously.
-        // Motor commands are updated via property setters which write to volatile fields.
+        // Request a sim step and wait for completion.
+        // This synchronizes the control loop with the Drake simulation:
+        // both run in separate threads but advance together one timestep at a time.
+        synchronized(stepLock) {
+            stepComplete = false
+            stepRequested = true
+            (stepLock as Object).notifyAll()
+
+            while (!stepComplete) {
+                try {
+                    (stepLock as Object).wait()
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
+            }
+        }
     }
 
     fun setGamepads(gp1: Gamepad, gp2: Gamepad) {
@@ -445,6 +461,11 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     fun close() {
         println("DrakeSimIO: Shutting down...")
         running = false
+
+        // Wake up Drake thread if it's waiting for a step request
+        synchronized(stepLock) {
+            (stepLock as Object).notifyAll()
+        }
 
         // Wait for threads to finish
         try {

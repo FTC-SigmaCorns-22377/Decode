@@ -9,6 +9,7 @@ package sigmacorns.sim
  * @param wheelRadius wheel radius (m)
  * @param weight weight of the robot (kg)
  * @param rotInertia rotational inertia of the robot about the wheelbase center (kg m^2)
+ * @param mu wheel-ground friction coefficient
  */
 class MecanumParameters(
     var motor: LinearDcMotor,
@@ -17,6 +18,7 @@ class MecanumParameters(
     var wheelRadius: Double,
     var weight: Double,
     var rotInertia: Double,
+    var mu: Double = 1.0,
 ) {
-    fun toArray(): DoubleArray = doubleArrayOf(motor.freeSpeed, motor.stallTorque, lx,ly,wheelRadius,weight,rotInertia)
+    fun toArray(): DoubleArray = doubleArrayOf(motor.freeSpeed, motor.stallTorque, lx,ly,wheelRadius,weight,rotInertia,mu)
 }

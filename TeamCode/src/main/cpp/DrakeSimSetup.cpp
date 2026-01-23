@@ -100,23 +100,19 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
                                    "ramp_red_vis", Vector4<double>(1, 0, 0, 1));
   }
 
-  // Motor configs derived from RobotModelConstants.
-  const double bare_motor_free_speed = 617.84;
-  const double bare_motor_stall_torque = 0.187;
-  const MotorConfig drive_motor{bare_motor_free_speed / 19.2,
-                                bare_motor_stall_torque * 19.2, 12.0};
-  // Spindexer gear ratio: (1+46/17)*(1+46/11) ≈ 19.2
-  const double spindexer_gear_ratio = (1.0 + 46.0/17.0) * (1.0 + 46.0/11.0);
-  const MotorConfig spindexer_motor{bare_motor_free_speed / spindexer_gear_ratio,
-                                    bare_motor_stall_torque * spindexer_gear_ratio, 12.0};
-  // Turret gear ratio: (1+46/11)*(76/19) ≈ 20.7
-  const double turret_gear_ratio = (1.0 + 46.0/11.0) * (76.0/19.0);
-  const MotorConfig turret_motor{bare_motor_free_speed / turret_gear_ratio,
-                                 bare_motor_stall_torque * turret_gear_ratio, 12.0};
-  const MotorConfig spin_motor{bare_motor_free_speed / 10.0,
-                               bare_motor_stall_torque * 10.0, 12.0};
-  const MotorConfig flywheel_motor{bare_motor_free_speed / 13.7,
-                                   bare_motor_stall_torque * 13.7, 12.0};
+  // Motor configs from RobotModelConstants (passed via SetMotorParameters)
+  const double bare_motor_free_speed = motor_configs_.bare_motor_free_speed;
+  const double bare_motor_stall_torque = motor_configs_.bare_motor_stall_torque;
+  const MotorConfig drive_motor{bare_motor_free_speed / motor_configs_.drive_gear_ratio,
+                                bare_motor_stall_torque * motor_configs_.drive_gear_ratio, 12.0};
+  const MotorConfig spindexer_motor{bare_motor_free_speed / motor_configs_.spindexer_gear_ratio,
+                                    bare_motor_stall_torque * motor_configs_.spindexer_gear_ratio, 12.0};
+  const MotorConfig turret_motor{bare_motor_free_speed / motor_configs_.turret_gear_ratio,
+                                 bare_motor_stall_torque * motor_configs_.turret_gear_ratio, 12.0};
+  const MotorConfig spin_motor{bare_motor_free_speed / motor_configs_.intake_hood_gear_ratio,
+                               bare_motor_stall_torque * motor_configs_.intake_hood_gear_ratio, 12.0};
+  const MotorConfig flywheel_motor{bare_motor_free_speed / motor_configs_.flywheel_gear_ratio,
+                                   bare_motor_stall_torque * motor_configs_.flywheel_gear_ratio, 12.0};
 
   mecanum_params_.lx = 0.2;
   mecanum_params_.ly = 0.2;
@@ -177,12 +173,6 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
               CoulombFriction<double>(0.7, 0.6));
   add_contact("flywheel_link", Cylinder(0.04, 0.02), "flywheel_contact",
               CoulombFriction<double>(1.3, 1.1));
-  add_contact("hood_seg1", Box(0.01, 0.08, 0.04), "hood_seg1_contact",
-              CoulombFriction<double>(0.4, 0.3));
-  add_contact("hood_seg2", Box(0.01, 0.08, 0.04), "hood_seg2_contact",
-              CoulombFriction<double>(0.4, 0.3));
-  add_contact("hood_seg3", Box(0.01, 0.08, 0.04), "hood_seg3_contact",
-              CoulombFriction<double>(0.4, 0.3));
   add_contact("transfer_ramp", Box(0.12, 0.08, 0.02), "transfer_contact",
               CoulombFriction<double>(0.6, 0.5));
 
@@ -279,6 +269,12 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
     const auto &base_body = plant_->get_body(base_body_index_);
     plant_->SetFreeBodyPose(&plant_context, base_body,
                             RigidTransformd(Eigen::Vector3d(0, 0, base_z)));
+
+    // Initialize hood pitch to 45 degrees
+    const auto &hood_joint = plant_->GetJointByName("hood_joint");
+    Eigen::VectorXd q(1);
+    q[0] = M_PI / 4.0;  // 45 degrees
+    hood_joint.SetPositions(&plant_context, q);
   }
 
   const auto &base_body = plant_->get_body(base_body_index_);

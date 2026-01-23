@@ -251,8 +251,6 @@ function applyDeadzone(value, deadzone = GAMEPAD_DEADZONE) {
 function readGamepadState(gamepad) {
     if (!gamepad) return null;
 
-    console.log(gamepad)
-
     return {
         left_stick_x: applyDeadzone(gamepad.axes[0] || 0),
         left_stick_y: applyDeadzone(gamepad.axes[1] || 0),
@@ -399,7 +397,7 @@ function createChart(id, datasets) {
     });
 }
 const chartWheels = createChart('chart-wheels', [{label:'FL',color:'red'},{label:'FR',color:'green'},{label:'BL',color:'blue'},{label:'BR',color:'yellow'}]);
-const chartMechs = createChart('chart-mechanisms', [{label:'Flywheel',color:'cyan'},{label:'Turret',color:'magenta'}]);
+const chartMechs = createChart('chart-mechanisms', [{label:'Flywheel',color:'cyan'},{label:'Turret',color:'magenta'},{label:'Spindexer Pwr',color:'orange'},{label:'Spindexer Ang',color:'lime'}]);
 const chartPos = createChart('chart-pos', [{label:'X',color:'red'},{label:'Y',color:'green'},{label:'Heading',color:'blue'}]);
 const chartError = createChart('chart-error', [
     {label:'Err X',color:'red'},
@@ -428,7 +426,7 @@ function syncCharts(currentIndex) {
     };
 
     update(chartWheels, [s=>s.telemetry.fl, s=>s.telemetry.fr, s=>s.telemetry.bl, s=>s.telemetry.br]);
-    update(chartMechs, [s=>s.telemetry.flywheel, s=>s.telemetry.turret]);
+    update(chartMechs, [s=>s.telemetry.flywheel, s=>s.telemetry.turret, s=>s.telemetry.spindexerPower, s=>s.telemetry.spindexerAngle]);
     update(chartPos, [s=>s.base.x, s=>s.base.y, s=>s.base.yaw]);
     update(chartError, [
         s=>s.error ? s.error.x : null,

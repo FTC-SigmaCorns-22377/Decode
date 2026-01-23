@@ -13,16 +13,18 @@ data class SpindexerBall(val color: Balls)
 /**
  * Simulates ball interaction with intake, spindexer, and shooter.
  * Infers all state from IO values without depending on SpindexerLogic.
+ *
+ * Slots are body-relative: slots[i] always refers to the same physical slot
+ * on the spindexer, regardless of rotation. The current spindexer angle is used
+ * to determine which slot is at the intake or shoot position.
  */
 class BallInteractionSimulator(private val model: DrakeRobotModel) {
 
-    // Spindexer slots (3 slots, index 0 faces intake direction)
+    // Spindexer slots (3 slots, body-relative: index always refers to same physical slot)
     private val slots: Array<SpindexerBall?> = arrayOfNulls(3)
 
-    // Track cumulative spindexer rotation for slot shifting
-    private var lastSpindexerAngle = 0.0
-    private var accumulatedRotation = 0.0
-    private var initialized = false
+    // Cached spindexer angle for color sensor queries
+    private var currentSpindexerAngle = 0.0
 
     /**
      * Main update function called each simulation step.
@@ -38,91 +40,81 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
         flywheelOmega: Double,
         dt: Duration
     ) {
-        // Initialize tracking on first call
-        if (!initialized) {
-            lastSpindexerAngle = spindexerAngle
-            initialized = true
+        currentSpindexerAngle = spindexerAngle
+
+        // 1. Check for intake capture - find which slot is at the intake position
+        val (intakeSlot, intakeError) = getSlotNearAngle(spindexerAngle, INTAKE_ANGLE)
+        if (abs(intakePower) > INTAKE_POWER_THRESHOLD &&
+            abs(intakeError) < SLOT_ALIGNMENT_TOLERANCE &&
+            slots[intakeSlot] == null) {
+            checkIntakeCapture(robotPose, intakeSlot)
         }
 
-        // 1. Track spindexer rotation and shift slots when crossing 120 degree boundaries
-        updateSlotRotation(spindexerAngle)
+        // 2. Check for shooting - find which slot is at the shoot position
+        val (shootSlot, shootError) = getSlotNearAngle(spindexerAngle, SHOOT_ANGLE)
+        if (transferPower > TRANSFER_POWER_THRESHOLD &&
+            abs(shootError) < SLOT_ALIGNMENT_TOLERANCE &&
+            slots[shootSlot] != null) {
+            shootBall(robotPose, robotVelocity, turretYaw, hoodPitch, flywheelOmega, shootSlot)
+        }
+    }
 
-        // 2. Check for intake capture
-        if (abs(intakePower) > INTAKE_POWER_THRESHOLD && slots[0] == null) {
-            if (isInIntakeMode(spindexerAngle)) {
-                checkIntakeCapture(robotPose)
+    /**
+     * Finds which slot is closest to a target angle in the robot frame.
+     * Returns the slot index and the alignment error (how far the slot is from the target).
+     */
+    private fun getSlotNearAngle(spindexerAngle: Double, targetAngle: Double): Pair<Int, Double> {
+        var bestSlot = 0
+        var bestError = Double.MAX_VALUE
+        for (i in 0 until 3) {
+            val slotRobotAngle = spindexerAngle + i * SPINDEXER_SLOT_ANGLE
+            var error = (slotRobotAngle - targetAngle) % (2 * PI)
+            if (error > PI) error -= 2 * PI
+            if (error < -PI) error += 2 * PI
+            if (abs(error) < abs(bestError)) {
+                bestError = error
+                bestSlot = i
             }
         }
-
-        // 3. Check for shooting
-        if (transferPower > TRANSFER_POWER_THRESHOLD && slots[0] != null) {
-            if (isInShootingMode(spindexerAngle)) {
-                shootBall(robotPose, robotVelocity, turretYaw, hoodPitch, flywheelOmega)
-            }
-        }
+        return Pair(bestSlot, bestError)
     }
 
-    private fun updateSlotRotation(currentAngle: Double) {
-        val delta = currentAngle - lastSpindexerAngle
-        accumulatedRotation += delta
-        lastSpindexerAngle = currentAngle
-
-        // When accumulated rotation crosses 120 degrees (or -120 degrees), shift slots
-        while (accumulatedRotation >= SPINDEXER_SLOT_ANGLE) {
-            accumulatedRotation -= SPINDEXER_SLOT_ANGLE
-            // Clockwise: slots shift 2->1->0->2
-            val temp = slots[0]
-            slots[0] = slots[2]
-            slots[2] = slots[1]
-            slots[1] = temp
-        }
-        while (accumulatedRotation <= -SPINDEXER_SLOT_ANGLE) {
-            accumulatedRotation += SPINDEXER_SLOT_ANGLE
-            // Counter-clockwise: slots shift 0->1->2->0
-            val temp = slots[0]
-            slots[0] = slots[1]
-            slots[1] = slots[2]
-            slots[2] = temp
-        }
-    }
-
-    private fun isInIntakeMode(angle: Double): Boolean {
-        val normalized = ((angle % (2 * PI)) + (2 * PI)) % (2 * PI)
-        val cycleAngle = normalized % SPINDEXER_SLOT_ANGLE
-        return cycleAngle < SLOT_ALIGNMENT_TOLERANCE ||
-               cycleAngle > SPINDEXER_SLOT_ANGLE - SLOT_ALIGNMENT_TOLERANCE
-    }
-
-    private fun isInShootingMode(angle: Double): Boolean {
-        val normalized = ((angle % (2 * PI)) + (2 * PI)) % (2 * PI)
-        val cycleAngle = normalized % SPINDEXER_SLOT_ANGLE
-        val shootOffset = MODE_CHANGE_ANGLE  // 60 degrees
-        return abs(cycleAngle - shootOffset) < SLOT_ALIGNMENT_TOLERANCE
-    }
-
-    private fun checkIntakeCapture(robotPose: Pose2d) {
-        // Transform intake position to world frame
-        val intakeWorld = transformToWorld(robotPose, INTAKE_X_OFFSET, 0.0, INTAKE_Z_OFFSET)
-
-        // Find closest ball within capture range
+    private fun checkIntakeCapture(robotPose: Pose2d, slotIndex: Int) {
+        // Find closest ball within rectangular capture zone
         var closestIndex = -1
-        var closestDist = INTAKE_CAPTURE_DISTANCE
+        var closestDist = Double.MAX_VALUE
+
+        val cos = cos(robotPose.rot)
+        val sin = sin(robotPose.rot)
 
         model.ballPositions.forEachIndexed { i, pos ->
-            val dx = pos.x - intakeWorld.x
-            val dy = pos.y - intakeWorld.y
-            val dist = sqrt(dx * dx + dy * dy)
-            // Check ball is at reasonable height (ground level)
-            if (dist < closestDist && pos.z < BALL_RADIUS * 3) {
-                closestDist = dist
-                closestIndex = i
+            // Transform ball position to robot-relative frame
+            val worldDx = pos.x - robotPose.v.x
+            val worldDy = pos.y - robotPose.v.y
+            val robotRelativeX = worldDx * cos + worldDy * sin
+            val robotRelativeY = -worldDx * sin + worldDy * cos
+
+            // Calculate deviation from intake position
+            val xDeviation = abs(robotRelativeX - INTAKE_X_OFFSET)
+            val yDeviation = abs(robotRelativeY)
+
+            // Check if ball is within rectangular intake zone and at reasonable height
+            if (xDeviation < INTAKE_X_TOLERANCE &&
+                yDeviation < INTAKE_Y_TOLERANCE &&
+                pos.z < BALL_RADIUS * 3) {
+                // Use distance for prioritization when multiple balls are in zone
+                val dist = sqrt(xDeviation * xDeviation + yDeviation * yDeviation)
+                if (dist < closestDist) {
+                    closestDist = dist
+                    closestIndex = i
+                }
             }
         }
 
         if (closestIndex >= 0) {
             // Capture ball: store color, remove from Drake
             val color = model.ballColors.getOrElse(closestIndex) { Balls.Green }
-            slots[0] = SpindexerBall(color)
+            slots[slotIndex] = SpindexerBall(color)
             model.removeBall(closestIndex)
         }
     }
@@ -132,14 +124,15 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
         robotVelocity: Pose2d,
         turretYaw: Double,
         hoodPitch: Double,
-        flywheelOmega: Double
+        flywheelOmega: Double,
+        slotIndex: Int
     ) {
-        val ball = slots[0] ?: return
-        slots[0] = null
-
         // Calculate exit speed from flywheel
-        val exitSpeed = abs(flywheelOmega) * FLYWHEEL_RADIUS
+        val exitSpeed = abs(flywheelOmega) * FLYWHEEL_RADIUS * FLYWHEEL_EFFICIENCY
         if (exitSpeed < 0.5) return  // Flywheel not spinning fast enough
+
+        val ball = slots[slotIndex] ?: return
+        slots[slotIndex] = null
 
         // World yaw = robot yaw + turret yaw
         val worldYaw = robotPose.rot + turretYaw
@@ -181,9 +174,15 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
         )
     }
 
-    // Color sensor API - always reads slot[0] if ball present
-    fun colorSensorDetectsBall(): Boolean = slots[0] != null
-    fun colorSensorGetBallColor(): Balls? = slots[0]?.color
+    // Color sensor API - reads whichever slot is closest to the intake position
+    fun colorSensorDetectsBall(): Boolean {
+        val (slot, _) = getSlotNearAngle(currentSpindexerAngle, INTAKE_ANGLE)
+        return slots[slot] != null
+    }
+    fun colorSensorGetBallColor(): Balls? {
+        val (slot, _) = getSlotNearAngle(currentSpindexerAngle, INTAKE_ANGLE)
+        return slots[slot]?.color
+    }
 
     // For visualization: get world positions of balls in spindexer
     fun getSpindexerBallPositions(robotPose: Pose2d, spindexerAngle: Double): List<Pair<Vector3d, Balls>> {
@@ -213,16 +212,20 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
     fun getSlots(): Array<SpindexerBall?> = slots.copyOf()
 
     companion object {
-        private const val INTAKE_X_OFFSET = 0.25
-        private const val INTAKE_Z_OFFSET = 0.05
-        private const val INTAKE_CAPTURE_DISTANCE = 0.08
+        private const val INTAKE_X_OFFSET = 0.23
+        private const val INTAKE_X_TOLERANCE = 0.04 // Forward tolerance
+        private const val INTAKE_Y_TOLERANCE = 0.1  // Left/right tolerance
         private const val INTAKE_POWER_THRESHOLD = 0.1
         private const val SPINDEXER_SLOT_ANGLE = 2 * PI / 3
-        private const val MODE_CHANGE_ANGLE = PI / 3
         private const val SLOT_ALIGNMENT_TOLERANCE = 0.15
         private const val TRANSFER_POWER_THRESHOLD = 0.5
-        private const val FLYWHEEL_RADIUS = 0.04
+        private const val FLYWHEEL_RADIUS = 0.048
         private const val BALL_RADIUS = 0.05
         private const val SHOT_SPAWN_OFFSET = 0.15
+        private const val FLYWHEEL_EFFICIENCY = 0.24
+
+        // Fixed robot-frame angles for intake and shoot positions
+        private const val INTAKE_ANGLE = 0.0
+        private const val SHOOT_ANGLE = PI / 3  // 60 degrees from intake
     }
 }

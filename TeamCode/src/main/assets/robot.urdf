@@ -17,8 +17,8 @@
       <material name="gray"/>
     </visual>
     <collision>
-      <origin xyz="0 -0.1575875 0.0508" rpy="0 0 1.57079632679"/>
-      <geometry><box size="0.39557406 0.4367 0.1016"/></geometry>
+      <origin xyz="0 0 0.0508" rpy="0 0 1.57079632679"/>
+      <geometry><box size="0.4367 0.39557406 0.1016"/></geometry>
     </collision>
     <inertial>
       <mass value="15.0"/>
@@ -115,10 +115,10 @@
 
   <!-- Intake Roller -->
   <link name="intake_link">
-    <!-- <visual> -->
-    <!--   <geometry><cylinder length="0.3" radius="0.03"/></geometry> -->
-    <!--   <material name="green"/> -->
-    <!-- </visual> -->
+    <visual>
+      <geometry><cylinder length="0.2" radius="0.03"/></geometry>
+      <material name="green"/>
+    </visual>
     <!-- <collision> -->
     <!--   <geometry><cylinder length="0.3" radius="0.03"/></geometry> -->
     <!-- </collision> -->
@@ -130,7 +130,7 @@
   <joint name="intake_joint" type="continuous">
     <parent link="base_link"/>
     <child link="intake_link"/>
-    <origin xyz="0.25 0 1" rpy="0 1.5708 0"/>
+    <origin xyz="0.2 0 0.128" rpy="0 1.5708 1.5708"/>
     <axis xyz="0 0 1"/>
   </joint>
 
@@ -153,53 +153,15 @@
     <child link="spindexer_base_link"/>
     <origin xyz="0 0 0.03" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
+    <dynamics damping="0.1"/>
   </joint>
-  
-  <!-- Spindexer Dividers (Fixed to base link) -->
-  <!-- Divider 1 -->
-  <link name="div1">
-    <collision><geometry><box size="0.15 0.01 0.05"/></geometry></collision>
-    <visual><geometry><box size="0.15 0.01 0.05"/></geometry><material name="blue"/></visual>
-    <inertial><mass value="0.1"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
-  </link>
-  <joint name="div1_joint" type="fixed">
-    <parent link="spindexer_base_link"/>
-    <child link="div1"/>
-    <origin xyz="0.075 0 0.03" rpy="0 0 0"/>
-  </joint>
-  
-  <!-- Divider 2 -->
-  <link name="div2">
-    <collision><geometry><box size="0.15 0.01 0.05"/></geometry></collision>
-    <visual><geometry><box size="0.15 0.01 0.05"/></geometry><material name="blue"/></visual>
-    <inertial><mass value="0.1"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
-  </link>
-  <joint name="div2_joint" type="fixed">
-    <parent link="spindexer_base_link"/>
-    <child link="div2"/>
-    <origin xyz="-0.0375 0.065 0.03" rpy="0 0 2.0944"/>
-  </joint>
-
-  <!-- Divider 3 -->
-  <link name="div3">
-    <collision><geometry><box size="0.15 0.01 0.05"/></geometry></collision>
-    <visual><geometry><box size="0.15 0.01 0.05"/></geometry><material name="blue"/></visual>
-    <inertial><mass value="0.1"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
-  </link>
-  <joint name="div3_joint" type="fixed">
-    <parent link="spindexer_base_link"/>
-    <child link="div3"/>
-    <origin xyz="-0.0375 -0.065 0.03" rpy="0 0 -2.0944"/>
-  </joint>
-
 
   <!-- Turret -->
   <!-- Connected to base_link (or spindexer? usually turret is separate, inside or above spindexer. Description says "Back of spindexer has transfer into turret". Implies turret is separate mechanism.) -->
   <!-- Let's put Turret on base_link, effectively passing through spindexer center or above it. -->
   <link name="turret_link">
     <visual>
-      <!-- <origin xyz="-0.039962 0 0.22744" rpy="0 0 0"/> -->
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 3.14159265359"/>
       <geometry><mesh filename="robotMeshes/shooter.stl" scale="1.0 1.0 1.0"/></geometry>
       <material name="red"/>
     </visual>
@@ -208,14 +170,15 @@
     <!-- </collision> -->
     <inertial>
       <mass value="1.0"/>
-      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+      <inertia ixx="0.01" iyy="0.01" izz="0.02432826"/>
     </inertial>
   </link>
   <joint name="turret_joint" type="continuous">
     <parent link="base_link"/>
     <child link="turret_link"/>
-    <origin xyz="-0.039962 0 0.22744" rpy="0 0 0"/>
+    <origin xyz="-0.039962 0 0.204265" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
+    <dynamics damping="0.3"/>
   </joint>
 
   <!-- Flywheel -->
@@ -245,7 +208,7 @@
   <!-- Hood is represented by 3 segments to approximate curve. -->
   
   <link name="hood_pivot">
-     <inertial><mass value="0.01"/><inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/></inertial>
+     <inertial><mass value="0.01"/><inertia ixx="0.001" iyy="0.001" izz="0.001"/></inertial>
   </link>
   <joint name="hood_joint" type="revolute">
     <parent link="turret_link"/>
@@ -255,41 +218,6 @@
     <limit lower="0" upper="1.2" effort="5" velocity="5"/>
   </joint>
 
-  <!-- Segment 1 -->
-  <link name="hood_seg1">
-     <visual><geometry><box size="0.01 0.08 0.04"/></geometry><material name="white"/></visual>
-     <collision><geometry><box size="0.01 0.08 0.04"/></geometry></collision>
-     <inertial><mass value="0.05"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
-  </link>
-  <joint name="h1" type="fixed">
-      <parent link="hood_pivot"/>
-      <child link="hood_seg1"/>
-      <origin xyz="0 0 0.02" rpy="0 -0.2 0"/>
-  </joint>
-  
-  <!-- Segment 2 -->
-  <link name="hood_seg2">
-     <visual><geometry><box size="0.01 0.08 0.04"/></geometry><material name="white"/></visual>
-     <collision><geometry><box size="0.01 0.08 0.04"/></geometry></collision>
-     <inertial><mass value="0.05"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
-  </link>
-  <joint name="h2" type="fixed">
-      <parent link="hood_seg1"/>
-      <child link="hood_seg2"/>
-      <origin xyz="0 0 0.04" rpy="0 -0.3 0"/>
-  </joint>
-
-   <!-- Segment 3 -->
-  <link name="hood_seg3">
-     <visual><geometry><box size="0.01 0.08 0.04"/></geometry><material name="white"/></visual>
-     <collision><geometry><box size="0.01 0.08 0.04"/></geometry></collision>
-     <inertial><mass value="0.05"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
-  </link>
-  <joint name="h3" type="fixed">
-      <parent link="hood_seg2"/>
-      <child link="hood_seg3"/>
-      <origin xyz="0 0 0.04" rpy="0 -0.3 0"/>
-  </joint>
 
   <!-- Transfer Ramp (spindexer to turret feed) -->
   <link name="transfer_ramp">
@@ -297,12 +225,12 @@
       <geometry><box size="0.12 0.08 0.02"/></geometry>
       <material name="white"/>
     </visual>
-    <collision>
-      <geometry><box size="0.12 0.08 0.02"/></geometry>
-    </collision>
+    <!-- <collision> -->
+    <!--   <geometry><box size="0.12 0.08 0.02"/></geometry> -->
+    <!-- </collision> -->
     <inertial>
       <mass value="0.2"/>
-      <inertia ixx="0.0002" ixy="0" ixz="0" iyy="0.0002" iyz="0" izz="0.0002"/>
+      <inertia ixx="0.0002" iyy="0.0002" izz="0.002"/>
     </inertial>
   </link>
   <joint name="transfer_ramp_joint" type="fixed">

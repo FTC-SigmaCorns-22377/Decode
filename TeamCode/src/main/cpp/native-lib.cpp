@@ -35,6 +35,29 @@ Java_sigmacorns_sim_DrakeNative_setMecanumParameters(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_sigmacorns_sim_DrakeNative_setMotorParameters(
+        JNIEnv* env,
+        jobject /* this */,
+        jlong simPtr,
+        jdoubleArray params) {
+    DrakeSim* sim = reinterpret_cast<DrakeSim*>(simPtr);
+    if (!sim) return;
+
+    jsize len = env->GetArrayLength(params);
+    if (len != 7) {
+        // Expected: [bare_motor_free_speed, bare_motor_stall_torque,
+        //            drive_gear_ratio, spindexer_gear_ratio, turret_gear_ratio,
+        //            intake_hood_gear_ratio, flywheel_gear_ratio]
+        return;
+    }
+    jdouble* body = env->GetDoubleArrayElements(params, 0);
+    std::vector<double> paramVec(body, body + len);
+    env->ReleaseDoubleArrayElements(params, body, 0);
+
+    sim->SetMotorParameters(paramVec);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_sigmacorns_sim_DrakeNative_step(
         JNIEnv* env,
         jobject /* this */,

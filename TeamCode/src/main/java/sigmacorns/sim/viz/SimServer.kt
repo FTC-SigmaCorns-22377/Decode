@@ -73,6 +73,9 @@ data class TelemetryState(
     val bl: Double,
     val br: Double,
     val flywheel: Double,
-    val turret: Double
+    val turret: Double,
+    val spindexerPower: Double = 0.0,
+    val spindexerAngle: Double = 0.0,
+    val intakePower: Double = 0.0
 )
 
