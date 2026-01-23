@@ -31,7 +31,31 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     private var gamepad2: Gamepad? = null
 
     private var t = 0.seconds
-    private val SIM_UPDATE_TIME = 30.milliseconds
+    private val SIM_UPDATE_TIME = 50.milliseconds
+
+    // Threading support
+    private val simLock = Any()
+    private var running = true
+    private val drakeThread: Thread
+    private val vizThread: Thread
+    @Volatile
+    private var currentDriveFL = 0.0
+    @Volatile
+    private var currentDriveBL = 0.0
+    @Volatile
+    private var currentDriveFR = 0.0
+    @Volatile
+    private var currentDriveBR = 0.0
+    @Volatile
+    private var currentShooter = 0.0
+    @Volatile
+    private var currentIntake = 0.0
+    @Volatile
+    private var currentTurret = 0.0
+    @Volatile
+    private var currentSpindexer = 0.0
+    @Volatile
+    private var currentTransfer = 0.0
 
     init {
         // Try to use RealSimServer if available (test environment), otherwise use stub
@@ -53,6 +77,188 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         // Spawn initial field balls at artifact pickup locations
         // Based on DECODE field positions (converted to meters from Pedro inches)
         spawnInitialBalls()
+
+        // Start Drake simulation thread
+        drakeThread = Thread {
+            println("DrakeSimIO: Drake simulation thread started")
+            while (running) {
+                try {
+                    val startTime = System.nanoTime()
+
+                    // Update gamepads from server
+                    updateGamepadsFromServer()
+
+                    // Create snapshot of motor commands (thread-safe read of volatile fields)
+                    val snapshotFL = currentDriveFL
+                    val snapshotBL = currentDriveBL
+                    val snapshotFR = currentDriveFR
+                    val snapshotBR = currentDriveBR
+                    val snapshotShooter = currentShooter
+                    val snapshotIntake = currentIntake
+                    val snapshotTurret = currentTurret
+                    val snapshotSpindexer = currentSpindexer
+                    val snapshotTransfer = currentTransfer
+
+                    // Step simulation with motor command snapshot
+                    val tmpIO = object : SigmaIO {
+                        override var driveFL: Double = snapshotFL
+                        override var driveBL: Double = snapshotBL
+                        override var driveFR: Double = snapshotFR
+                        override var driveBR: Double = snapshotBR
+                        override var shooter: Double = snapshotShooter
+                        override var intake: Double = snapshotIntake
+                        override var turret: Double = snapshotTurret
+                        override var spindexer: Double = snapshotSpindexer
+                        override var turretAngle: Double = 0.0
+                        override var breakPower: Double = 0.0
+                        override var transfer: Double = snapshotTransfer
+
+                        // Cached state to avoid reentrant locks
+                        private var cachedPos: Pose2d? = null
+                        private var cachedVel: Pose2d? = null
+
+                        override fun position(): Pose2d = cachedPos ?: Pose2d(0.0, 0.0, 0.0)
+                        override fun velocity(): Pose2d = cachedVel ?: Pose2d(0.0, 0.0, 0.0)
+                        override fun flywheelVelocity(): Double = 0.0
+                        override fun turretPosition(): Double = 0.0
+                        override fun spindexerPosition(): Double = 0.0
+                        override fun distance(): Double = Double.MAX_VALUE
+                        override fun update() {}
+                        override fun setPosition(p: Pose2d) {}
+                        override fun time(): Duration = 0.seconds
+                        override fun configurePinpoint() {}
+                        override fun voltage(): Double = 12.0
+                        override fun colorSensorDetectsBall(): Boolean = false
+                        override fun colorSensorGetBallColor(): Balls? = null
+                    }
+
+                    try {
+                        synchronized(simLock) {
+                            // Validate motor commands before simulation step
+                            if (!snapshotFL.isFinite() || !snapshotBL.isFinite() ||
+                                !snapshotFR.isFinite() || !snapshotBR.isFinite()) {
+                                println("WARNING: Invalid motor commands detected, skipping step")
+                                println("  FL=$snapshotFL BL=$snapshotBL FR=$snapshotFR BR=$snapshotBR")
+                            } else {
+                                // Cache current state for tmpIO callbacks if needed
+                                // (Though advanceSim shouldn't need to call these methods)
+                                model.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS), tmpIO)
+                                t += SIM_UPDATE_TIME
+
+                                // Update ball interaction simulation
+                                ballSim.update(
+                                    robotPose = model.drivetrainState.pos,
+                                    robotVelocity = model.drivetrainState.vel,
+                                    intakePower = snapshotIntake,
+                                    transferPower = snapshotTransfer,
+                                    spindexerAngle = model.jointPositions["spindexer_joint"] ?: 0.0,
+                                    turretYaw = model.jointPositions["turret_joint"] ?: 0.0,
+                                    hoodPitch = model.jointPositions["hood_joint"] ?: 0.0,
+                                    flywheelOmega = model.flywheelState.omega,
+                                    dt = SIM_UPDATE_TIME
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        System.err.println("ERROR in Drake simulation step: ${e.message}")
+                        e.printStackTrace()
+                        // Continue running despite errors to allow debugging
+                    }
+
+                    // Real-time sync
+                    val elapsedNanos = System.nanoTime() - startTime
+                    val elapsedMillis = elapsedNanos / 1_000_000
+                    val sleepTime = SIM_UPDATE_TIME.inWholeMilliseconds - elapsedMillis
+
+                    if (sleepTime > 0) {
+                        Thread.sleep(sleepTime)
+                    }
+                } catch (e: InterruptedException) {
+                    break
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            println("DrakeSimIO: Drake simulation thread stopped")
+        }
+        drakeThread.name = "Drake-Sim-Thread"
+        drakeThread.start()
+
+        // Start visualization thread
+        vizThread = Thread {
+            println("DrakeSimIO: Visualization thread started")
+            while (running) {
+                try {
+                    val startTime = System.nanoTime()
+
+                    // Broadcast state
+                    val vizState = synchronized(simLock) {
+                        val state = model.drivetrainState
+                        val fw = model.flywheelState
+
+                        // Combine Drake ball positions with spindexer ball positions
+                        val spindexerBalls = ballSim.getSpindexerBallPositions(
+                            model.drivetrainState.pos,
+                            model.jointPositions["spindexer_joint"] ?: 0.0
+                        )
+                        val drakeBalls = model.ballPositions.mapIndexed { i, pos ->
+                            val color = model.ballColors.getOrElse(i) { Balls.Green }
+                            BallState(pos.x, pos.y, pos.z, color.toVizColor())
+                        }
+                        val spindexerVizBalls = spindexerBalls.map { (pos, color) ->
+                            BallState(pos.x, pos.y, pos.z, color.toVizColor())
+                        }
+                        val allBalls = drakeBalls + spindexerVizBalls
+
+                        SimState(
+                            t = t.toDouble(DurationUnit.SECONDS),
+                            base = BaseState(
+                                x = state.pos.v.x,
+                                y = state.pos.v.y,
+                                z = model.baseZ,
+                                roll = 0.0,
+                                pitch = 0.0,
+                                yaw = state.pos.rot
+                            ),
+                            joints = model.jointPositions,
+                            telemetry = TelemetryState(
+                                fl = currentDriveFL,
+                                fr = currentDriveFR,
+                                bl = currentDriveBL,
+                                br = currentDriveBR,
+                                flywheel = fw.omega,
+                                turret = currentTurret,
+                                spindexerPower = currentSpindexer,
+                                spindexerAngle = model.jointPositions["spindexer_joint"] ?: 0.0,
+                                intakePower = currentIntake
+                            ),
+                            wheelForces = model.wheelForces.map { ForceState(it.x, it.y, it.z) },
+                            error = trackingError,
+                            balls = allBalls,
+                            mpcTarget = trackingTarget
+                        )
+                    }
+
+                    broadcastState(vizState)
+
+                    // Visualization updates at 20Hz (50ms)
+                    val elapsedNanos = System.nanoTime() - startTime
+                    val elapsedMillis = elapsedNanos / 1_000_000
+                    val sleepTime = 50 - elapsedMillis
+
+                    if (sleepTime > 0) {
+                        Thread.sleep(sleepTime)
+                    }
+                } catch (e: InterruptedException) {
+                    break
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            println("DrakeSimIO: Visualization thread stopped")
+        }
+        vizThread.name = "Drake-Viz-Thread"
+        vizThread.start()
     }
 
     private fun spawnInitialBalls() {
@@ -74,113 +280,67 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         }
     }
 
-    override var driveFL: Double = 0.0
-    override var driveBL: Double = 0.0
-    override var driveFR: Double = 0.0
-    override var driveBR: Double = 0.0
-    override var shooter: Double = 0.0
-    override var intake: Double = 0.0
-    override var turret: Double = 0.0
-    override var spindexer: Double = 0.0
+    override var driveFL: Double
+        get() = currentDriveFL
+        set(value) { currentDriveFL = value.sanitize() }
+    override var driveBL: Double
+        get() = currentDriveBL
+        set(value) { currentDriveBL = value.sanitize() }
+    override var driveFR: Double
+        get() = currentDriveFR
+        set(value) { currentDriveFR = value.sanitize() }
+    override var driveBR: Double
+        get() = currentDriveBR
+        set(value) { currentDriveBR = value.sanitize() }
+    override var shooter: Double
+        get() = currentShooter
+        set(value) { currentShooter = value.sanitize() }
+    override var intake: Double
+        get() = currentIntake
+        set(value) { currentIntake = value.sanitize() }
+    override var turret: Double
+        get() = currentTurret
+        set(value) { currentTurret = value.sanitize() }
+    override var spindexer: Double
+        get() = currentSpindexer
+        set(value) { currentSpindexer = value.sanitize() }
     override var turretAngle: Double = 0.0
     override var breakPower: Double = 0.0
-    override var transfer: Double = 0.0
+    override var transfer: Double
+        get() = currentTransfer
+        set(value) { currentTransfer = value.sanitize() }
 
-    override fun position(): Pose2d = model.drivetrainState.pos
-    override fun velocity(): Pose2d = model.drivetrainState.vel
-    override fun flywheelVelocity(): Double = model.flywheelState.omega
+    private fun Double.sanitize(): Double {
+        return when {
+            this.isNaN() || this.isInfinite() -> 0.0
+            this > 1.0 -> 1.0
+            this < -1.0 -> -1.0
+            else -> this
+        }
+    }
 
-    override fun turretPosition(): Double =
-        model.jointPositions["turret_joint"] ?: 0.0
+    override fun position(): Pose2d = synchronized(simLock) { model.drivetrainState.pos }
+    override fun velocity(): Pose2d = synchronized(simLock) { model.drivetrainState.vel }
+    override fun flywheelVelocity(): Double = synchronized(simLock) { model.flywheelState.omega }
 
-    override fun spindexerPosition(): Double =
-        model.jointPositions["spindexer_joint"] ?: 0.0
+    override fun turretPosition(): Double = synchronized(simLock) {
+        // Drake returns output shaft radians; control expects motor encoder ticks
+        (model.jointPositions["turret_joint"] ?: 0.0) * TURRET_TICKS_PER_RAD
+    }
 
-    override fun distance(): Double {
-        return if(ballSim.colorSensorDetectsBall()) 0.0 else Double.MAX_VALUE
+    override fun spindexerPosition(): Double = synchronized(simLock) {
+        // Drake returns output shaft radians; control expects motor encoder ticks
+        (model.jointPositions["spindexer_joint"] ?: 0.0) * SPINDEXER_TICKS_PER_RAD
+    }
+
+    override fun distance(): Double = synchronized(simLock) {
+        if(ballSim.colorSensorDetectsBall()) 0.0 else Double.MAX_VALUE
     }
 
     override fun update() {
-        // Measure start time for real-time sync
-        val startTime = System.nanoTime()
-
-        // Update gamepads from web interface
-        updateGamepadsFromServer()
-
-        // Step Simulation
-        model.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS), this)
-        t += SIM_UPDATE_TIME
-
-        // Update ball interaction simulation
-        ballSim.update(
-            robotPose = model.drivetrainState.pos,
-            robotVelocity = model.drivetrainState.vel,
-            intakePower = intake,
-            transferPower = transfer,
-            spindexerAngle = model.jointPositions["spindexer_joint"] ?: 0.0,
-            turretYaw = model.jointPositions["turret_joint"] ?: 0.0,
-            hoodPitch = model.jointPositions["hood_joint"] ?: 0.0,
-            flywheelOmega = model.flywheelState.omega,
-            dt = SIM_UPDATE_TIME
-        )
-
-        // Broadcast State
-        val state = model.drivetrainState
-        val fw = model.flywheelState
-
-        // Combine Drake ball positions with spindexer ball positions for visualization
-        val spindexerBalls = ballSim.getSpindexerBallPositions(
-            model.drivetrainState.pos,
-            model.jointPositions["spindexer_joint"] ?: 0.0
-        )
-        val drakeBalls = model.ballPositions.mapIndexed { i, pos ->
-            val color = model.ballColors.getOrElse(i) { Balls.Green }
-            BallState(pos.x, pos.y, pos.z, color.toVizColor())
-        }
-        val spindexerVizBalls = spindexerBalls.map { (pos, color) ->
-            BallState(pos.x, pos.y, pos.z, color.toVizColor())
-        }
-        val allBalls = drakeBalls + spindexerVizBalls
-
-        val vizState = SimState(
-            t = t.toDouble(DurationUnit.SECONDS),
-            base = BaseState(
-                x = state.pos.v.x,
-                y = state.pos.v.y,
-                z = model.baseZ,
-                roll = 0.0,
-                pitch = 0.0,
-                yaw = state.pos.rot
-            ),
-            joints = model.jointPositions,
-            telemetry = TelemetryState(
-                fl = driveFL,
-                fr = driveFR,
-                bl = driveBL,
-                br = driveBR,
-                flywheel = fw.omega,
-                turret = turret
-            ),
-            wheelForces = model.wheelForces.map { ForceState(it.x, it.y, it.z) },
-            error = trackingError,
-            balls = allBalls,
-            mpcTarget = trackingTarget
-        )
-        broadcastState(vizState)
-
-        // Real-time sync: sleep only for remaining time
-        val elapsedNanos = System.nanoTime() - startTime
-        val elapsedMillis = elapsedNanos / 1_000_000
-        val sleepTime = SIM_UPDATE_TIME.inWholeMilliseconds - elapsedMillis
-
-        if (sleepTime > 0) {
-            try {
-                Thread.sleep(sleepTime)
-            } catch (e: InterruptedException) {
-                e.printStackTrace()
-            }
-        }
-        // If sleepTime <= 0, simulation is running slower than real-time (no sleep needed)
+        // With threaded simulation, update() is now a no-op.
+        // The Drake thread and visualization thread handle all updates continuously.
+        // Motor commands are updated via property setters which write to volatile fields.
     }
 
     fun setGamepads(gp1: Gamepad, gp2: Gamepad) {
@@ -265,24 +425,35 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         }
     }
 
-    override fun setPosition(p: Pose2d) {
+    override fun setPosition(p: Pose2d) = synchronized(simLock) {
         model.setPosition(p)
     }
 
-    override fun time(): Duration = t
+    override fun time(): Duration = synchronized(simLock) { t }
 
     override fun configurePinpoint() {}
-    override fun voltage(): Double {
-        return 12.0
+    override fun voltage(): Double = 12.0
+
+    override fun colorSensorDetectsBall(): Boolean = synchronized(simLock) {
+        ballSim.colorSensorDetectsBall()
     }
 
-    override fun colorSensorDetectsBall(): Boolean =
-        ballSim.colorSensorDetectsBall()
-
-    override fun colorSensorGetBallColor(): Balls? =
+    override fun colorSensorGetBallColor(): Balls? = synchronized(simLock) {
         ballSim.colorSensorGetBallColor()
+    }
 
     fun close() {
+        println("DrakeSimIO: Shutting down...")
+        running = false
+
+        // Wait for threads to finish
+        try {
+            drakeThread.join(1000)
+            vizThread.join(1000)
+        } catch (e: InterruptedException) {
+            e.printStackTrace()
+        }
+
         model.destroy()
         try {
             val method = server.javaClass.getMethod("stop")
@@ -290,6 +461,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         } catch (e: Exception) {
             // Silently fail on stub server
         }
+        println("DrakeSimIO: Shutdown complete")
     }
 
     fun setTrackingError(error: ErrorState?) {
@@ -310,11 +482,11 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     }
 
     // Ball spawning API with color
-    fun spawnFieldBall(x: Double, y: Double, z: Double, color: Balls = Balls.Green) {
+    fun spawnFieldBall(x: Double, y: Double, z: Double, color: Balls = Balls.Green) = synchronized(simLock) {
         model.spawnBall(x, y, z, color)
     }
 
-    fun spawnFieldBalls(positions: List<Pair<Vector2d, Balls>>) {
+    fun spawnFieldBalls(positions: List<Pair<Vector2d, Balls>>) = synchronized(simLock) {
         positions.forEach { (p, color) ->
             model.spawnBall(p.x, p.y, BALL_RADIUS, color)
         }
@@ -322,5 +494,16 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     companion object {
         private const val BALL_RADIUS = 0.05
+
+        // Motor encoder ticks per radian of output shaft rotation.
+        // Matches the gear ratios used in MotorRangeMapper for each mechanism.
+
+        // Spindexer: (1+(46/17)) * (1+(46/11)) * 28 ticks per revolution
+        private val SPINDEXER_TICKS_PER_RAD =
+            ((1.0 + (46.0 / 17.0)) * (1.0 + (46.0 / 11.0)) * 28.0) / (2 * Math.PI)
+
+        // Turret: (1+(46/11)) * 28 / (2π) * (76/19) ticks per radian
+        private val TURRET_TICKS_PER_RAD =
+            (1.0 + (46.0 / 11.0)) * 28.0 / (2 * Math.PI) * 76.0 / 19.0
     }
 }

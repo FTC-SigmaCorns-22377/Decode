@@ -27,7 +27,7 @@ DrakeSim::~DrakeSim() {}
 void DrakeSim::BuildSimulator(const RobotState *state) {
   DiagramBuilder<double> builder;
 
-  auto [plant, scene_graph] = AddMultibodyPlantSceneGraph(&builder, 0.001);
+  auto [plant, scene_graph] = AddMultibodyPlantSceneGraph(&builder, 0.005);
   plant_ = &plant;
   scene_graph_ = &scene_graph;
 
@@ -105,6 +105,14 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
   const double bare_motor_stall_torque = 0.187;
   const MotorConfig drive_motor{bare_motor_free_speed / 19.2,
                                 bare_motor_stall_torque * 19.2, 12.0};
+  // Spindexer gear ratio: (1+46/17)*(1+46/11) ≈ 19.2
+  const double spindexer_gear_ratio = (1.0 + 46.0/17.0) * (1.0 + 46.0/11.0);
+  const MotorConfig spindexer_motor{bare_motor_free_speed / spindexer_gear_ratio,
+                                    bare_motor_stall_torque * spindexer_gear_ratio, 12.0};
+  // Turret gear ratio: (1+46/11)*(76/19) ≈ 20.7
+  const double turret_gear_ratio = (1.0 + 46.0/11.0) * (76.0/19.0);
+  const MotorConfig turret_motor{bare_motor_free_speed / turret_gear_ratio,
+                                 bare_motor_stall_torque * turret_gear_ratio, 12.0};
   const MotorConfig spin_motor{bare_motor_free_speed / 10.0,
                                bare_motor_stall_torque * 10.0, 12.0};
   const MotorConfig flywheel_motor{bare_motor_free_speed / 13.7,
@@ -123,8 +131,8 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
       "turret_joint",   "flywheel_joint", "hood_joint"};
 
   const std::vector<MotorConfig> actuator_motors = {
-      drive_motor, drive_motor, drive_motor,    drive_motor, spin_motor,
-      spin_motor,  spin_motor,  flywheel_motor, spin_motor};
+      drive_motor, drive_motor, drive_motor, drive_motor, spin_motor,
+      spindexer_motor, turret_motor, flywheel_motor, spin_motor};
 
   joint_state_order_ = actuator_joint_names;
 

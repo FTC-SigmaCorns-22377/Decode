@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -28,11 +30,14 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
     return;
   }
 
+  // Start timing
+  auto start_time = std::chrono::high_resolution_clock::now();
+
   auto &context = simulator_->get_mutable_context();
   auto &plant_context = diagram_->GetMutableSubsystemContext(*plant_, &context);
 
   // Sub-stepping
-  constexpr int kSubsteps = 10;
+  constexpr int kSubsteps = 5;
   const double sub_dt = dt / kSubsteps;
 
   static const std::array<const char *, 4> wheel_names = {
@@ -100,6 +105,15 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
     std::array<double, 4> motor_torques;
     for (size_t i = 0; i < 4; ++i) {
       motor_torques[i] = MotorTorque(mecanum_params_.drive_motor, motor_powers[i], wheel_omegas[i]);
+    }
+
+    // Traction limit: clamp wheel forces to friction circle
+    // F_max = μ * N_wheel = μ * (m * g / 4)
+    // max_torque = F_max * r
+    const double max_traction_force = mecanum_params_.mu * (mecanum_params_.mass * 9.81) / 4.0;
+    const double max_torque = max_traction_force * r;
+    for (size_t i = 0; i < 4; ++i) {
+      motor_torques[i] = std::clamp(motor_torques[i], -max_torque, max_torque);
     }
 
     // Forward acceleration kinematics: wheel torques → robot acceleration
@@ -198,4 +212,25 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
   mecanum_state_.vel.x = v_world.x() * c + v_world.y() * s;
   mecanum_state_.vel.y = -v_world.x() * s + v_world.y() * c;
   mecanum_state_.vel.theta = V_WB.rotational().z();
+
+  // End timing and update statistics
+  auto end_time = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = end_time - start_time;
+
+  total_sim_time_ += dt;
+  total_wall_time_ += elapsed.count();
+  step_count_++;
+
+  // Log performance every 1 second of simulation time
+  if (total_sim_time_ - last_log_time_ >= 1.0) {
+    double speedup_factor = total_sim_time_ / total_wall_time_;
+    double avg_step_time_ms = (total_wall_time_ / step_count_) * 1000.0;
+
+    std::cout << "[Drake Sim Performance] "
+              << "Running at " << std::fixed << std::setprecision(2) << speedup_factor << "x realtime "
+              << "(avg step: " << std::setprecision(3) << avg_step_time_ms << "ms, "
+              << step_count_ << " steps)" << std::endl;
+
+    last_log_time_ = total_sim_time_;
+  }
 }
