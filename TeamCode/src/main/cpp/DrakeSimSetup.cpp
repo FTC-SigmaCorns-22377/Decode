@@ -7,6 +7,7 @@
 
 #include <drake/geometry/collision_filter_declaration.h>
 #include <drake/geometry/geometry_set.h>
+#include <drake/geometry/proximity_properties.h>
 #include <drake/geometry/shape_specification.h>
 #include <drake/math/rigid_transform.h>
 #include <drake/math/roll_pitch_yaw.h>
@@ -79,7 +80,7 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
   add_wall("E", RigidTransformd(Eigen::Vector3d(L / 2, 0, h / 2)));
   add_wall("W", RigidTransformd(Eigen::Vector3d(-L / 2, 0, h / 2)));
 
-  // Ramp STL
+  // Ramp STL - offsets from app.js
   const std::string ramp_stl_path =
       "TeamCode/src/main/assets/Ramp Assembly - am-5715 (1).stl";
   const std::string ramp_stl_path2 =
@@ -88,11 +89,11 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
       std::filesystem::exists(ramp_stl_path) ? ramp_stl_path : ramp_stl_path2;
 
   if (std::filesystem::exists(actual_ramp_path)) {
-    // Target corner: tx = -1.792859, ty = 1.792066 (North-West)
+    // Offsets match app.js: offsetX = -1.643476, offsetY = -0.013388
     // Rotation: X = PI/2
 
     RigidTransformd X_WR(RollPitchYaw<double>(M_PI / 2, 0, 0),
-                         Eigen::Vector3d(-1.792859, 1.792066, 0));
+                         Eigen::Vector3d(-1.643476, -0.013388, 0));
 
     Mesh ramp_mesh(actual_ramp_path, 0.001);
 
@@ -100,12 +101,52 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
                                    "ramp_blue_vis",
                                    Vector4<double>(0, 0, 1, 1));
 
-    // Red Ramp (Mirrored)
+    // Red Ramp (Mirrored - position.x negated)
     RigidTransformd X_WR_Red(RollPitchYaw<double>(M_PI / 2, 0, 0),
-                             Eigen::Vector3d(1.792859, 1.792066, 0));
+                             Eigen::Vector3d(1.643476, -0.013388, 0));
 
     plant_->RegisterVisualGeometry(plant_->world_body(), X_WR_Red, ramp_mesh,
                                    "ramp_red_vis", Vector4<double>(1, 0, 0, 1));
+  }
+
+  // Ramp collision meshes - split into convex hulls
+  // (exported from Blender with Y forward, Z up to match simulation coordinates)
+  const std::vector<std::string> ramp_collision_files = {
+      "back.obj", "front.obj", "inside_ramp.obj",
+      "ramp.obj", "ramp_back.obj", "ramp_front.obj"
+  };
+
+  const std::string ramp_collision_dir = "TeamCode/src/main/assets/rampCollision/";
+  const std::string ramp_collision_dir2 = "src/main/assets/rampCollision/";
+  std::string actual_collision_dir =
+      std::filesystem::exists(ramp_collision_dir) ? ramp_collision_dir : ramp_collision_dir2;
+
+  if (std::filesystem::exists(actual_collision_dir)) {
+    const CoulombFriction<double> ramp_friction(0.5, 0.5);
+
+    // Blue ramp - same position offsets as visual
+    RigidTransformd X_WR_Blue(Eigen::Vector3d(-1.643476, -0.013388, 0));
+
+    // Red ramp - mirrored position
+    RigidTransformd X_WR_Red(Eigen::Vector3d(1.643476, -0.013388, 0));
+
+    // Load and register each convex hull piece
+    for (const auto& filename : ramp_collision_files) {
+      std::string filepath = actual_collision_dir + filename;
+      if (std::filesystem::exists(filepath)) {
+        Mesh collision_piece(filepath, 1.0);
+
+        // Register blue ramp piece
+        plant_->RegisterCollisionGeometry(
+            plant_->world_body(), X_WR_Blue, collision_piece,
+            "ramp_blue_" + filename, ramp_friction);
+
+        // Register red ramp piece
+        plant_->RegisterCollisionGeometry(
+            plant_->world_body(), X_WR_Red, collision_piece,
+            "ramp_red_" + filename, ramp_friction);
+      }
+    }
   }
 
   // Motor configs from RobotModelConstants (passed via SetMotorParameters)
