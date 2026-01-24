@@ -31,7 +31,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     private var gamepad2: Gamepad? = null
 
     private var t = 0.seconds
-    private val SIM_UPDATE_TIME = 50.milliseconds
+    private val SIM_UPDATE_TIME = 20.milliseconds
 
     // Threading support
     private val simLock = Any()
@@ -514,7 +514,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     }
 
     companion object {
-        private const val BALL_RADIUS = 0.05
+        private const val BALL_RADIUS = 0.0635
 
         // Motor encoder ticks per radian of output shaft rotation.
         // Matches the gear ratios used in MotorRangeMapper for each mechanism.

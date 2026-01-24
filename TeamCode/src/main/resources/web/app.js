@@ -118,8 +118,8 @@ stlLoader.load('/assets/Ramp Assembly - am-5715 (1).stl', geometry => {
     geometry.computeBoundingBox();
     mesh.updateMatrixWorld();
     const worldBox = new THREE.Box3().setFromObject(mesh);
-    const offsetX = -1.792859 - worldBox.min.x;
-    const offsetY = 1.792066 - worldBox.max.y;
+    const offsetX = -1.643476;
+    const offsetY = -0.013388;
     mesh.position.x += offsetX;
     mesh.position.y += offsetY;
     scene.add(mesh);
@@ -131,7 +131,7 @@ stlLoader.load('/assets/Ramp Assembly - am-5715 (1).stl', geometry => {
 });
 
 // Balls
-const ballGeo = new THREE.SphereGeometry(0.05, 16, 16);
+const ballGeo = new THREE.SphereGeometry(0.0635, 16, 16);
 const ballMaterials = {
     green: new THREE.MeshPhongMaterial({ color: 0x00ff00 }),
     purple: new THREE.MeshPhongMaterial({ color: 0x9932cc }),

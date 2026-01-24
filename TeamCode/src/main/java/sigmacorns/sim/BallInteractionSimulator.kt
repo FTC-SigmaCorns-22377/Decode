@@ -47,7 +47,7 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
         if (abs(intakePower) > INTAKE_POWER_THRESHOLD &&
             abs(intakeError) < SLOT_ALIGNMENT_TOLERANCE &&
             slots[intakeSlot] == null) {
-            checkIntakeCapture(robotPose, intakeSlot)
+            checkIntakeCapture(intakeSlot)
         }
 
         // 2. Check for shooting - find which slot is at the shoot position
@@ -79,44 +79,16 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
         return Pair(bestSlot, bestError)
     }
 
-    private fun checkIntakeCapture(robotPose: Pose2d, slotIndex: Int) {
-        // Find closest ball within rectangular capture zone
-        var closestIndex = -1
-        var closestDist = Double.MAX_VALUE
+    private fun checkIntakeCapture(slotIndex: Int) {
+        // Query Drake for balls colliding with the intake geometry
+        val contacts = model.getIntakeContacts()
+        if (contacts.isEmpty()) return
 
-        val cos = cos(robotPose.rot)
-        val sin = sin(robotPose.rot)
-
-        model.ballPositions.forEachIndexed { i, pos ->
-            // Transform ball position to robot-relative frame
-            val worldDx = pos.x - robotPose.v.x
-            val worldDy = pos.y - robotPose.v.y
-            val robotRelativeX = worldDx * cos + worldDy * sin
-            val robotRelativeY = -worldDx * sin + worldDy * cos
-
-            // Calculate deviation from intake position
-            val xDeviation = abs(robotRelativeX - INTAKE_X_OFFSET)
-            val yDeviation = abs(robotRelativeY)
-
-            // Check if ball is within rectangular intake zone and at reasonable height
-            if (xDeviation < INTAKE_X_TOLERANCE &&
-                yDeviation < INTAKE_Y_TOLERANCE &&
-                pos.z < BALL_RADIUS * 3) {
-                // Use distance for prioritization when multiple balls are in zone
-                val dist = sqrt(xDeviation * xDeviation + yDeviation * yDeviation)
-                if (dist < closestDist) {
-                    closestDist = dist
-                    closestIndex = i
-                }
-            }
-        }
-
-        if (closestIndex >= 0) {
-            // Capture ball: store color, remove from Drake
-            val color = model.ballColors.getOrElse(closestIndex) { Balls.Green }
-            slots[slotIndex] = SpindexerBall(color)
-            model.removeBall(closestIndex)
-        }
+        // Capture the first contacting ball
+        val ballIndex = contacts[0]
+        val color = model.ballColors.getOrElse(ballIndex) { Balls.Green }
+        slots[slotIndex] = SpindexerBall(color)
+        model.removeBall(ballIndex)
     }
 
     private fun shootBall(
@@ -212,20 +184,16 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
     fun getSlots(): Array<SpindexerBall?> = slots.copyOf()
 
     companion object {
-        private const val INTAKE_X_OFFSET = 0.23
-        private const val INTAKE_X_TOLERANCE = 0.04 // Forward tolerance
-        private const val INTAKE_Y_TOLERANCE = 0.1  // Left/right tolerance
         private const val INTAKE_POWER_THRESHOLD = 0.1
         private const val SPINDEXER_SLOT_ANGLE = 2 * PI / 3
         private const val SLOT_ALIGNMENT_TOLERANCE = 0.15
         private const val TRANSFER_POWER_THRESHOLD = 0.5
         private const val FLYWHEEL_RADIUS = 0.048
-        private const val BALL_RADIUS = 0.05
         private const val SHOT_SPAWN_OFFSET = 0.15
         private const val FLYWHEEL_EFFICIENCY = 0.24
 
         // Fixed robot-frame angles for intake and shoot positions
         private const val INTAKE_ANGLE = 0.0
-        private const val SHOOT_ANGLE = PI / 3  // 60 degrees from intake
+        private const val SHOOT_ANGLE = PI
     }
 }

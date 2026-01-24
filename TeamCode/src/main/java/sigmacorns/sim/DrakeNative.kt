@@ -19,6 +19,7 @@ object DrakeNative {
     external fun spawnBallWithVelocity(simPtr: Long, x: Double, y: Double, z: Double,
                                         vx: Double, vy: Double, vz: Double)
     external fun removeBall(simPtr: Long, index: Int)
+    external fun getIntakeContacts(simPtr: Long): IntArray
     external fun setPosition(simPtr: Long, x: Double, y: Double, yaw: Double)
     external fun destroySim(simPtr: Long)
 }

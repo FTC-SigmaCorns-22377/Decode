@@ -21,4 +21,8 @@ void DrakeSim::SpawnBallWithVelocity(double /* x */, double /* y */, double /* z
 
 void DrakeSim::RemoveBall(int /* index */) {}
 
+std::vector<int> DrakeSim::GetIntakeContacts() {
+    return {};
+}
+
 void DrakeSim::SetPosition(double /* x */, double /* y */, double /* yaw */) {}

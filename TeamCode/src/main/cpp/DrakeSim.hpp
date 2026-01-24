@@ -45,6 +45,9 @@ public:
     // Removes a ball by index
     void RemoveBall(int index);
 
+    // Returns indices of balls currently in contact with the intake geometry
+    std::vector<int> GetIntakeContacts();
+
     void SetPosition(double x, double y, double yaw);
 
 private:
@@ -118,6 +121,7 @@ private:
     MecanumParams mecanum_params_;
     MecanumState mecanum_state_;
     drake::multibody::BodyIndex base_body_index_;
+    drake::multibody::BodyIndex intake_body_index_;
     drake::multibody::ModelInstanceIndex ball_instance_;
     std::vector<drake::multibody::BodyIndex> ball_bodies_;
     std::vector<BallState> balls_;
@@ -161,6 +165,7 @@ public:
     void SpawnBallWithVelocity(double x, double y, double z,
                                double vx, double vy, double vz);
     void RemoveBall(int index);
+    std::vector<int> GetIntakeContacts();
     void SetPosition(double x, double y, double yaw);
 };
 #endif

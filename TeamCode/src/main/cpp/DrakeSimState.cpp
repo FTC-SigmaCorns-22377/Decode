@@ -1,7 +1,10 @@
 #include "DrakeSim.hpp"
 
+#include <map>
+#include <set>
 #include <vector>
 
+#include <drake/geometry/query_object.h>
 #include <drake/math/rigid_transform.h>
 #include <drake/math/roll_pitch_yaw.h>
 
@@ -164,4 +167,47 @@ void DrakeSim::SetMotorParameters(const std::vector<double>& params) {
   motor_configs_.turret_gear_ratio = params[4];
   motor_configs_.intake_hood_gear_ratio = params[5];
   motor_configs_.flywheel_gear_ratio = params[6];
+}
+
+std::vector<int> DrakeSim::GetIntakeContacts() {
+  auto &context = simulator_->get_mutable_context();
+  auto &sg_context = diagram_->GetSubsystemContext(*scene_graph_, context);
+  const auto &query_object =
+      scene_graph_->get_query_output_port()
+          .Eval<geometry::QueryObject<double>>(sg_context);
+
+  // Get geometry IDs for the intake body
+  const auto &intake_body = plant_->get_body(intake_body_index_);
+  auto intake_geoms = plant_->GetCollisionGeometriesForBody(intake_body);
+  std::set<geometry::GeometryId> intake_geom_set(intake_geoms.begin(),
+                                                  intake_geoms.end());
+
+  // Build a map from geometry ID to ball index
+  std::map<geometry::GeometryId, int> geom_to_ball;
+  for (size_t i = 0; i < ball_bodies_.size(); ++i) {
+    const auto &ball_body = plant_->get_body(ball_bodies_[i]);
+    auto ball_geoms = plant_->GetCollisionGeometriesForBody(ball_body);
+    for (const auto &gid : ball_geoms) {
+      geom_to_ball[gid] = static_cast<int>(i);
+    }
+  }
+
+  // Query all contact pairs
+  auto contacts = query_object.ComputePointPairPenetration();
+
+  std::set<int> contacting_balls;
+  for (const auto &contact : contacts) {
+    auto it_a = geom_to_ball.find(contact.id_A);
+    auto it_b = geom_to_ball.find(contact.id_B);
+    bool a_is_intake = intake_geom_set.count(contact.id_A) > 0;
+    bool b_is_intake = intake_geom_set.count(contact.id_B) > 0;
+
+    if (a_is_intake && it_b != geom_to_ball.end()) {
+      contacting_balls.insert(it_b->second);
+    } else if (b_is_intake && it_a != geom_to_ball.end()) {
+      contacting_balls.insert(it_a->second);
+    }
+  }
+
+  return std::vector<int>(contacting_balls.begin(), contacting_balls.end());
 }

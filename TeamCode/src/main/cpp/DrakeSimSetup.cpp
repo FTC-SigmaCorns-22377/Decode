@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include <drake/geometry/collision_filter_declaration.h>
+#include <drake/geometry/geometry_set.h>
 #include <drake/geometry/shape_specification.h>
 #include <drake/math/rigid_transform.h>
 #include <drake/math/roll_pitch_yaw.h>
@@ -35,14 +37,20 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
   parser.AddModels(urdf_path_);
 
   base_body_index_ = plant_->GetBodyByName("base_link").index();
+  intake_body_index_ = plant_->GetBodyByName("intake_link").index();
 
   const double ground_size = 10.0;
   const double ground_depth = 1.0;
   RigidTransformd X_WG(Eigen::Vector3d(0, 0, -ground_depth / 2.0));
   Box box(ground_size, ground_size, ground_depth);
-  plant_->RegisterCollisionGeometry(plant_->world_body(), X_WG, box,
-                                    "ground_collision",
-                                    CoulombFriction<double>(0.0, 0.0));
+  // Robot ground: 0 friction (robot uses manual mecanum physics for traction)
+  auto robot_ground_geom = plant_->RegisterCollisionGeometry(
+      plant_->world_body(), X_WG, box, "robot_ground_collision",
+      CoulombFriction<double>(0.0, 0.0));
+  // Ball ground: friction so balls slow down on the field
+  auto ball_ground_geom = plant_->RegisterCollisionGeometry(
+      plant_->world_body(), X_WG, box, "ball_ground_collision",
+      CoulombFriction<double>(1.0, 1.0));
   plant_->RegisterVisualGeometry(plant_->world_body(), X_WG, box,
                                  "ground_visual",
                                  Vector4<double>(0.3, 0.3, 0.3, 1.0));
@@ -193,6 +201,38 @@ void DrakeSim::BuildSimulator(const RobotState *state) {
   }
 
   plant_->Finalize();
+
+  // Collision filter: robot only touches robot_ground, balls only touch ball_ground
+  {
+    // Collect all robot geometries (everything in the robot model instance)
+    auto robot_instance = plant_->GetBodyByName("base_link").model_instance();
+    std::vector<GeometryId> robot_geom_ids;
+    for (auto body_index : plant_->GetBodyIndices(robot_instance)) {
+      auto geoms = plant_->GetCollisionGeometriesForBody(
+          plant_->get_body(body_index));
+      robot_geom_ids.insert(robot_geom_ids.end(), geoms.begin(), geoms.end());
+    }
+
+    // Collect all ball geometries
+    std::vector<GeometryId> ball_geom_ids;
+    for (auto body_index : ball_bodies_) {
+      auto geoms = plant_->GetCollisionGeometriesForBody(
+          plant_->get_body(body_index));
+      ball_geom_ids.insert(ball_geom_ids.end(), geoms.begin(), geoms.end());
+    }
+
+    GeometrySet robot_set;
+    for (const auto &id : robot_geom_ids) robot_set.Add(id);
+    GeometrySet ball_set;
+    for (const auto &id : ball_geom_ids) ball_set.Add(id);
+    GeometrySet robot_ground_set({robot_ground_geom});
+    GeometrySet ball_ground_set({ball_ground_geom});
+
+    scene_graph_->collision_filter_manager().Apply(
+        CollisionFilterDeclaration()
+            .ExcludeBetween(robot_set, ball_ground_set)
+            .ExcludeBetween(ball_set, robot_ground_set));
+  }
 
   actuators_.clear();
   for (size_t i = 0; i < actuator_joint_names.size(); ++i) {

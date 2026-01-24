@@ -161,6 +161,10 @@ class DrakeRobotModel(urdfPath: String) {
         ballColors.add(color)
     }
 
+    fun getIntakeContacts(): IntArray {
+        return DrakeNative.getIntakeContacts(simPtr)
+    }
+
     fun setPosition(p: Pose2d) {
         DrakeNative.setPosition(simPtr, p.v.x, p.v.y, p.rot)
         drivetrainState.pos = p

@@ -39,7 +39,7 @@ val drivetrainParameters = MecanumParameters(
     0.048,
     20.0,
     1.0,
-    0.4
+    0.1
 )
 
 // Gear ratios for all robot mechanisms

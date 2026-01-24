@@ -147,6 +147,21 @@ Java_sigmacorns_sim_DrakeNative_setPosition(
     }
 }
 
+extern "C" JNIEXPORT jintArray JNICALL
+Java_sigmacorns_sim_DrakeNative_getIntakeContacts(
+        JNIEnv* env,
+        jobject /* this */,
+        jlong simPtr) {
+    DrakeSim* sim = reinterpret_cast<DrakeSim*>(simPtr);
+    if (!sim) return nullptr;
+
+    std::vector<int> contacts = sim->GetIntakeContacts();
+
+    jintArray result = env->NewIntArray(contacts.size());
+    env->SetIntArrayRegion(result, 0, contacts.size(), contacts.data());
+    return result;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_sigmacorns_sim_DrakeNative_destroySim(
         JNIEnv* env,
