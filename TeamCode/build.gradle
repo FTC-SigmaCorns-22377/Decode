@@ -127,15 +127,6 @@ repositories {
     maven { url = "https://mymaven.bylazar.com/releases" }
 
     maven {
-        name = "choreolib"
-        url = uri("https://maven.pkg.github.com/NullFTC/choreolib")
-        credentials {
-            username = local.getProperty('username')
-            password = local.getProperty('apiKey')
-        }
-    }
-
-    maven {
         name = "sloth"
         url = uri("https://maven.pkg.github.com/Veratay/sloth")
         credentials {
@@ -158,10 +149,6 @@ dependencies {
 
     implementation "org.joml:joml:${jomlVersion}"
 
-    implementation("nullftc:common:1.4-snapshot") {
-        exclude group: "com.google.code.gson", module: "gson"
-    }
-
     testImplementation platform("org.junit:junit-bom:5.13.4")
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
@@ -175,12 +162,12 @@ dependencies {
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
     systemProperty "projectDir", project.projectDir.absolutePath
-    systemProperty "choreoDir", "$project.projectDir.absolutePath/choreo"
+    systemProperty "trajoptDir", "$project.projectDir.absolutePath/trajopt"
 }
 
-tasks.register("syncChoreo") {
+tasks.register("syncTrajopt") {
     group = "deployment"
-    description = "Syncs TeamCode/choreo contents to /sdcard/FIRST/choreo when the remote directory exists"
+    description = "Syncs TeamCode/trajopt contents to /sdcard/FIRST/trajopt when the remote directory exists"
 
     doLast {
         def adb = android.adbExecutable
@@ -188,11 +175,11 @@ tasks.register("syncChoreo") {
             throw new GradleException("adb executable not found. Ensure the Android SDK is configured.")
         }
 
-        def remoteDir = "/sdcard/FIRST/choreo"
-        def localDir = file("choreo")
+        def remoteDir = "/sdcard/FIRST/trajopt"
+        def localDir = file("trajopt")
 
         if (!localDir.exists()) {
-            logger.lifecycle("Local choreo directory ${localDir} not found; nothing to upload.")
+            logger.lifecycle("Local trajopt directory ${localDir} not found; nothing to upload.")
             return
         }
 
@@ -203,7 +190,7 @@ tasks.register("syncChoreo") {
         }
 
         if (checkResult.exitValue != 0) {
-            logger.lifecycle("Remote choreo directory ${remoteDir} not present; skipping sync.")
+            logger.lifecycle("Remote trajopt directory ${remoteDir} not present; skipping sync.")
             return
         }
 
@@ -217,6 +204,6 @@ tasks.register("syncChoreo") {
             args "push", "${localDir.absolutePath}/.", remoteDir
         }
 
-        logger.lifecycle("Synced choreo assets to ${remoteDir}")
+        logger.lifecycle("Synced trajopt assets to ${remoteDir}")
     }
 }

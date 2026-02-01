@@ -1,7 +1,5 @@
 package sigmacorns.io
 
-import dev.nullftc.choreolib.sample.MecanumSample
-import dev.nullftc.choreolib.trajectory.Trajectory
 import org.joml.Vector2d
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
@@ -17,15 +15,10 @@ import java.nio.channels.DatagramChannel
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.sign
 import kotlin.math.sin
-import kotlin.math.withSign
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
@@ -33,20 +26,59 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 import kotlin.time.times
 
-data class Contour(
-    var pos: Pose2d,
-    var vel: Pose2d,
-    var tangent: Double,
-    var r: Double,
-    var a: Vector2d
+/**
+ * Linear contour parameters for a single knot point.
+ * Each knot defines a target point on the path and the path direction.
+ */
+data class LinearContour(
+    /** Target position on the path */
+    val lineP: Vector2d,
+    /** Path direction (unit vector) */
+    val lineD: Vector2d,
+    /** Target heading angle (radians) */
+    val targetTheta: Double,
+    /** Target angular velocity (rad/s) */
+    val targetOmega: Double,
 ) {
-    fun toArray(): DoubleArray = doubleArrayOf(pos.v.x,pos.v.y,pos.rot,vel.v.x,vel.v.y,vel.rot,tangent,r,a.x,a.y)
-    fun toStateArray(): DoubleArray = doubleArrayOf(vel.v.x, vel.v.y, vel.rot, pos.v.x, pos.v.y, pos.rot)
-}
+    fun toArray(): DoubleArray = doubleArrayOf(
+        lineP.x, lineP.y,
+        lineD.x, lineD.y,
+        targetTheta, targetOmega
+    )
 
-enum class SolverRequestType(val wireValue: Short) {
-    CONTOURING(1),
-    TRACKING(3),
+    companion object {
+        const val SIZE = 6
+
+        fun fromSample(sample: TrajoptSample, nextSample: TrajoptSample?): LinearContour {
+            // Compute path direction from velocity or position difference
+            val dir = if (sample.vx != 0.0 || sample.vy != 0.0) {
+                val speed = kotlin.math.hypot(sample.vx, sample.vy)
+                if (speed > 1e-6) {
+                    Vector2d(sample.vx / speed, sample.vy / speed)
+                } else {
+                    Vector2d(1.0, 0.0)
+                }
+            } else if (nextSample != null) {
+                val dx = nextSample.x - sample.x
+                val dy = nextSample.y - sample.y
+                val d = kotlin.math.hypot(dx, dy)
+                if (d > 1e-6) {
+                    Vector2d(dx / d, dy / d)
+                } else {
+                    Vector2d(1.0, 0.0)
+                }
+            } else {
+                Vector2d(cos(sample.heading), sin(sample.heading))
+            }
+
+            return LinearContour(
+                lineP = Vector2d(sample.x, sample.y),
+                lineD = dir,
+                targetTheta = sample.heading,
+                targetOmega = sample.omega,
+            )
+        }
+    }
 }
 
 enum class ContourSelectionMode {
@@ -54,41 +86,26 @@ enum class ContourSelectionMode {
     TIME,
 }
 
+/**
+ * MPC tuning parameters matching the new mecanum_mpc formulation.
+ * See gen_mpc.py for cost function details.
+ */
 data class MPCTuning(
-    // Contouring weights (indices 0-6)
-    var contourProgressWeight: Double = 0.0,
-    var contourPosErrWeight: Double = 30000.0,
-    var contourVelWeight: Double = 1000.0,
-    var contourThetaWeight: Double = 1000.0,
-    var contourWWeight: Double = 5.0,
-    var contourUDiffWeight: Double = 0.0,
-    var contourFutureDecay: Double = 0.3,
-    // Tracking weights (indices 7-14)
-    var trackStateWeight: Double = 250.0,
-    var trackTerminalWeightScale: Double = 1.0,
-    var trackUDiffWeight: Double = 20.0,
-    var trackFutureDecay: Double = 0.5,
-    var trackVW: Double = 1.0,
-    var trackPW: Double = 100.0,
-    var trackThetaW: Double = 50.0,
-    var trackOmegaW: Double = 1.0,
+    /** Weight for normal error (perpendicular to path) */
+    var wNormal: Double = 5000.0,
+    /** Weight for lag error (along path direction) */
+    var wLag: Double = 500.0,
+    /** Weight for heading error */
+    var wHeading: Double = 150.0,
+    /** Weight for control smoothness (u_diff) */
+    var wUDiff: Double = 20.0,
+    /** Temporal decay factor for future costs */
+    var futureDecay: Double = 0.8,
+    /** Scale factor for terminal cost */
+    var terminalScale: Double = 2.0,
 ) {
     fun toArray(): DoubleArray = doubleArrayOf(
-        contourProgressWeight,
-        contourPosErrWeight,
-        contourVelWeight,
-        contourThetaWeight,
-        contourWWeight,
-        contourUDiffWeight,
-        contourFutureDecay,
-        trackStateWeight,
-        trackTerminalWeightScale,
-        trackUDiffWeight,
-        trackFutureDecay,
-        trackVW,
-        trackPW,
-        trackThetaW,
-        trackOmegaW,
+        wNormal, wLag, wHeading, wUDiff, futureDecay, terminalScale
     )
 }
 
@@ -98,125 +115,86 @@ class MPCClient(
     SOLVER_PORT: Int = 5000,
     ROBOT_PORT: Int = 22377,
     val sampleLookahead: Int = 0,
-    val preIntegrate: Duration = 40.milliseconds,
+    val preIntegrate: Duration = 80.milliseconds,
     var contourSelectionMode: ContourSelectionMode = ContourSelectionMode.POSITION,
     var tuning: MPCTuning = MPCTuning(),
 ): AutoCloseable {
 
     companion object {
-        val N: Int = 7
-        val NX: Int = 6
-        val NU: Int = 4
-        val NT: Int = 10
-        val NP: Int = 7
-        val NTUNING: Int = 15
-        val DT: Duration = 40.milliseconds
+        const val N: Int = 10
+        const val K: Int = N + 1  // Number of knot points
+        const val NX: Int = 6
+        const val NU: Int = 4
+        const val NP: Int = 7
+        const val NTUNING: Int = 6
+        const val N_CONTOUR_PER_KNOT: Int = 6
+        const val N_CONTOUR_PARAMS: Int = K * N_CONTOUR_PER_KNOT  // 66 doubles
+        val DT: Duration = 80.milliseconds
 
-        val horizon = DT*N
+        val horizon = DT * N
 
-        fun load(traj: Trajectory<MecanumSample>): List<Contour> {
+        /**
+         * Convert a TrajoptTrajectory to a list of LinearContours.
+         */
+        fun load(traj: TrajoptTrajectory): List<LinearContour> {
             if (traj.samples.isEmpty()) return emptyList()
 
-            val samples = traj.samples
+            val contours = mutableListOf<LinearContour>()
+            var lastTheta = traj.samples.first().heading
 
-            val wpts = mutableListOf<Contour>()
-            var lastTheta = samples.first().heading
-
-            for ((i,s) in samples.withIndex()) {
-                val p = Vector2d(s.x, s.y)
-                val v = Vector2d(s.vx, s.vy)
-                val a = Vector2d(s.ax, s.ay)
-
-                var cross = v[0] * a[1] - v[1] * a[0]
-                if (abs(cross) < 0.01) {
-                    cross = 0.01.withSign(cross)
-                }
-
-                var r = hypot(v[0], v[1]).pow(3) / cross
-
-                if (abs(r) > 1000) {
-                    r = 1000.0.withSign(r)
-                }
-                if (abs(r) < 0.05) {
-                    r = 0.05.withSign(r)
-                }
-
-                var theta = s.heading
+            for ((i, sample) in traj.samples.withIndex()) {
+                val nextSample = traj.samples.getOrNull(i + 1)
 
                 // Unwrap heading so it's continuous
-                while (theta - lastTheta > PI) {
-                    theta -= PI * 2.0
-                }
-                while (theta - lastTheta < -PI) {
-                    theta += PI * 2.0
-                }
-
+                var theta = sample.heading
+                while (theta - lastTheta > PI) theta -= PI * 2.0
+                while (theta - lastTheta < -PI) theta += PI * 2.0
                 lastTheta = theta
 
-                // use average acceleration over the time horizon instead of the instantaneous acceleration
-                val endHorizonSample = traj.sampleAt(s.timestamp + horizon.toDouble(DurationUnit.SECONDS)) ?: traj.getFinalSample()!!
-
-                var ax = (endHorizonSample.vx - s.vx)/(endHorizonSample.timestamp-s.timestamp)
-                var ay = (endHorizonSample.vy - s.vy)/(endHorizonSample.timestamp-s.timestamp)
-
-                if(s == traj.getFinalSample()) {
-                    ax = 0.0
-                    ay = 0.0
-                }
-
-                wpts.add(
-                    Contour(
-                        Pose2d(
-                            p,
-                            theta,
-                        ),
-                        Pose2d(
-                            v,
-                            s.omega
-                        ),
-                        atan2(v[1], v[0]),
-                        -r,
-                        Vector2d(ax,ay)
-                    )
+                val unwrappedSample = TrajoptSample(
+                    timestamp = sample.timestamp,
+                    vx = sample.vx,
+                    vy = sample.vy,
+                    omega = sample.omega,
+                    x = sample.x,
+                    y = sample.y,
+                    heading = theta,
                 )
+
+                contours.add(LinearContour.fromSample(unwrappedSample, nextSample))
             }
 
-            return wpts
+            return contours
         }
     }
 
     val model = MecanumDynamics(parameters)
 
-    var lastTargetContour: Contour? = null
+    var lastTargetContour: LinearContour? = null
         private set
 
     var predictedEvolution: List<MecanumState> = emptyList()
         private set
 
-    var path: List<Contour>? = null
+    var path: List<LinearContour>? = null
         private set
 
-    private var trackingReferenceStates: List<DoubleArray> = emptyList()
-    private var contourReferencePositions: List<Vector2d> = emptyList()
-    private var contourTimestamps: List<Double> = emptyList()
-     var trackingReferencePositions: List<Vector2d> = emptyList()
-    private var trackingTimestamps: List<Double> = emptyList()
+    private var referencePositions: List<Vector2d> = emptyList()
+    private var timestamps: List<Double> = emptyList()
     private var trajectoryStartTime: Duration? = null
 
-    private var sentTargetContours: MutableList<Pair<Long, Contour?>> = mutableListOf()
+    private var sentTargetContours: MutableList<Pair<Long, LinearContour?>> = mutableListOf()
     private var curTime = 0.seconds
 
-    private val HEADER_SIZE: Int = 4 + 2 + 2 + 4 + 8
+    private val HEADER_SIZE: Int = 4 + 2 + 2 + 4 + 8  // 20 bytes
     private val DOUBLE_SIZE: Int = 8
-    private val TRACKING_STATE_COUNT: Int = (N + 1) * NX
-    private val CONTOURING_REQUEST_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (NT + NX + NU + NP + NTUNING)
-    private val TRACKING_REQUEST_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (TRACKING_STATE_COUNT + NX + NU + NP + NTUNING)
+    private val REQUEST_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (N_CONTOUR_PARAMS + NX + NU + NP + NTUNING)
     private val RESPONSE_MSG_SIZE: Int = HEADER_SIZE + DOUBLE_SIZE * (1 + N * NU)
 
     private var x0: MecanumState? = null
     private var V: Double = parameters.motor.vRef
 
-    private var latestU: DoubleArray = DoubleArray(N*NU)
+    private var latestU: DoubleArray = DoubleArray(N * NU)
     private var latestUTime = 0L
 
     var latestSampleI = 0
@@ -225,7 +203,6 @@ class MPCClient(
     private val channel = DatagramChannel.open()
     private val solverAddr = InetSocketAddress(SOLVER_IP, SOLVER_PORT)
     private val selector = Selector.open()
-    private var solverRequestType: SolverRequestType = SolverRequestType.CONTOURING
 
     init {
         channel.configureBlocking(false)
@@ -233,55 +210,27 @@ class MPCClient(
         channel.register(selector, SelectionKey.OP_READ)
     }
 
-    fun contourErr(contour: Contour, p: Vector2d): Pair<Double, Double> {
-        val cx = contour.pos.v[0] + contour.r * sin(contour.tangent)
-        val cy = contour.pos.v[1] - contour.r * cos(contour.tangent)
-
-        val dx = p[0] - cx
-        val dy = p[1] - cy
-
-        val drx = cos(-contour.tangent) * dx - sin(-contour.tangent) * dy
-        val dry = sin(-contour.tangent) * dx + cos(-contour.tangent) * dy
-
-        val progress = contour.r * (sign(contour.r) * (Math.PI / 2.0) - atan2(dry, drx))
-        val err = abs(contour.r) - hypot(dx, dy)
-
-        return Pair(progress, err)
-    }
-
     private data class TargetSelection(
         val closestIndex: Int,
         val targetIndex: Int,
-        val contour: Contour?,
     )
 
     private fun selectTarget(state: DoubleArray, time: Duration): TargetSelection? {
-        val positions = when (solverRequestType) {
-            SolverRequestType.CONTOURING -> contourReferencePositions
-            SolverRequestType.TRACKING -> trackingReferencePositions
-        }
-
-        if (positions.isEmpty()) {
+        if (referencePositions.isEmpty()) {
             return null
         }
 
-        val timestamps = when (solverRequestType) {
-            SolverRequestType.CONTOURING -> contourTimestamps
-            SolverRequestType.TRACKING -> trackingTimestamps
-        }
-
         val closestIndex = when {
-            contourSelectionMode == ContourSelectionMode.TIME &&
-            timestamps.isNotEmpty() -> {
+            contourSelectionMode == ContourSelectionMode.TIME && timestamps.isNotEmpty() -> {
                 if (trajectoryStartTime == null) {
                     trajectoryStartTime = time
                 }
                 val elapsed = (time - trajectoryStartTime!!).toDouble(DurationUnit.SECONDS)
                 timestamps.withIndex().minBy { (_, t) ->
-                    abs(t - elapsed)
+                    kotlin.math.abs(t - elapsed)
                 }.index
             }
-            else -> positions.withIndex().minBy { (_, ref) ->
+            else -> referencePositions.withIndex().minBy { (_, ref) ->
                 val dx = ref.x() - state[3]
                 val dy = ref.y() - state[4]
                 dx * dx + dy * dy
@@ -290,134 +239,95 @@ class MPCClient(
 
         latestSampleI = closestIndex
 
-        val targetIndex = min(closestIndex + sampleLookahead, positions.size - 1)
-
-        val contour = if (solverRequestType == SolverRequestType.CONTOURING) {
-            path?.getOrNull(targetIndex)
-        } else {
-            null
-        }
+        val targetIndex = min(closestIndex + sampleLookahead, referencePositions.size - 1)
 
         return TargetSelection(
             closestIndex = closestIndex,
             targetIndex = targetIndex,
-            contour = contour,
         )
     }
 
-    private fun buildTrackingReferenceStates(traj: Trajectory<MecanumSample>): List<DoubleArray> {
-        if (traj.samples.isEmpty()) return emptyList()
+    var seq: Int = 0
 
-        val states = ArrayList<DoubleArray>(traj.samples.size)
-        var lastTheta = traj.samples.first().heading
-
-        for (sample in traj.samples) {
-            var theta = sample.heading
-            while (theta - lastTheta > PI) {
-                theta -= PI * 2.0
-            }
-            while (theta - lastTheta < -PI) {
-                theta += PI * 2.0
-            }
-            lastTheta = theta
-
-            states += doubleArrayOf(
-                sample.vx,
-                sample.vy,
-                sample.omega,
-                sample.x,
-                sample.y,
-                theta,
-            )
-        }
-
-        return states
+    private fun unnormalizeHeading(heading: Double, target: Double): Double {
+        var h = heading
+        while (h - target > PI) h -= PI * 2.0
+        while (h - target < -PI) h += PI * 2.0
+        return h
     }
 
-    var seq: Int = 0
+    /**
+     * Build the contour parameters array for all K knots.
+     * Each knot has N_CONTOUR_PER_KNOT (6) values.
+     */
+    private fun buildContourParams(startIndex: Int): DoubleArray {
+        val params = DoubleArray(N_CONTOUR_PARAMS)
+        val contours = path ?: return params
+        if (contours.isEmpty()) return params
+
+        val lastIndex = contours.size - 1
+        for (k in 0 until K) {
+            val contour = contours[min(startIndex + k, lastIndex)]
+            val arr = contour.toArray()
+            for (j in 0 until N_CONTOUR_PER_KNOT) {
+                params[k * N_CONTOUR_PER_KNOT + j] = arr[j]
+            }
+        }
+
+        return params
+    }
 
     private fun sendRequest(time: Long) {
         if (x0 == null) {
             return
         }
-        val hasReference = when (solverRequestType) {
-            SolverRequestType.CONTOURING -> contourReferencePositions.isNotEmpty()
-            SolverRequestType.TRACKING -> trackingReferencePositions.isNotEmpty()
-        }
-
-        if (!hasReference) {
+        if (referencePositions.isEmpty()) {
             return
         }
 
         val selection = selectTarget(x0!!.toDoubleArray(), time.nanoseconds) ?: return
-        val targetContour = selection.contour
+        val targetContour = path?.getOrNull(selection.targetIndex) ?: return
 
-        if (solverRequestType == SolverRequestType.CONTOURING && targetContour == null) {
-            return
-        }
-        if (solverRequestType == SolverRequestType.TRACKING && trackingReferenceStates.isEmpty()) {
-            return
-        }
-
-        val requestSize = when (solverRequestType) {
-            SolverRequestType.CONTOURING -> CONTOURING_REQUEST_MSG_SIZE
-            SolverRequestType.TRACKING -> TRACKING_REQUEST_MSG_SIZE
-        }
-
-        val buf: ByteBuffer = ByteBuffer.allocate(requestSize)
+        val buf: ByteBuffer = ByteBuffer.allocate(REQUEST_MSG_SIZE)
         buf.order(ByteOrder.LITTLE_ENDIAN)
 
         // Header
         buf.putInt(0x564C4F53) // magic 'SOLV'
         buf.putShort(1.toShort()) // version
-        buf.putShort(solverRequestType.wireValue) // type = request
+        buf.putShort(1.toShort()) // type = contour request
         buf.putInt(seq) // sequence number
         seq += 1
         buf.putLong(time) // timestamp
 
         val p = parameters.toArray()
-        p[0] *= V/parameters.motor.vRef
-        p[1] *= V/parameters.motor.vRef
+        p[0] *= V / parameters.motor.vRef
+        p[1] *= V / parameters.motor.vRef
 
-        // Payload
-        when (solverRequestType) {
-            SolverRequestType.CONTOURING -> putArray(buf, targetContour!!.toArray())
-            SolverRequestType.TRACKING -> putArray(buf, buildExpectedStateHorizon(selection.targetIndex))
-        }
+        // Contour params (66 doubles)
+        putArray(buf, buildContourParams(selection.targetIndex))
 
-        val predictedX = predictState(x0!!,time.nanoseconds+preIntegrate)
-        val predictedU = getU(time.nanoseconds+preIntegrate)
+        // Predicted state
+        val predictedX = predictState(x0!!, time.nanoseconds + preIntegrate)
+        val predictedU = getU(time.nanoseconds + preIntegrate)
 
-        putArray(buf, predictedX.toDoubleArray())
-        putArray(buf, predictedU)
-        putArray(buf, p)
-        putArray(buf, tuning.toArray())
+        // Unnormalize heading so MPC turns in shortest direction
+        val stateArray = predictedX.toDoubleArray()
+        stateArray[5] = unnormalizeHeading(stateArray[5], targetContour.targetTheta)
+
+        putArray(buf, stateArray)  // x0 (6 doubles)
+        putArray(buf, predictedU)  // u_last (4 doubles)
+        putArray(buf, p)           // p (7 doubles)
+        putArray(buf, tuning.toArray())  // tuning (6 doubles)
 
         buf.flip()
 
         sentTargetContours += time to targetContour
 
         try {
-            if(channel.isOpen) channel.send(buf, solverAddr)
+            if (channel.isOpen) channel.send(buf, solverAddr)
         } catch (e: ClosedByInterruptException) {
             channel.close()
         }
-    }
-
-    private fun buildExpectedStateHorizon(startIndex: Int): DoubleArray {
-        val expected = DoubleArray(TRACKING_STATE_COUNT)
-        if (trackingReferenceStates.isEmpty()) {
-            return expected
-        }
-        val lastIndex = trackingReferenceStates.size - 1
-        for (offset in 0..N) {
-            val state = trackingReferenceStates[min(startIndex + offset, lastIndex)]
-            for (i in state.indices) {
-                expected[offset * NX + i] = state[i]
-            }
-        }
-
-        return expected
     }
 
     private fun receiveResponse() {
@@ -429,24 +339,24 @@ class MPCClient(
                     buf.order(ByteOrder.LITTLE_ENDIAN)
                     var addr: SocketAddress? = null
                     try {
-                        if(channel.isOpen) addr = channel.receive(buf)
+                        if (channel.isOpen) addr = channel.receive(buf)
                     } catch (_: ClosedByInterruptException) {
                         channel.close()
                     }
                     if (addr != null) {
                         buf.flip()
-                        val magic = buf.getInt() // magic 'SOLV'
+                        val magic = buf.getInt()
                         require(magic == 0x564C4F53)
-                        val version = buf.getShort() // version
-                        val type = buf.getShort() // type = request
-                        val seq = buf.getInt() // sequence number
-                        val t = buf.getLong() // timestamp
+                        val version = buf.getShort()
+                        val type = buf.getShort()
+                        val seq = buf.getInt()
+                        val t = buf.getLong()
 
                         val t0 = buf.getLong()
 
                         println("SOLVED t0=$t0")
 
-                        if (t0>=latestUTime) {
+                        if (t0 >= latestUTime) {
                             println("UPDATED LATEST U")
                             latestUTime = t0
                             getArray(buf, latestU)
@@ -470,39 +380,20 @@ class MPCClient(
         for (i in arr.indices) arr[i] = buf.getDouble()
     }
 
-    fun setTarget(
-        traj: Trajectory<MecanumSample>,
-        requestType: SolverRequestType = solverRequestType,
-    ) {
-        solverRequestType = requestType
-        when (requestType) {
-            SolverRequestType.CONTOURING -> setTargetContours(load(traj), traj.samples.map { it.timestamp })
-            SolverRequestType.TRACKING -> setTargetTracking(buildTrackingReferenceStates(traj), traj.samples.map { it.timestamp })
-        }
+    /**
+     * Set the target trajectory from a TrajoptTrajectory.
+     */
+    fun setTarget(traj: TrajoptTrajectory) {
+        setTargetContours(load(traj), traj.samples.map { it.timestamp })
     }
 
-    fun setTargetContours(path: List<Contour>, timestamps: List<Double> = emptyList()) {
+    /**
+     * Set the target contours directly.
+     */
+    fun setTargetContours(path: List<LinearContour>, timestamps: List<Double> = emptyList()) {
         this.path = path
-        solverRequestType = SolverRequestType.CONTOURING
-        trackingReferenceStates = emptyList()
-        contourReferencePositions = path.map { Vector2d(it.pos.v) }
-        contourTimestamps = timestamps
-        trackingReferencePositions = emptyList()
-        trackingTimestamps = emptyList()
-        trajectoryStartTime = null
-        latestSampleI = 0
-        lastTargetContour = null
-        latestU = DoubleArray(N * NU)
-    }
-
-    fun setTargetTracking(states: List<DoubleArray>, timestamps: List<Double> = emptyList()) {
-        solverRequestType = SolverRequestType.TRACKING
-        this.path = null
-        trackingReferenceStates = states.map { it.copyOf() }
-        trackingReferencePositions = trackingReferenceStates.map { Vector2d(it[3], it[4]) }
-        trackingTimestamps = timestamps
-        contourReferencePositions = emptyList()
-        contourTimestamps = emptyList()
+        referencePositions = path.map { it.lineP }
+        this.timestamps = timestamps
         trajectoryStartTime = null
         latestSampleI = 0
         lastTargetContour = null
@@ -510,12 +401,8 @@ class MPCClient(
     }
 
     fun startPose(): Pose2d {
-        return when (solverRequestType) {
-            SolverRequestType.CONTOURING -> path!![0].pos
-            SolverRequestType.TRACKING -> trackingReferenceStates[0].let {
-                Pose2d(it[3],it[4],it[5])
-            }
-        }
+        val first = path?.firstOrNull() ?: return Pose2d()
+        return Pose2d(first.lineP, first.targetTheta)
     }
 
     fun resetTrajectoryStartTime() {
@@ -536,39 +423,39 @@ class MPCClient(
     fun getU(time: Duration): DoubleArray {
         receiveResponse()
 
-        val delay = time-latestUTime.nanoseconds
+        val delay = time - latestUTime.nanoseconds
 
-        println("MPC DELAY: ${delay.inWholeMilliseconds}ms (true) ${(delay-preIntegrate).inWholeMilliseconds}ms (effective)")
+        println("MPC DELAY: ${delay.inWholeMilliseconds}ms (true) ${(delay - preIntegrate).inWholeMilliseconds}ms (effective)")
 
-        val i = ((delay-preIntegrate-10.milliseconds)/DT).toInt().coerceIn(0, N-1)
+        val i = ((delay - preIntegrate - 10.milliseconds) / DT).toInt().coerceIn(0, N - 1)
 
-        val res =  latestU.copyOfRange(i*NU, (i+1)*NU)
+        val res = latestU.copyOfRange(i * NU, (i + 1) * NU)
 
         return res
     }
 
     private fun repredictEvolution() {
         val xs = mutableListOf(x0!!)
-        for(i in 0..N-1) {
-            xs += model.integrate(DT.toDouble(DurationUnit.SECONDS),0.001, latestU.sliceArray(i*NU..(i+1)*NU-1), xs.last())
+        for (i in 0 until N) {
+            xs += model.integrate(DT.toDouble(DurationUnit.SECONDS), 0.001, latestU.sliceArray(i * NU..(i + 1) * NU - 1), xs.last())
         }
 
         predictedEvolution = xs
     }
 
     fun predictState(x0: MecanumState, time: Duration): MecanumState {
-        val t = time-latestUTime.nanoseconds
-        var x0 = x0
-        val i = (t.inWholeMilliseconds/DT.inWholeMilliseconds).toInt().coerceIn(0,N-1)
-        if(!predictedEvolution.isEmpty()) {
-            x0 = predictedEvolution[i]
+        val t = time - latestUTime.nanoseconds
+        var state = x0
+        val i = (t.inWholeMilliseconds / DT.inWholeMilliseconds).toInt().coerceIn(0, N - 1)
+        if (predictedEvolution.isNotEmpty()) {
+            state = predictedEvolution[i]
         }
-        val u = latestU.sliceArray(i*NU..(i+1)*NU-1)
-        return model.integrate((t-i*DT).toDouble(DurationUnit.SECONDS), MECANUM_DT,u,x0)
+        val u = latestU.sliceArray(i * NU..(i + 1) * NU - 1)
+        return model.integrate((t - i * DT).toDouble(DurationUnit.SECONDS), MECANUM_DT, u, state)
     }
 
     override fun close() {
-        if(channel.isOpen) {
+        if (channel.isOpen) {
             channel.close()
         }
     }
