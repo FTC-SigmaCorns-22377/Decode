@@ -113,9 +113,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     override fun velocity(): Pose2d {
         if (pinpoint == null ) return Pose2d()
+
+
+        val vx = pinpoint!!.getVelX(DistanceUnit.METER)
+        val vy = pinpoint!!.getVelY(DistanceUnit.METER)
         return Pose2d(
-            pinpoint!!.getVelX(DistanceUnit.METER),
-            pinpoint!!.getVelY(DistanceUnit.METER),
+            cos(-posOffset.rot)*vx + sin(-posOffset.rot)*vy,
+            -sin(-posOffset.rot)*vx + cos(-posOffset.rot)*vy,
+
             pinpoint!!.getHeadingVelocity(UnnormalizedAngleUnit.RADIANS)
         )
     }

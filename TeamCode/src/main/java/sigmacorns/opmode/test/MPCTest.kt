@@ -7,6 +7,7 @@ import kotlin.math.hypot
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.control.DriveController
 import sigmacorns.io.ContourSelectionMode
 import sigmacorns.math.Pose2d
 import sigmacorns.io.HardwareIO
@@ -19,7 +20,7 @@ import java.io.File
 import kotlin.time.Duration.Companion.seconds
 
 @TeleOp(group = "test")
-class MPCForward: MPCTest("Trajectory 1")
+class MPCForward: MPCTest("forward")
 
 @TeleOp(group = "test")
 class MPCReturn: MPCTest("Trajectory 2")
@@ -78,7 +79,7 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
             drivetrainParameters,
             Network.LIMELIGHT,
             contourSelectionMode = ContourSelectionMode.POSITION,
-            sampleLookahead = 1
+            sampleLookahead = 0
         ).use { mpc ->
             rerunSink("MPCTest($trajName)").use { rr ->
                 mpc.setTarget(traj)
@@ -103,16 +104,28 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                 val pathPoints = mpc.path?.map { it.lineP } ?: emptyList()
                 rr.logLineStrip("path/pos", pathPoints)
 
+                val driveController = DriveController()
+
                 while (opModeIsActive()) {
                     val t = io.time()
                     state.update(io)
 
                     mpc.update(
-                        MecanumState(io.velocity(), io.position()),
+                        state.mecanumState,
                         io.voltage(),
                         t
                     )
                     val u = mpc.getU(t)
+
+                    // u is now [drive, strafe, turn]
+                    val drive = u[0]
+                    val strafe = u[1]
+                    val turn = u[2]
+
+                    // Log drive, strafe, turn values
+                    rr.logScalar("mpc/drive", drive)
+                    rr.logScalar("mpc/strafe", strafe)
+                    rr.logScalar("mpc/turn", turn)
 
                     // Log predicted path as velocity-colored points
                     val predictedPoints = mpc.predictedEvolution.map {
@@ -123,10 +136,9 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                     }.toIntArray()
                     rr.logPoints3DWithColors("predictedPath", predictedPoints, predictedColors, 0.02f)
 
-                    io.driveFL = u[0]
-                    io.driveBL = u[1]
-                    io.driveBR = u[2]
-                    io.driveFR = u[3]
+                    // Convert drive, strafe, turn to motor powers using DriveController
+                    val robotPower = Pose2d(drive, strafe, turn)
+                    driveController.drive(robotPower, io)
 
                     io.update()
 
@@ -149,6 +161,27 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                         rr.logScalar("contour/omega", contour.targetOmega)
                         rr.logScalar("contour/index", mpc.latestSampleI)
                     }
+//
+//                    // Log sent target contours as 3D unit vectors (arrows)
+//                    // Each contour is visualized as: origin at lineP, direction along lineD
+//                    val sentContours = mpc.lastSentContours
+//                    if (sentContours.isNotEmpty()) {
+//                        val arrowLength = 0.1  // Length of direction arrow in meters
+//                        for ((k, contour) in sentContours.withIndex()) {
+//                            val origin = Vector3d(contour.lineP.x, contour.lineP.y, 0.0)
+//                            val endpoint = Vector3d(
+//                                contour.lineP.x + contour.lineD.x * arrowLength,
+//                                contour.lineP.y + contour.lineD.y * arrowLength,
+//                                0.0
+//                            )
+//                            rr.logLineStrip("contour/sent/$k", listOf(origin, endpoint))
+//                        }
+//
+//                        // Also log all sent contour positions as points
+//                        val sentPoints = sentContours.map { Vector3d(it.lineP.x, it.lineP.y, 0.0) }
+//                        val sentColors = IntArray(sentContours.size) { 0xFF00FFFF.toInt() } // Cyan
+//                        rr.logPoints3DWithColors("contour/sent/positions", sentPoints, sentColors, 0.02f)
+//                    }
                 }
             }
         }

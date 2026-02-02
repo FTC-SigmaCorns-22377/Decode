@@ -1,6 +1,7 @@
 package sigmacorns.io
 
 import org.joml.Vector2d
+import sigmacorns.control.DriveController
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
 import sigmacorns.sim.MecanumDynamics
@@ -14,6 +15,7 @@ import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.DatagramChannel
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
+import sigmacorns.control.SlewRateLimiter
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -87,25 +89,35 @@ enum class ContourSelectionMode {
 }
 
 /**
- * MPC tuning parameters matching the new mecanum_mpc formulation.
- * See gen_mpc.py for cost function details.
+ * MPC tuning parameters matching the mecanum_mpc formulation.
+ * See gen_mpc_native.py for cost function details.
+ *
+ * Cost = w_normal * normal_err² + w_lag * lag_err² + w_heading * heading_err²
+ *      + w_u * ||u||² + w_du * ||u - u_last||²
+ *
+ * Tuning guidelines:
+ * - wNormal: High values (1000-10000) keep robot close to path. Start high, reduce if too aggressive.
+ * - wLag: Moderate values (100-1000) control how tightly robot follows timing. Lower = more relaxed.
+ * - wHeading: Lower values (50-500) for heading. Too high causes oscillation when path changes direction.
+ * - wU: Control effort penalty (1-50). Higher = slower, smoother movements. Prevents motor saturation.
+ * - wDU: Control rate penalty (10-200). CRITICAL for smoothness. Higher = less jitter but slower response.
+ *
+ * For jitter issues: Increase wDU first (try 50-100), then wU (try 10-30).
  */
 data class MPCTuning(
     /** Weight for normal error (perpendicular to path) */
-    var wNormal: Double = 5000.0,
+    var wNormal: Double = 500.0,
     /** Weight for lag error (along path direction) */
     var wLag: Double = 500.0,
     /** Weight for heading error */
     var wHeading: Double = 150.0,
-    /** Weight for control smoothness (u_diff) */
-    var wUDiff: Double = 20.0,
-    /** Temporal decay factor for future costs */
-    var futureDecay: Double = 0.8,
-    /** Scale factor for terminal cost */
-    var terminalScale: Double = 2.0,
+    /** Weight for control effort (penalizes large controls) */
+    var wU: Double = 10.0,
+    /** Weight for control rate (penalizes rapid changes - reduces jitter) */
+    var wDU: Double = 50.0,
 ) {
     fun toArray(): DoubleArray = doubleArrayOf(
-        wNormal, wLag, wHeading, wUDiff, futureDecay, terminalScale
+        wNormal, wLag, wHeading, wU, wDU
     )
 }
 
@@ -115,21 +127,28 @@ class MPCClient(
     SOLVER_PORT: Int = 5000,
     ROBOT_PORT: Int = 22377,
     val sampleLookahead: Int = 0,
-    val preIntegrate: Duration = 80.milliseconds,
-    var contourSelectionMode: ContourSelectionMode = ContourSelectionMode.POSITION,
+    val preIntegrate: Duration = 0.milliseconds,
+    var contourSelectionMode: ContourSelectionMode = ContourSelectionMode.TIME,
     var tuning: MPCTuning = MPCTuning(),
+    /**
+     * Optional client-side slew rate limiting as a safety fallback.
+     * Set to null to disable. Recommended: 3.0-5.0 (units/second) for smooth operation.
+     * This is applied AFTER MPC output as a last-resort smoothing filter.
+     * The MPC's wDU parameter should handle most smoothing; use this for additional safety.
+     */
+    var clientSlewRate: Double? = null,
 ): AutoCloseable {
 
     companion object {
-        const val N: Int = 10
+        const val N: Int = 15
         const val K: Int = N + 1  // Number of knot points
         const val NX: Int = 6
-        const val NU: Int = 4
+        const val NU: Int = 3  // drive, strafe, turn
         const val NP: Int = 7
-        const val NTUNING: Int = 6
+        const val NTUNING: Int = 5  // [w_normal, w_lag, w_heading, w_u, w_du]
         const val N_CONTOUR_PER_KNOT: Int = 6
-        const val N_CONTOUR_PARAMS: Int = K * N_CONTOUR_PER_KNOT  // 66 doubles
-        val DT: Duration = 80.milliseconds
+        const val N_CONTOUR_PARAMS: Int = K * N_CONTOUR_PER_KNOT  // 96 doubles
+        val DT: Duration = 40.milliseconds
 
         val horizon = DT * N
 
@@ -179,6 +198,11 @@ class MPCClient(
     var path: List<LinearContour>? = null
         private set
 
+    /** The last set of K contours sent to the MPC solver (interpolated at DT intervals). */
+    var lastSentContours: List<LinearContour> = emptyList()
+        private set
+
+    private var trajectory: TrajoptTrajectory? = null
     private var referencePositions: List<Vector2d> = emptyList()
     private var timestamps: List<Double> = emptyList()
     private var trajectoryStartTime: Duration? = null
@@ -196,6 +220,14 @@ class MPCClient(
 
     private var latestU: DoubleArray = DoubleArray(N * NU)
     private var latestUTime = 0L
+
+    // Client-side slew rate limiters (one per control channel)
+    private val slewLimiters = arrayOf(
+        SlewRateLimiter(5.0),  // drive
+        SlewRateLimiter(5.0),  // strafe
+        SlewRateLimiter(5.0),  // turn
+    )
+    private var lastGetUTime: Duration? = null
 
     var latestSampleI = 0
         private set
@@ -257,23 +289,67 @@ class MPCClient(
     }
 
     /**
+     * Interpolate a LinearContour at a given time using the trajectory.
+     * Falls back to the nearest contour from path if trajectory is unavailable.
+     */
+    private fun interpolateContourAt(time: Double): LinearContour {
+        val traj = trajectory
+        val contours = path ?: return LinearContour(Vector2d(), Vector2d(1.0, 0.0), 0.0, 0.0)
+        if (contours.isEmpty()) return LinearContour(Vector2d(), Vector2d(1.0, 0.0), 0.0, 0.0)
+
+        // Use trajectory's sampleAt for interpolation if available
+        if (traj != null) {
+            val sample = traj.sampleAt(time) ?: return contours.last()
+            return LinearContour.fromSample(sample, null)
+        }
+
+        // Fallback: find nearest by timestamp
+        if (timestamps.isEmpty()) return contours.last()
+        val idx = timestamps.withIndex().minBy { (_, t) -> kotlin.math.abs(t - time) }.index
+        return contours[idx]
+    }
+
+    /**
      * Build the contour parameters array for all K knots.
      * Each knot has N_CONTOUR_PER_KNOT (6) values.
+     * Contours are interpolated at DT time intervals from the start time.
      */
-    private fun buildContourParams(startIndex: Int): DoubleArray {
+    private fun buildContourParams(startTime: Double): DoubleArray {
         val params = DoubleArray(N_CONTOUR_PARAMS)
         val contours = path ?: return params
         if (contours.isEmpty()) return params
 
-        val lastIndex = contours.size - 1
+        val dtSeconds = DT.toDouble(DurationUnit.SECONDS)
+        val interpolatedContours = mutableListOf<LinearContour>()
+
+        // Unwrap headings to ensure continuity
+        var lastTheta = interpolateContourAt(startTime).targetTheta
+
         for (k in 0 until K) {
-            val contour = contours[min(startIndex + k, lastIndex)]
-            val arr = contour.toArray()
+            val time = startTime + k * dtSeconds
+            val contour = interpolateContourAt(time)
+
+            // Unwrap heading
+            var theta = contour.targetTheta
+            while (theta - lastTheta > PI) theta -= PI * 2.0
+            while (theta - lastTheta < -PI) theta += PI * 2.0
+            lastTheta = theta
+
+            val unwrappedContour = LinearContour(
+                lineP = contour.lineP,
+                lineD = contour.lineD,
+                targetTheta = theta,
+                targetOmega = contour.targetOmega,
+            )
+            interpolatedContours.add(unwrappedContour)
+
+            val arr = unwrappedContour.toArray()
             for (j in 0 until N_CONTOUR_PER_KNOT) {
                 params[k * N_CONTOUR_PER_KNOT + j] = arr[j]
             }
         }
 
+        lastSentContours = interpolatedContours
         return params
     }
 
@@ -287,6 +363,14 @@ class MPCClient(
 
         val selection = selectTarget(x0!!.toDoubleArray(), time.nanoseconds) ?: return
         val targetContour = path?.getOrNull(selection.targetIndex) ?: return
+
+        // Compute the start time for contour interpolation
+        val startTime = if (timestamps.isNotEmpty() && selection.targetIndex < timestamps.size) {
+            timestamps[selection.targetIndex]
+        } else {
+            // Fallback: estimate time from index
+            selection.targetIndex * DT.toDouble(DurationUnit.SECONDS)
+        }
 
         val buf: ByteBuffer = ByteBuffer.allocate(REQUEST_MSG_SIZE)
         buf.order(ByteOrder.LITTLE_ENDIAN)
@@ -303,8 +387,8 @@ class MPCClient(
         p[0] *= V / parameters.motor.vRef
         p[1] *= V / parameters.motor.vRef
 
-        // Contour params (66 doubles)
-        putArray(buf, buildContourParams(selection.targetIndex))
+        // Contour params (K * 6 doubles) - interpolated at DT intervals
+        putArray(buf, buildContourParams(startTime))
 
         // Predicted state
         val predictedX = predictState(x0!!, time.nanoseconds + preIntegrate)
@@ -360,6 +444,7 @@ class MPCClient(
                             println("UPDATED LATEST U")
                             latestUTime = t0
                             getArray(buf, latestU)
+                            println("MPC: UPDATED U = ${latestU.toList().chunked(3).map { "(${it[0]},${it[1]},${it[2]}), " }.reduce(String::plus)}")
                             val matched = sentTargetContours.find { it.first == t0 }
                             lastTargetContour = matched?.second
                             sentTargetContours.removeAll { it.first <= t0 }
@@ -384,6 +469,7 @@ class MPCClient(
      * Set the target trajectory from a TrajoptTrajectory.
      */
     fun setTarget(traj: TrajoptTrajectory) {
+        this.trajectory = traj
         setTargetContours(load(traj), traj.samples.map { it.timestamp })
     }
 
@@ -397,6 +483,7 @@ class MPCClient(
         trajectoryStartTime = null
         latestSampleI = 0
         lastTargetContour = null
+        lastSentContours = emptyList()
         latestU = DoubleArray(N * NU)
     }
 
@@ -429,7 +516,19 @@ class MPCClient(
 
         val i = ((delay - preIntegrate - 10.milliseconds) / DT).toInt().coerceIn(0, N - 1)
 
-        val res = latestU.copyOfRange(i * NU, (i + 1) * NU)
+        var res = latestU.copyOfRange(i * NU, (i + 1) * NU)
+
+        // Apply optional client-side slew rate limiting
+        val slewRate = clientSlewRate
+        if (slewRate != null) {
+            val dt = lastGetUTime?.let { time - it } ?: DT
+            lastGetUTime = time
+
+            slewLimiters.forEachIndexed { idx, limiter ->
+                limiter.maxRate = slewRate
+                res[idx] = limiter.calculate(res[idx], dt)
+            }
+        }
 
         return res
     }
@@ -437,7 +536,11 @@ class MPCClient(
     private fun repredictEvolution() {
         val xs = mutableListOf(x0!!)
         for (i in 0 until N) {
-            xs += model.integrate(DT.toDouble(DurationUnit.SECONDS), 0.001, latestU.sliceArray(i * NU..(i + 1) * NU - 1), xs.last())
+            val u = latestU.sliceArray(i * NU..(i + 1) * NU - 1).let {
+                val v = model.mecanumInversePowerKinematics(Pose2d(it[0],it[1],it[2]))
+                doubleArrayOf(v[0],v[1],v[2],v[3])
+            }
+            xs += model.integrate(DT.toDouble(DurationUnit.SECONDS), 0.001, u, xs.last())
         }
 
         predictedEvolution = xs
@@ -450,7 +553,10 @@ class MPCClient(
         if (predictedEvolution.isNotEmpty()) {
             state = predictedEvolution[i]
         }
-        val u = latestU.sliceArray(i * NU..(i + 1) * NU - 1)
+        val u = latestU.sliceArray(i * NU..(i + 1) * NU - 1).let {
+            val v = model.mecanumInversePowerKinematics(Pose2d(it[0],it[1],it[2]))
+            doubleArrayOf(v[0],v[1],v[2],v[3])
+        }
         return model.integrate((t - i * DT).toDouble(DurationUnit.SECONDS), MECANUM_DT, u, state)
     }
 
