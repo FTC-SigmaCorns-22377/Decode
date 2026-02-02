@@ -23,6 +23,9 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.yield
+import sigmacorns.State
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
@@ -571,6 +574,52 @@ class MPCClient(
             doubleArrayOf(v[0],v[1],v[2],v[3])
         }
         return model.integrate((t - i * DT).toDouble(DurationUnit.SECONDS), MECANUM_DT, u, state)
+    }
+
+    fun isTrajectoryComplete(): Boolean {
+        val traj = trajectory ?: return true
+        val startTime = trajectoryStartTime ?: return false
+
+        // Also check if we're at the last sample
+        val pathSize = path?.size ?: 0
+        if (pathSize > 0 && latestSampleI >= pathSize - 1) {
+            return true
+        }
+
+        return false
+    }
+
+    /**
+     * Creates a suspend function that runs MPC control on the given trajectory.
+     * The function updates the drivetrain until the trajectory is complete.
+     *
+     * Usage:
+     * ```
+     * val mpc = MPCClient(...)
+     * scope.launch {
+     *     mpc.runTrajectory(traj, io)()
+     * }
+     * ```
+     *
+     * @param traj The trajectory to follow
+     * @param io The IO interface for reading state and writing motor powers
+     * @param driveController The drive controller for setting motor powers (optional)
+     * @param updateDelay Optional delay between loop iterations (use for simulation)
+     * @return A suspend function that runs the MPC and completes when trajectory is finished
+     */
+    fun runTrajectory(
+        traj: TrajoptTrajectory,
+        updateDelay: Duration = 0.milliseconds
+    ): suspend () -> Unit = suspend {
+        setTarget(traj)
+
+        while (!isTrajectoryComplete()) {
+            if (updateDelay > 0.milliseconds) {
+                delay(updateDelay.inWholeMilliseconds)
+            } else {
+                yield()
+            }
+        }
     }
 
     override fun close() {
