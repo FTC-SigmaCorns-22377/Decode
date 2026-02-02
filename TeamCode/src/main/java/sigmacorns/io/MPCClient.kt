@@ -1,6 +1,7 @@
 package sigmacorns.io
 
 import org.joml.Vector2d
+import sigmacorns.constants.drivetrainCenter
 import sigmacorns.control.DriveController
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
@@ -20,6 +21,7 @@ import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -110,11 +112,11 @@ data class MPCTuning(
     /** Weight for lag error (along path direction) */
     var wLag: Double = 500.0,
     /** Weight for heading error */
-    var wHeading: Double = 150.0,
-    /** Weight for control effort (penalizes large controls) */
-    var wU: Double = 10.0,
+    var wHeading: Double = 200.0,
+    /** Weight for control effort (penalizes torque) */
+    var wU: Double = 0.2,
     /** Weight for control rate (penalizes rapid changes - reduces jitter) */
-    var wDU: Double = 50.0,
+    var wDU: Double = 10.0,
 ) {
     fun toArray(): DoubleArray = doubleArrayOf(
         wNormal, wLag, wHeading, wU, wDU
@@ -252,20 +254,24 @@ class MPCClient(
             return null
         }
 
+
+        if (trajectoryStartTime == null) {
+            trajectoryStartTime = time
+        }
+
+        val elapsed = (time - trajectoryStartTime!!).toDouble(DurationUnit.SECONDS)
+
         val closestIndex = when {
             contourSelectionMode == ContourSelectionMode.TIME && timestamps.isNotEmpty() -> {
-                if (trajectoryStartTime == null) {
-                    trajectoryStartTime = time
-                }
-                val elapsed = (time - trajectoryStartTime!!).toDouble(DurationUnit.SECONDS)
                 timestamps.withIndex().minBy { (_, t) ->
                     kotlin.math.abs(t - elapsed)
                 }.index
             }
-            else -> referencePositions.withIndex().minBy { (_, ref) ->
+            else -> referencePositions.withIndex().minBy { (i, ref) ->
                 val dx = ref.x() - state[3]
                 val dy = ref.y() - state[4]
-                dx * dx + dy * dy
+                val dt = kotlin.math.abs((timestamps.getOrNull(i) ?: elapsed) - elapsed)
+                dx * dx + dy * dy + dt*2.0
             }.index
         }
 
@@ -353,6 +359,8 @@ class MPCClient(
         return params
     }
 
+    private var lastTargetSelection: TargetSelection? = null
+
     private fun sendRequest(time: Long) {
         if (x0 == null) {
             return
@@ -361,7 +369,12 @@ class MPCClient(
             return
         }
 
-        val selection = selectTarget(x0!!.toDoubleArray(), time.nanoseconds) ?: return
+        // Predicted state
+        val predictedX = predictState(x0!!, time.nanoseconds + preIntegrate)
+        val predictedU = getU(time.nanoseconds + preIntegrate)
+
+        val selection = selectTarget(predictedX.toDoubleArray(), time.nanoseconds) ?: return
+        lastTargetSelection = selection
         val targetContour = path?.getOrNull(selection.targetIndex) ?: return
 
         // Compute the start time for contour interpolation
@@ -389,10 +402,6 @@ class MPCClient(
 
         // Contour params (K * 6 doubles) - interpolated at DT intervals
         putArray(buf, buildContourParams(startTime))
-
-        // Predicted state
-        val predictedX = predictState(x0!!, time.nanoseconds + preIntegrate)
-        val predictedU = getU(time.nanoseconds + preIntegrate)
 
         // Unnormalize heading so MPC turns in shortest direction
         val stateArray = predictedX.toDoubleArray()
@@ -498,7 +507,11 @@ class MPCClient(
 
     fun update(state: MecanumState, v: Number, time: Duration) {
         V = v.toDouble()
-        x0 = state
+        x0 = state.copy().also {
+
+            // go from odometry center to drivetrain center
+            it.pos.v.add(drivetrainCenter.rotate(it.pos.rot))
+        }
 
         println("sending state=$state")
         println("sending $x0")
@@ -514,7 +527,7 @@ class MPCClient(
 
         println("MPC DELAY: ${delay.inWholeMilliseconds}ms (true) ${(delay - preIntegrate).inWholeMilliseconds}ms (effective)")
 
-        val i = ((delay - preIntegrate - 10.milliseconds) / DT).toInt().coerceIn(0, N - 1)
+        val i = ((delay - preIntegrate - 5.milliseconds) / DT).toInt().coerceIn(0, N - 1)
 
         var res = latestU.copyOfRange(i * NU, (i + 1) * NU)
 

@@ -1,5 +1,6 @@
 package sigmacorns.constants
 
+import org.joml.Vector2d
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
@@ -25,7 +26,7 @@ val bareMotorStallTorque = 0.187
  * Gear ratio used with a Modern Robotics 12v DC motor.
  * See goBilda website for values
  */
-val driveGearRatio = 19.2
+val driveGearRatio = 13.7
 
 val driveMotor = LinearDcMotor(bareMotorTopSpeed/driveGearRatio,bareMotorStallTorque*driveGearRatio)
 
@@ -37,9 +38,13 @@ val drivetrainParameters = MecanumParameters(
     0.2,
     0.2,
     0.048,
-    17.0,
+    13.0,
     0.5
+    //1.32129857491
 )
+
+
+val drivetrainCenter = Vector2d(0.03996203, 0.0)
 
 val flywheelGearRatio = 13.7
 val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio,bareMotorStallTorque*flywheelGearRatio)

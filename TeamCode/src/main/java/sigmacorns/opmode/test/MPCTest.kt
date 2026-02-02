@@ -17,10 +17,14 @@ import sigmacorns.io.TrajoptLoader
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MecanumState
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @TeleOp(group = "test")
 class MPCForward: MPCTest("forward")
+
+@TeleOp(group = "test")
+class MPCIntake1: MPCTest("intake_1")
 
 @TeleOp(group = "test")
 class MPCReturn: MPCTest("Trajectory 2")
@@ -79,9 +83,11 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
             drivetrainParameters,
             Network.LIMELIGHT,
             contourSelectionMode = ContourSelectionMode.POSITION,
+            preIntegrate = 40.milliseconds,
             sampleLookahead = 0
         ).use { mpc ->
             rerunSink("MPCTest($trajName)").use { rr ->
+                rr.disable = true
                 mpc.setTarget(traj)
 
                 val state = State(

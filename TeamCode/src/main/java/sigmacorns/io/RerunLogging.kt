@@ -87,6 +87,8 @@ class RerunLogging private constructor(
     private var ptr: Long = 0
     private var connectionWarningLogged = false
 
+    var disable: Boolean = false
+
     var isConnected: Boolean = false
         private set
 
@@ -101,6 +103,7 @@ class RerunLogging private constructor(
     }
 
     private inline fun withConnection(block: (Long) -> Unit) {
+        if(disable) return
         val handle = ptr
         if (!isConnected) {
             logConnectionUnavailable()
