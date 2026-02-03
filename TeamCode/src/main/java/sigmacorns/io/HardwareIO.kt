@@ -39,7 +39,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
 
     //shooter
-    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")!!
+    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
 //turret
@@ -51,7 +51,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val transferServo: CRServo? = hardwareMap.tryGet(CRServo::class.java,"transfer")
 
     //sensors
-    private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
+    val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
     private val distanceSensor: DistanceSensor? = hardwareMap.tryGet(DistanceSensor::class.java, "dist")
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
     val imu: IMU? = hardwareMap.tryGet(IMU::class.java,"imu")
@@ -232,10 +232,35 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     override fun voltage(): Double = savedVoltage
     override fun colorSensorDetectsBall(): Boolean {
-        return false
+        if (colorSensor == null) return false
+        val distance = (colorSensor as? DistanceSensor)?.getDistance(DistanceUnit.CM) ?: 100.0
+        return distance < 5.0
     }
 
     override fun colorSensorGetBallColor(): Balls? {
+        if (colorSensor == null) return null
+        if (!colorSensorDetectsBall()) return null
+
+        // Read RGB values from the sensor
+        val red = colorSensor.red()
+        val green = colorSensor.green()
+        val blue = colorSensor.blue()
+
+        // Determine which color this is based on calibration
+        // These thresholds will need to be tuned for your specific balls and lighting
+
+        // Example logic (tune these values for your robot):
+        if (colorSensor.alpha() < 95) return null
+
+        if (green > red && green > blue) {
+            // Green ball detected
+            return Balls.Green
+        } else if ((red + blue) > green * 1.5) {
+            // Purple ball detected (red + blue makes purple)
+            return Balls.Purple
+        }
+
+        // If we can't determine the color clearly, return null
         return null
     }
 

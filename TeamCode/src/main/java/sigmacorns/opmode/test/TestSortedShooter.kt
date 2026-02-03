@@ -1,4 +1,4 @@
-package sigmacorns.opmode.teleop
+package sigmacorns.opmode.test
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
@@ -12,11 +12,11 @@ import sigmacorns.control.SpindexerLogic
 import sigmacorns.control.Turret
 import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.aim.VisionTracker
+import sigmacorns.control.sortedShoot
 import sigmacorns.globalFieldState
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.opmode.test.AutoAimGTSAMTest
 import sigmacorns.opmode.test.AutoAimGTSAMTest.Companion.applyRuntimeConfig
 import kotlin.math.PI
 import kotlin.math.absoluteValue
@@ -25,13 +25,13 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.DurationUnit
 
-@TeleOp(name = "TeleopBlue", group = "Competition")
-class TeleopBlue: TeleopBase(true)
+@TeleOp(name = "TestSortingBlue", group = "Competition")
+class TeleopBlue: TestSortedShooter(true)
 
-@TeleOp(name = "TeleopRed", group = "Competition")
-class TeleopRed: TeleopBase(false)
+@TeleOp(name = "TestSortingRed", group = "Competition")
+class TeleopRed: TestSortedShooter(false)
 
-open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
+open class TestSortedShooter(val blue: Boolean) : SigmaOpMode() {
 
     // Subsystems
     private lateinit var spindexerLogic: SpindexerLogic
@@ -129,16 +129,16 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         goalPosition = if (blue) {
             Vector2d(-1.480126, 1.598982)
         } else {
-             Vector2d(1.480126, 1.598982)
+            Vector2d(1.480126, 1.598982)
         }
-        
+
         autoAim = AutoAimGTSAM(
             landmarkPositions = landmarks,
             goalPosition = goalPosition!!,
             initialPose = io.position(), // Use current pose as initial
             estimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig()
         )
-        
+
         visionTracker = VisionTracker(
             limelight = limelight,
             allowedTagIds = landmarks.keys
@@ -231,7 +231,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
             }
         }
         wasFieldRelativeToggle = fieldRelativeToggle
-        
+
         // Calculate target distance using fused pose and goal position
         val pose = autoAim.fusedPose
         goalPosition?.let { goal ->
@@ -345,7 +345,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         spindexerLogic.shootingRequested = isShooting
 
         if (isShooting && !wasShooting) {
-            spindexerLogic.shoot()
+            spindexerLogic.sortedShoot()
         }
         if (!isShooting && wasShooting) {
             manualOverridePower = null
@@ -392,7 +392,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         }
         telemetry.addData("Turret Pitch", "%.2f", turret.targetPitch)
         telemetry.addData("Distance", "%.1f m", targetDistance)
-        
+
         val zone = when (spindexerLogic.targetShotPower) {
             ShotPowers.shortShotPower -> "SHORT"
             ShotPowers.midShotPower -> "MID"
@@ -403,7 +403,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         telemetry.addData("Shot Power", "%.0f%%", spindexerLogic.targetShotPower * 100)
         telemetry.addData("Power Locked", if (lockedShotPower != null) "YES" else "NO")
         telemetry.addData("Manual Override", if (manualOverridePower != null) "YES" else "NO")
-        
+
         telemetry.addData("Flywheel", "%.0f%%", io.shooter * 100)
 
         telemetry.addLine("")
@@ -439,7 +439,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
             telemetry.addData("Raw TX", "%.2f deg", autoAim.rawTxDegrees)
             telemetry.addData("Adjusted TX", "%.2f deg", Math.toDegrees(autoAim.targetTx))
             telemetry.addData("Target Distance", "%.2f m", targetDistance)
-            
+
             // Fused pose telemetry
             val fusedPose = autoAim.fusedPose
             telemetry.addData("Fused Pose (m, m, rad)",
@@ -448,7 +448,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
                 fusedPose.v.y,
                 fusedPose.rot
             )
-            
+
             telemetry.addData("Current Turret", "%.1f deg", Math.toDegrees(turret.pos))
             val timeSinceDetection = System.currentTimeMillis() - autoAim.lastDetectionTimeMs
             telemetry.addData("Last Detection", "${timeSinceDetection}ms ago")
@@ -468,10 +468,6 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         // Practice game ramp
         telemetry.addData("Ramp", globalFieldState.ramp.contentToString())
 
-
-        //testing for autosorting
-        telemetry.addData("if nay balls were found:" ,spindexerLogic.foundAnyBall)
-        telemetry.addData("current ball being detected:", io.colorSensorGetBallColor())
         telemetry.update()
     }
 }
