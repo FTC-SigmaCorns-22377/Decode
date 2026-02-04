@@ -349,7 +349,8 @@ class SpindexerLogic(val io: SigmaIO) {
                     //continue
                 }
             }
-    }
+       }
+
 
     private fun shootingBehavior(): suspend () -> State = suspend {
         // Flywheel control is handled in update() based on state
