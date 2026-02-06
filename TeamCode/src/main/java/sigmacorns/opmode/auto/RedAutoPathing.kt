@@ -5,7 +5,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.joml.Vector2d
-import org.joml.Vector3d
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
@@ -17,8 +16,15 @@ import sigmacorns.io.MPCClient
 import sigmacorns.io.TrajoptLoader
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import java.io.File
-import kotlin.math.hypot
+import sigmacorns.sim.LinearDcMotor
+import sigmacorns.sim.MecanumState
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.thread
+import kotlin.concurrent.withLock
+import kotlin.math.min
+import kotlin.system.measureNanoTime
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -40,10 +46,14 @@ class RedAutoPathing: SigmaOpMode() {
         io.setPosition(intake1.getInitialSample()!!.pos)
 
         MPCClient(
-            drivetrainParameters,
+            drivetrainParameters.let {
+                val p = it.copy()
+                p.motor = LinearDcMotor(it.motor.freeSpeed, it.motor.stallTorque*0.8)
+                p
+            },
             Network.LIMELIGHT,
             contourSelectionMode = ContourSelectionMode.POSITION,
-            preIntegrate = 40.milliseconds,
+            preIntegrate = 30.milliseconds,
             sampleLookahead = 0
         ).use { mpc ->
             val state = State(
@@ -56,7 +66,41 @@ class RedAutoPathing: SigmaOpMode() {
                 0.seconds
             )
 
+            // Shared state for MPC thread communication
+            val mpcLock = ReentrantLock()
+            var latestU = doubleArrayOf(0.0, 0.0, 0.0)
+            var sharedMecanumState: MecanumState? = null
+            var sharedVoltage: Double = 12.0
+            var sharedTime: Duration = 0.seconds
+            val mpcRunning = AtomicBoolean(true)
+
             waitForStart()
+
+            // Start MPC thread
+            val mpcThread = thread(name = "MPC-Thread") {
+                while (mpcRunning.get()) {
+                    val (mecanumState, voltage, time) = mpcLock.withLock {
+                        Triple(sharedMecanumState, sharedVoltage, sharedTime)
+                    }
+
+                    if (mecanumState != null) {
+                        val n = measureNanoTime {
+                            // Receive any pending responses and get control output
+                            val u = mpc.getU(time)
+                            mpcLock.withLock {
+                                latestU = u
+                            }
+
+                            // Send new request with current state
+                            mpc.update(mecanumState, voltage, time)
+                        }
+                        println("MPC thread update took ${n.toDouble()/1_000_000} ms")
+                    }
+
+                    // Small sleep to prevent busy-waiting
+                    Thread.sleep(1)
+                }
+            }
 
             val driveController = DriveController()
 
@@ -75,12 +119,20 @@ class RedAutoPathing: SigmaOpMode() {
 
                 dispatcher.update()
 
-                mpc.update(
-                    state.mecanumState,
-                    io.voltage(),
-                    t
-                )
-                val u = mpc.getU(t)
+                // Update shared state for MPC thread
+                val u: List<Double>
+                val n = measureNanoTime {
+                    mpcLock.withLock {
+                        sharedMecanumState = state.mecanumState
+                        sharedVoltage = min(11.0,io.voltage())
+                        sharedTime = t
+                        u = latestU.copyOf().map {
+                            it*11.0/io.voltage()
+                        }
+                    }
+                }
+
+                println("MPC state sync took ${n.toDouble()/1_000_000} ms")
 
                 // u is now [drive, strafe, turn]
                 val drive = u[0]
@@ -91,7 +143,16 @@ class RedAutoPathing: SigmaOpMode() {
                 val robotPower = Pose2d(drive, strafe, turn)
                 driveController.drive(robotPower, io)
 
-                io.update()
+                val n2 = measureNanoTime { io.update() }
+
+                println("MPC IO update took ${n2.toDouble()/1_000_000} ms")
+            }
+
+            // Stop MPC thread
+            mpcRunning.set(false)
+            mpcThread.join(50)
+            if (mpcThread.isAlive) {
+                mpcThread.interrupt()
             }
         }
     }

@@ -4,9 +4,12 @@ import com.bylazar.configurables.annotations.Configurable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
 import sigmacorns.opmode.tune.ShooterFlywheelPIDConfig
+import kotlin.math.abs
 import kotlin.math.sign
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -156,16 +159,16 @@ class SpindexerLogic(val io: SigmaIO) {
     }
 
     private fun stateBehavior(state: State): suspend () -> State = when (state) {
-        State.IDLE -> idleBehavior()
-        State.INTAKING -> intakingBehavior()
-        State.MOVING -> movingBehavior()
-        State.FULL -> fullBehavior()
-        State.SHOOTING -> shootingBehavior()
-        State.MOVING_SHOOT -> movingShootBehavior()
-        State.SORTED_SHOOTING -> sortedShootingBehavior()  // ← ADD THIS LINE
+        State.IDLE -> this::idleBehavior
+        State.INTAKING -> this::intakingBehavior
+        State.MOVING -> this::movingBehavior
+        State.FULL -> this::fullBehavior
+        State.SHOOTING -> this::shootingBehavior
+        State.MOVING_SHOOT -> this::movingShootBehavior
+        State.SORTED_SHOOTING -> this::sortedShootingBehavior
     }
 
-    private fun idleBehavior(): suspend () -> State = suspend {
+    private suspend fun idleBehavior(): State {
         // Idle: wait for events, no automatic transitions
         io.intake = 0.0
         io.shooter = 0.0
@@ -178,7 +181,7 @@ class SpindexerLogic(val io: SigmaIO) {
 
         // Wait indefinitely until cancelled by an event-triggered state change
         delay(Long.MAX_VALUE)
-        State.IDLE
+        return State.IDLE
     }
 
     /** Reset the transfer servo by running it down for a set duration */
@@ -197,7 +200,7 @@ class SpindexerLogic(val io: SigmaIO) {
         transferNeedsReset = true  // Mark that we need to reset next time
     }
 
-    private fun intakingBehavior(): suspend () -> State = suspend {
+    private suspend fun intakingBehavior(): State {
         // Run intake motor
         println("Entered intaking state")
         io.intake = -1.0
@@ -234,10 +237,10 @@ class SpindexerLogic(val io: SigmaIO) {
         }
 
         // Ball detected -> transition to MOVING
-        State.MOVING
+        return State.MOVING
     }
 
-    private fun movingBehavior(): suspend () -> State = suspend {
+    private suspend fun movingBehavior(): State {
         // Stop intake while moving
         io.intake = 0.0
 
@@ -274,18 +277,14 @@ class SpindexerLogic(val io: SigmaIO) {
         }
 
         // Check if spindexer is full
-        if (spindexerState.all { it != null }) {
-            State.FULL
-        } else {
-            State.IDLE
-        }
+        return if (spindexerState.all { it != null }) State.FULL else State.IDLE
     }
 
-    private fun fullBehavior(): suspend () -> State = suspend {
+    private suspend fun fullBehavior(): State {
         // Full: wait for shoot event, no automatic transitions
         io.intake = 0.0
         delay(Long.MAX_VALUE)
-        State.FULL
+        return State.FULL
     }
     var foundAnyBall = false
     var requiredColor = motif[0]
@@ -335,7 +334,7 @@ class SpindexerLogic(val io: SigmaIO) {
 
                     // Try next slot
                     if (rotations < 2) {
-                        movingBehavior()()
+                        movingBehavior()
                         rotations++
                     } else {
                         break
@@ -352,7 +351,7 @@ class SpindexerLogic(val io: SigmaIO) {
        }
 
 
-    private fun shootingBehavior(): suspend () -> State = suspend {
+    private suspend fun shootingBehavior(): State {
         // Flywheel control is handled in update() based on state
 
 
@@ -383,7 +382,7 @@ class SpindexerLogic(val io: SigmaIO) {
         spindexerState[0] = null
 
         // Check if spindexer is empty
-        if (spindexerState.all { it == null } && !shootingRequested) {
+        return if (spindexerState.all { it == null } && !shootingRequested) {
             io.shooter = 0.0
             State.IDLE
         } else {
@@ -391,7 +390,7 @@ class SpindexerLogic(val io: SigmaIO) {
         }
     }
 
-    private fun movingShootBehavior(): suspend () -> State = suspend {
+    private suspend fun movingShootBehavior(): State {
         if (!offsetActive) {
             spindexerRotation += MODE_CHANGE_ANGLE
             offsetActive = true
@@ -445,9 +444,9 @@ class SpindexerLogic(val io: SigmaIO) {
     // Current state accessor
     val currentState: State get() = fsm.curState
 
-    private fun sortedShootingBehavior(): suspend () -> State = suspend {
-        sortedShoot(targetMotif)
-        State.IDLE
+    private suspend fun sortedShootingBehavior(): State {
+        sortedShoot()
+        return State.IDLE
     }
 
     /**

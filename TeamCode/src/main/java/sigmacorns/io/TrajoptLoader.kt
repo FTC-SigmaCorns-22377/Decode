@@ -31,6 +31,7 @@ data class TrajoptTrajectoryEntry(
     val name: String,
     val trajectory: TrajoptTrajectoryData?,
     val followsTrajectoryId: String? = null,
+    val eventMarkers: List<TrajoptEventMarker>? = null,
 )
 
 data class TrajoptTrajectoryData(
@@ -38,6 +39,14 @@ data class TrajoptTrajectoryData(
     val states: List<List<Double>>,
     val controls: List<List<Double>>,
     val totalTime: Double,
+    val waypoint_times: List<Double>? = null,
+)
+
+data class TrajoptEventMarker(
+    val waypointIndex: Int,
+    val percentage: Double,
+    val name: String,
+    val timestamp: Double,
 )
 
 /**
@@ -66,6 +75,8 @@ class TrajoptTrajectory(
     val name: String,
     val samples: List<TrajoptSample>,
     val totalTime: Double,
+    val waypointTimes: List<Double> = emptyList(),
+    val eventMarkers: List<TrajoptEventMarker> = emptyList(),
 ) {
     fun getInitialSample(): TrajoptSample? = samples.firstOrNull()
     fun getFinalSample(): TrajoptSample? = samples.lastOrNull()
@@ -167,7 +178,7 @@ object TrajoptLoader {
     /**
      * Parse a trajectory entry into a TrajoptTrajectory.
      */
-    private fun parseTrajectory(entry: TrajoptTrajectoryEntry): TrajoptTrajectory? {
+    internal fun parseTrajectory(entry: TrajoptTrajectoryEntry): TrajoptTrajectory? {
         val data = entry.trajectory ?: return null
 
         val samples = data.times.mapIndexed { i, time ->
@@ -189,7 +200,24 @@ object TrajoptLoader {
             name = entry.name,
             samples = samples,
             totalTime = data.totalTime,
+            waypointTimes = data.waypoint_times ?: emptyList(),
+            eventMarkers = entry.eventMarkers ?: emptyList(),
         )
+    }
+
+    /**
+     * Load all trajectories ordered by followsTrajectoryId chain (roots first, then children).
+     */
+    fun loadAllTrajectoriesOrdered(file: File): List<TrajoptTrajectory> {
+        val project = loadProject(file)
+        val childrenOf = project.trajectories.groupBy { it.followsTrajectoryId }
+        val ordered = mutableListOf<TrajoptTrajectoryEntry>()
+        fun walk(entry: TrajoptTrajectoryEntry) {
+            ordered.add(entry)
+            childrenOf[entry.id]?.forEach { walk(it) }
+        }
+        childrenOf[null]?.forEach { walk(it) }
+        return ordered.mapNotNull { parseTrajectory(it) }
     }
 
     /**

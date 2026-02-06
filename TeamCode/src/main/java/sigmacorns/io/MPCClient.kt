@@ -115,15 +115,29 @@ data class MPCTuning(
     /** Weight for lag error (along path direction) */
     var wLag: Double = 500.0,
     /** Weight for heading error */
-    var wHeading: Double = 200.0,
+    var wHeading: Double = 80.0,
     /** Weight for control effort (penalizes torque) */
-    var wU: Double = 0.2,
+    var wU: Double = 0.8,
     /** Weight for control rate (penalizes rapid changes - reduces jitter) */
-    var wDU: Double = 10.0,
+    var wDU: Double = 3.0,
 ) {
     fun toArray(): DoubleArray = doubleArrayOf(
         wNormal, wLag, wHeading, wU, wDU
     )
+}
+
+/**
+ * Immutable snapshot of trajectory state for thread-safe access.
+ */
+private data class TrajectorySnapshot(
+    val trajectory: TrajoptTrajectory?,
+    val path: List<LinearContour>,
+    val referencePositions: List<Vector2d>,
+    val timestamps: List<Double>,
+) {
+    companion object {
+        val EMPTY = TrajectorySnapshot(null, emptyList(), emptyList(), emptyList())
+    }
 }
 
 class MPCClient(
@@ -145,17 +159,38 @@ class MPCClient(
 ): AutoCloseable {
 
     companion object {
-        const val N: Int = 15
+        const val N: Int = 18
         const val K: Int = N + 1  // Number of knot points
         const val NX: Int = 6
         const val NU: Int = 3  // drive, strafe, turn
         const val NP: Int = 7
         const val NTUNING: Int = 5  // [w_normal, w_lag, w_heading, w_u, w_du]
         const val N_CONTOUR_PER_KNOT: Int = 6
-        const val N_CONTOUR_PARAMS: Int = K * N_CONTOUR_PER_KNOT  // 96 doubles
-        val DT: Duration = 40.milliseconds
+        const val N_CONTOUR_PARAMS: Int = K * N_CONTOUR_PER_KNOT  // 114 doubles
 
-        val horizon = DT * N
+        // Variable timesteps: first N_FAST use DT_FAST, next N_MED use DT_MED, rest use DT_SLOW
+        const val N_FAST: Int = 4      // steps 0-3: 15ms
+        const val N_MED: Int = 11      // steps 4-14: 40ms
+        val DT_FAST: Duration = 15.milliseconds
+        val DT_MED: Duration = 40.milliseconds
+        val DT_SLOW: Duration = 75.milliseconds
+
+        /** Get the timestep for a given stage index (0 to N-1). */
+        fun getDtForStage(k: Int): Duration = when {
+            k < N_FAST -> DT_FAST
+            k < N_FAST + N_MED -> DT_MED
+            else -> DT_SLOW
+        }
+
+        /** Get cumulative time offsets for each knot point (0 to K-1). */
+        val timeOffsets: List<Duration> = buildList {
+            add(0.milliseconds)
+            for (k in 0 until K - 1) {
+                add(last() + getDtForStage(k))
+            }
+        }
+
+        val horizon: Duration = timeOffsets.last()
 
         /**
          * Convert a TrajoptTrajectory to a list of LinearContours.
@@ -194,23 +229,31 @@ class MPCClient(
 
     val model = MecanumDynamics(parameters)
 
+    @Volatile
     var lastTargetContour: LinearContour? = null
         private set
 
+    @Volatile
     var predictedEvolution: List<MecanumState> = emptyList()
         private set
 
-    var path: List<LinearContour>? = null
-        private set
-
-    /** The last set of K contours sent to the MPC solver (interpolated at DT intervals). */
+    /** The last set of K contours sent to the MPC solver (interpolated at variable time intervals). */
+    @Volatile
     var lastSentContours: List<LinearContour> = emptyList()
         private set
 
-    private var trajectory: TrajoptTrajectory? = null
-    private var referencePositions: List<Vector2d> = emptyList()
-    private var timestamps: List<Double> = emptyList()
+    /** Thread-safe trajectory state - swap atomically via volatile reference */
+    @Volatile
+    private var trajSnapshot: TrajectorySnapshot = TrajectorySnapshot.EMPTY
+
+    @Volatile
     private var trajectoryStartTime: Duration? = null
+
+    // Convenience accessors for the snapshot
+    private val trajectory: TrajoptTrajectory? get() = trajSnapshot.trajectory
+    val path: List<LinearContour> get() = trajSnapshot.path
+    private val referencePositions: List<Vector2d> get() = trajSnapshot.referencePositions
+    private val timestamps: List<Double> get() = trajSnapshot.timestamps
 
     private var sentTargetContours: MutableList<Pair<Long, LinearContour?>> = mutableListOf()
     private var curTime = 0.seconds
@@ -223,7 +266,9 @@ class MPCClient(
     private var x0: MecanumState? = null
     private var V: Double = parameters.motor.vRef
 
+    @Volatile
     private var latestU: DoubleArray = DoubleArray(N * NU)
+    @Volatile
     private var latestUTime = 0L
 
     // Client-side slew rate limiters (one per control channel)
@@ -234,6 +279,7 @@ class MPCClient(
     )
     private var lastGetUTime: Duration? = null
 
+    @Volatile
     var latestSampleI = 0
         private set
 
@@ -303,7 +349,7 @@ class MPCClient(
      */
     private fun interpolateContourAt(time: Double): LinearContour {
         val traj = trajectory
-        val contours = path ?: return LinearContour(Vector2d(), Vector2d(1.0, 0.0), 0.0, 0.0)
+        val contours = path
         if (contours.isEmpty()) return LinearContour(Vector2d(), Vector2d(1.0, 0.0), 0.0, 0.0)
 
         // Use trajectory's sampleAt for interpolation if available
@@ -321,21 +367,20 @@ class MPCClient(
     /**
      * Build the contour parameters array for all K knots.
      * Each knot has N_CONTOUR_PER_KNOT (6) values.
-     * Contours are interpolated at DT time intervals from the start time.
+     * Contours are interpolated at variable time intervals (first N_FAST at DT_FAST, rest at DT_SLOW).
      */
     private fun buildContourParams(startTime: Double): DoubleArray {
         val params = DoubleArray(N_CONTOUR_PARAMS)
-        val contours = path ?: return params
+        val contours = path
         if (contours.isEmpty()) return params
 
-        val dtSeconds = DT.toDouble(DurationUnit.SECONDS)
         val interpolatedContours = mutableListOf<LinearContour>()
 
         // Unwrap headings to ensure continuity
         var lastTheta = interpolateContourAt(startTime).targetTheta
 
         for (k in 0 until K) {
-            val time = startTime + k * dtSeconds
+            val time = startTime + timeOffsets[k].toDouble(DurationUnit.SECONDS)
             val contour = interpolateContourAt(time)
 
             // Unwrap heading
@@ -378,14 +423,14 @@ class MPCClient(
 
         val selection = selectTarget(predictedX.toDoubleArray(), time.nanoseconds) ?: return
         lastTargetSelection = selection
-        val targetContour = path?.getOrNull(selection.targetIndex) ?: return
+        val targetContour = path.getOrNull(selection.targetIndex) ?: return
 
         // Compute the start time for contour interpolation
         val startTime = if (timestamps.isNotEmpty() && selection.targetIndex < timestamps.size) {
             timestamps[selection.targetIndex]
         } else {
-            // Fallback: estimate time from index
-            selection.targetIndex * DT.toDouble(DurationUnit.SECONDS)
+            // Fallback: estimate time from index (using DT_MED as approximate sample rate)
+            selection.targetIndex * DT_MED.toDouble(DurationUnit.SECONDS)
         }
 
         val buf: ByteBuffer = ByteBuffer.allocate(REQUEST_MSG_SIZE)
@@ -403,7 +448,7 @@ class MPCClient(
         p[0] *= V / parameters.motor.vRef
         p[1] *= V / parameters.motor.vRef
 
-        // Contour params (K * 6 doubles) - interpolated at DT intervals
+        // Contour params (K * 6 doubles) - interpolated at variable time intervals
         putArray(buf, buildContourParams(startTime))
 
         // Unnormalize heading so MPC turns in shortest direction
@@ -479,19 +524,36 @@ class MPCClient(
 
     /**
      * Set the target trajectory from a TrajoptTrajectory.
+     * Thread-safe: can be called from any thread.
      */
     fun setTarget(traj: TrajoptTrajectory) {
-        this.trajectory = traj
-        setTargetContours(load(traj), traj.samples.map { it.timestamp })
+        val contours = load(traj)
+        // Atomically swap the entire trajectory state
+        trajSnapshot = TrajectorySnapshot(
+            trajectory = traj,
+            path = contours,
+            referencePositions = contours.map { it.lineP },
+            timestamps = traj.samples.map { it.timestamp }
+        )
+        // Reset other state
+        trajectoryStartTime = null
+        latestSampleI = 0
+        lastTargetContour = null
+        lastSentContours = emptyList()
+        latestU = DoubleArray(N * NU)
     }
 
     /**
      * Set the target contours directly.
+     * Thread-safe: can be called from any thread.
      */
     fun setTargetContours(path: List<LinearContour>, timestamps: List<Double> = emptyList()) {
-        this.path = path
-        referencePositions = path.map { it.lineP }
-        this.timestamps = timestamps
+        trajSnapshot = TrajectorySnapshot(
+            trajectory = null,
+            path = path,
+            referencePositions = path.map { it.lineP },
+            timestamps = timestamps
+        )
         trajectoryStartTime = null
         latestSampleI = 0
         lastTargetContour = null
@@ -500,7 +562,7 @@ class MPCClient(
     }
 
     fun startPose(): Pose2d {
-        val first = path?.firstOrNull() ?: return Pose2d()
+        val first = path.firstOrNull() ?: return Pose2d()
         return Pose2d(first.lineP, first.targetTheta)
     }
 
@@ -530,14 +592,16 @@ class MPCClient(
 
         println("MPC DELAY: ${delay.inWholeMilliseconds}ms (true) ${(delay - preIntegrate).inWholeMilliseconds}ms (effective)")
 
-        val i = ((delay - preIntegrate - 5.milliseconds) / DT).toInt().coerceIn(0, N - 1)
+        // Find the stage index using variable timesteps
+        val effectiveDelay = delay - preIntegrate - 5.milliseconds
+        val i = findStageIndex(effectiveDelay).coerceIn(0, N - 1)
 
         var res = latestU.copyOfRange(i * NU, (i + 1) * NU)
 
         // Apply optional client-side slew rate limiting
         val slewRate = clientSlewRate
         if (slewRate != null) {
-            val dt = lastGetUTime?.let { time - it } ?: DT
+            val dt = lastGetUTime?.let { time - it } ?: DT_FAST
             lastGetUTime = time
 
             slewLimiters.forEachIndexed { idx, limiter ->
@@ -549,6 +613,14 @@ class MPCClient(
         return res
     }
 
+    /** Find the stage index for a given elapsed time using variable timesteps. */
+    private fun findStageIndex(elapsed: Duration): Int {
+        for (i in 0 until N) {
+            if (elapsed < timeOffsets[i + 1]) return i
+        }
+        return N - 1
+    }
+
     private fun repredictEvolution() {
         val xs = mutableListOf(x0!!)
         for (i in 0 until N) {
@@ -556,7 +628,8 @@ class MPCClient(
                 val v = model.mecanumInversePowerKinematics(Pose2d(it[0],it[1],it[2]))
                 doubleArrayOf(v[0],v[1],v[2],v[3])
             }
-            xs += model.integrate(DT.toDouble(DurationUnit.SECONDS), 0.001, u, xs.last())
+            val dt = getDtForStage(i).toDouble(DurationUnit.SECONDS)
+            xs += model.integrate(dt, 0.001, u, xs.last())
         }
 
         predictedEvolution = xs
@@ -565,7 +638,7 @@ class MPCClient(
     fun predictState(x0: MecanumState, time: Duration): MecanumState {
         val t = time - latestUTime.nanoseconds
         var state = x0
-        val i = (t.inWholeMilliseconds / DT.inWholeMilliseconds).toInt().coerceIn(0, N - 1)
+        val i = findStageIndex(t).coerceIn(0, N - 1)
         if (predictedEvolution.isNotEmpty()) {
             state = predictedEvolution[i]
         }
@@ -573,20 +646,17 @@ class MPCClient(
             val v = model.mecanumInversePowerKinematics(Pose2d(it[0],it[1],it[2]))
             doubleArrayOf(v[0],v[1],v[2],v[3])
         }
-        return model.integrate((t - i * DT).toDouble(DurationUnit.SECONDS), MECANUM_DT, u, state)
+        return model.integrate((t - timeOffsets[i]).toDouble(DurationUnit.SECONDS), MECANUM_DT, u, state)
     }
 
     fun isTrajectoryComplete(): Boolean {
-        val traj = trajectory ?: return true
-        val startTime = trajectoryStartTime ?: return false
+        val snapshot = trajSnapshot
+        if (snapshot.trajectory == null) return true
+        if (trajectoryStartTime == null) return false
 
-        // Also check if we're at the last sample
-        val pathSize = path?.size ?: 0
-        if (pathSize > 0 && latestSampleI >= pathSize - 1) {
-            return true
-        }
-
-        return false
+        // Check if we're at the last sample
+        val pathSize = snapshot.path.size
+        return pathSize > 0 && latestSampleI >= pathSize - 1
     }
 
     /**

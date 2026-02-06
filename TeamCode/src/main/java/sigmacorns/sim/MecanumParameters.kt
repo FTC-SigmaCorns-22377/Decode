@@ -10,7 +10,7 @@ package sigmacorns.sim
  * @param weight weight of the robot (kg)
  * @param rotInertia rotational inertia of the robot about the wheelbase center (kg m^2)
  */
-class MecanumParameters(
+data class MecanumParameters(
     var motor: LinearDcMotor,
     var lx: Double,
     var ly: Double,

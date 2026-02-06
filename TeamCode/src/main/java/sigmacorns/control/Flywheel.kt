@@ -14,16 +14,12 @@ import kotlin.time.DurationUnit
  *
  * This is equivalent to a 1st-order deadbeat controller
  *
- * @param DT length of the timesteps. Can be different than the actual update time of the controller
- * higher than reality results in asymptotic convergence, lower results in oscillation
- *
  * @param motor the motor powering the flywheel
  * @param inertia the inertia of the flywheel system (kg m^2)
  * @param io IO handle
  * @param lag expected delay between sensor measurement and motor power write.
  */
 class Flywheel(
-    val DT: Duration,
     val motor: LinearDcMotor,
     val inertia: Double,
     val io: SigmaIO,
@@ -47,11 +43,12 @@ class Flywheel(
      */
 
     var target: Double = 0.0
+    var hold: Boolean = false
 
     private var lastU = 0.0
 
-    private fun calculate(v0: Double): Double {
-        val e = exp(-motor.stallTorque/inertia/motor.freeSpeed * DT.toDouble(DurationUnit.SECONDS))
+    private fun calculate(v0: Double, dt: Duration): Double {
+        val e = exp(-motor.stallTorque/inertia/motor.freeSpeed * dt.toDouble(DurationUnit.SECONDS))
         val power = (target - v0*e)/(motor.freeSpeed * (1.0-e))
 
         // verification: if target=2 & v0=2
@@ -63,9 +60,14 @@ class Flywheel(
         return power * motor.vRef
     }
 
-    fun update(curV: Double, dt: Double) {
-        val v0 = integrate(curV,lastU,lag)
-        val V = calculate(v0)
+    fun update(curV: Double, dt: Duration) {
+        val V = if (hold) {
+            target/motor.freeSpeed*motor.vRef
+        } else {
+            val v0 = integrate(curV,lastU,lag)
+            calculate(v0, dt)
+        }
+
         io.shooter = (V/io.voltage()).coerceIn(-1.0..1.0)
         lastU = V.coerceIn(-io.voltage()..io.voltage())
     }
@@ -76,7 +78,7 @@ class Flywheel(
         return s + (v0 - s)*exp(-a/motor.freeSpeed*t.toDouble(DurationUnit.SECONDS))
     }
 
-    fun spinupTime(cur: Double, target: Double): Duration {
+    fun spinupTime(cur: Double, target: Double, dt: Duration): Duration {
         /*
         If the target cannot be reached in DT, this controller will saturate motor limits
         therefore an upper bound for the spinup time is the time to reach target under full power + DT
@@ -89,6 +91,6 @@ class Flywheel(
 
         val t = ln((target - motor.freeSpeed)/(cur - motor.freeSpeed))/(-motor.stallTorque/inertia/motor.freeSpeed)
 
-        return t.seconds + DT + lag
+        return t.seconds + dt + lag
     }
 }
