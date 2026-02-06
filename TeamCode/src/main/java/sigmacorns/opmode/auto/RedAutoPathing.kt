@@ -8,23 +8,15 @@ import org.joml.Vector2d
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.control.DriveController
 import sigmacorns.control.PollableDispatcher
-import sigmacorns.io.ContourSelectionMode
+import sigmacorns.control.mpc.ContourSelectionMode
+import sigmacorns.control.mpc.MPCClient
+import sigmacorns.control.mpc.MPCRunner
+import sigmacorns.control.mpc.TrajoptLoader
 import sigmacorns.io.HardwareIO
-import sigmacorns.io.MPCClient
-import sigmacorns.io.TrajoptLoader
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.LinearDcMotor
-import sigmacorns.sim.MecanumState
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.thread
-import kotlin.concurrent.withLock
-import kotlin.math.min
-import kotlin.system.measureNanoTime
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -66,43 +58,11 @@ class RedAutoPathing: SigmaOpMode() {
                 0.seconds
             )
 
-            // Shared state for MPC thread communication
-            val mpcLock = ReentrantLock()
-            var latestU = doubleArrayOf(0.0, 0.0, 0.0)
-            var sharedMecanumState: MecanumState? = null
-            var sharedVoltage: Double = 12.0
-            var sharedTime: Duration = 0.seconds
-            val mpcRunning = AtomicBoolean(true)
+            val runner = MPCRunner(mpc)
 
             waitForStart()
 
-            // Start MPC thread
-            val mpcThread = thread(name = "MPC-Thread") {
-                while (mpcRunning.get()) {
-                    val (mecanumState, voltage, time) = mpcLock.withLock {
-                        Triple(sharedMecanumState, sharedVoltage, sharedTime)
-                    }
-
-                    if (mecanumState != null) {
-                        val n = measureNanoTime {
-                            // Receive any pending responses and get control output
-                            val u = mpc.getU(time)
-                            mpcLock.withLock {
-                                latestU = u
-                            }
-
-                            // Send new request with current state
-                            mpc.update(mecanumState, voltage, time)
-                        }
-                        println("MPC thread update took ${n.toDouble()/1_000_000} ms")
-                    }
-
-                    // Small sleep to prevent busy-waiting
-                    Thread.sleep(1)
-                }
-            }
-
-            val driveController = DriveController()
+            runner.start()
 
             val schedule = CoroutineScope(dispatcher).launch {
                 mpc.runTrajectory(intake1,1.milliseconds)()
@@ -119,41 +79,13 @@ class RedAutoPathing: SigmaOpMode() {
 
                 dispatcher.update()
 
-                // Update shared state for MPC thread
-                val u: List<Double>
-                val n = measureNanoTime {
-                    mpcLock.withLock {
-                        sharedMecanumState = state.mecanumState
-                        sharedVoltage = min(12.0,io.voltage())
-                        sharedTime = t
-                        u = latestU.copyOf().map {
-                            it*12.0/io.voltage()
-                        }
-                    }
-                }
+                runner.updateState(state.mecanumState, kotlin.math.min(12.0, io.voltage()), t)
+                runner.driveWithMPC(io, io.voltage())
 
-                println("MPC state sync took ${n.toDouble()/1_000_000} ms")
-
-                // u is now [drive, strafe, turn]
-                val drive = u[0]
-                val strafe = u[1]
-                val turn = u[2]
-
-                // Convert drive, strafe, turn to motor powers using DriveController
-                val robotPower = Pose2d(drive, strafe, turn)
-                driveController.drive(robotPower, io)
-
-                val n2 = measureNanoTime { io.update() }
-
-                println("MPC IO update took ${n2.toDouble()/1_000_000} ms")
+                io.update()
             }
 
-            // Stop MPC thread
-            mpcRunning.set(false)
-            mpcThread.join(50)
-            if (mpcThread.isAlive) {
-                mpcThread.interrupt()
-            }
+            runner.stop()
         }
     }
 }

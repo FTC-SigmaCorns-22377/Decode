@@ -9,35 +9,27 @@ import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.turretRange
-import sigmacorns.control.DriveController
 import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
 import sigmacorns.control.Turret
 import sigmacorns.control.aim.AutoAimGTSAM
-import sigmacorns.io.ContourSelectionMode
+import sigmacorns.control.aim.AutoAimTurretController
+import sigmacorns.control.mpc.ContourSelectionMode
+import sigmacorns.control.mpc.MPCClient
+import sigmacorns.control.mpc.MPCRunner
+import sigmacorns.control.mpc.TrajoptEventMarker
+import sigmacorns.control.mpc.TrajoptLoader
+import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
-import sigmacorns.io.MPCClient
-import sigmacorns.io.TrajoptEventMarker
-import sigmacorns.io.TrajoptLoader
-import sigmacorns.io.TrajoptTrajectory
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.opmode.test.AutoAimGTSAMTest
 import sigmacorns.opmode.test.AutoAimGTSAMTest.Companion.applyRuntimeConfig
 import sigmacorns.sim.Balls
-import sigmacorns.sim.MecanumState
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.thread
-import kotlin.concurrent.withLock
-import kotlin.math.absoluteValue
-import kotlin.math.hypot
-import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.DurationUnit
 
 @Autonomous(name = "Trajopt Auto", group = "Auto")
 class TrajoptAuto : SigmaOpMode() {
@@ -67,14 +59,7 @@ class TrajoptAuto : SigmaOpMode() {
 
         val spindexerLogic = SpindexerLogic(io)
         val dispatcher = PollableDispatcher(io)
-        val driveController = DriveController()
         turret = Turret(turretRange,io)
-
-        // Preload spindexer with 3 balls
-//        spindexerlogic.spindexerstate[0] = balls.purple
-//        spindexerlogic.spindexerstate[1] = balls.green
-//        spindexerlogic.spindexerstate[2] = balls.green
-
 
         // Set initial position from first trajectory
         trajectories.firstOrNull()?.getInitialSample()?.let { io.setPosition(it.pos) }
@@ -84,7 +69,7 @@ class TrajoptAuto : SigmaOpMode() {
         autoAim = AutoAimGTSAM(
             landmarkPositions = mapOf(),
             goalPosition,
-            initialPose = io.position(), // Use current pose as initial
+            initialPose = io.position(),
             estimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig()
         )
 
@@ -106,35 +91,11 @@ class TrajoptAuto : SigmaOpMode() {
                 Pose2d(Vector2d(), 0.0), 0.0, 0.0, 0.seconds
             )
 
-            // Shared state for MPC thread communication
-            val mpcLock = ReentrantLock()
-            var latestU = doubleArrayOf(0.0, 0.0, 0.0)
-            var sharedMecanumState: MecanumState? = null
-            var sharedVoltage = 12.0
-            var sharedTime: Duration = 0.seconds
-            val mpcRunning = AtomicBoolean(true)
+            val runner = MPCRunner(mpc)
 
             waitForStart()
 
-            // Start MPC thread
-            val mpcThread = thread(name = "MPC-Thread") {
-                while (mpcRunning.get()) {
-                    val (mecanumState, voltage, time) = mpcLock.withLock {
-                        Triple(sharedMecanumState, sharedVoltage, sharedTime)
-                    }
-
-                    if (mecanumState != null) {
-                        val n = measureNanoTime {
-                            val u = mpc.getU(time)
-                            mpcLock.withLock { latestU = u }
-                            mpc.update(mecanumState, voltage, time)
-                        }
-                        println("MPC thread update took ${n.toDouble() / 1_000_000} ms")
-                    }
-
-                    Thread.sleep(1)
-                }
-            }
+            runner.start()
 
             val schedule = CoroutineScope(dispatcher).launch {
                 for (traj in trajectories) {
@@ -151,30 +112,23 @@ class TrajoptAuto : SigmaOpMode() {
                 state.update(io)
                 dispatcher.update()
 
-                val u: List<Double>
-                mpcLock.withLock {
-                    sharedMecanumState = state.mecanumState
-                    sharedVoltage = 12.0
-                    sharedTime = t
-                    u = latestU.copyOf().map { it * 12.0 / io.voltage() }
-                }
-
-                driveController.drive(Pose2d(u[0], u[1], u[2]), io)
+                runner.updateState(state.mecanumState, 12.0, t)
+                runner.driveWithMPC(io, io.voltage())
 
                 val dt = t - lastTime
                 spindexerLogic.update(io.spindexerPosition(), dt, 12.0 / io.voltage())
                 lastTime = t
 
                 autoAim.update(io.position(), turret.pos, null)
-                processTurret(dt)
+                AutoAimTurretController.update(
+                    autoAim, turret, io,
+                    goalPosition.x, goalPosition.y, dt
+                )
 
                 io.update()
             }
 
-            // Stop MPC thread
-            mpcRunning.set(false)
-            mpcThread.join(50)
-            if (mpcThread.isAlive) mpcThread.interrupt()
+            runner.stop()
         }
     }
 
@@ -224,7 +178,7 @@ class TrajoptAuto : SigmaOpMode() {
                 }
             }
 
-            // Shoot when we reach a shoot marker — blocks until all balls are fired
+            // Shoot when we reach a shoot marker -- blocks until all balls are fired
             if (nextShootIdx < shootSampleIndices.size && sampleI >= shootSampleIndices[nextShootIdx]) {
                 println("TrajoptAuto: Reached shoot marker at sample $sampleI")
                 if (intaking) {
@@ -275,19 +229,12 @@ class TrajoptAuto : SigmaOpMode() {
 
     // ---- Sample-index helpers ----
 
-    /**
-     * Find the sample index closest to the given waypoint's time.
-     */
     private fun waypointToSampleIndex(traj: TrajoptTrajectory, waypointIdx: Int): Int? {
         val waypointTime = traj.waypointTimes.getOrNull(waypointIdx) ?: return null
         return traj.samples.indexOfFirst { it.timestamp >= waypointTime }
             .takeIf { it >= 0 } ?: traj.samples.lastIndex
     }
 
-    /**
-     * Convert an event marker (waypointIndex + percentage between that waypoint
-     * and the next) to the corresponding sample index.
-     */
     private fun eventMarkerToSampleIndex(traj: TrajoptTrajectory, marker: TrajoptEventMarker): Int {
         val startTime = traj.waypointTimes.getOrNull(marker.waypointIndex)
             ?: return traj.samples.lastIndex
@@ -297,9 +244,6 @@ class TrajoptAuto : SigmaOpMode() {
             .takeIf { it >= 0 } ?: traj.samples.lastIndex
     }
 
-    /**
-     * Convert INTAKE_SEGMENTS waypoint-index pairs into sample-index ranges.
-     */
     private fun computeIntakeSampleRanges(traj: TrajoptTrajectory): List<IntRange> {
         val segments = INTAKE_SEGMENTS[traj.name] ?: return emptyList()
         return segments.mapNotNull { (startWp, endWp) ->
@@ -307,39 +251,5 @@ class TrajoptAuto : SigmaOpMode() {
             val endIdx = waypointToSampleIndex(traj, endWp) ?: return@mapNotNull null
             startIdx..endIdx
         }
-    }
-
-
-    private fun processTurret(dt: Duration) {
-        // Update robot heading for field-relative aiming
-        turret.robotHeading = autoAim.fusedPose.rot
-        turret.robotAngularVelocity = io.velocity().rot
-
-        // Calculate target distance using fused pose and goal position
-        val pose = autoAim.fusedPose
-        var targetDistance = 0.0
-        goalPosition?.let { goal ->
-            targetDistance = hypot(goal.x - pose.v.x, goal.y - pose.v.y)
-        }
-
-        if (autoAim.enabled && autoAim.hasTarget) {
-            if (turret.fieldRelativeMode) {
-                // Use field-relative target angle from sensor fusion
-                autoAim.getTargetFieldAngle()?.let { fieldAngle ->
-                    turret.fieldTargetAngle = fieldAngle
-                }
-            } else {
-                autoAim.getTargetTurretAngle()?.let { robotAngle ->
-                    turret.targetAngle = robotAngle
-                }
-            }
-            // Limit target distance for flywheel calculations
-            targetDistance = targetDistance.coerceIn(0.1, 10.0)
-        }
-
-        turret.targetDistance = targetDistance
-
-        // Update turret PID
-        turret.update(dt)
     }
 }

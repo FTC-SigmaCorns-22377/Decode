@@ -5,8 +5,8 @@ import org.jetbrains.kotlinx.kandy.letsplot.export.save
 import org.jetbrains.kotlinx.kandy.letsplot.layers.path
 import org.jetbrains.kotlinx.kandy.letsplot.layers.points
 import org.junit.jupiter.api.Test
-import sigmacorns.io.MPCClient
-import sigmacorns.io.TrajoptLoader
+import sigmacorns.control.mpc.MPCClient
+import sigmacorns.control.mpc.TrajoptLoader
 import java.io.File
 import kotlin.math.cos
 import kotlin.math.sin

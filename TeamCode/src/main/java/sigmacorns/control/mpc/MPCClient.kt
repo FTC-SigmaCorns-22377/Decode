@@ -1,8 +1,8 @@
-package sigmacorns.io
+package sigmacorns.control.mpc
 
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainCenter
-import sigmacorns.control.DriveController
+import sigmacorns.control.SlewRateLimiter
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
 import sigmacorns.sim.MecanumDynamics
@@ -16,129 +16,16 @@ import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.DatagramChannel
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
-import sigmacorns.control.SlewRateLimiter
-import kotlin.math.PI
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.sin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
-import sigmacorns.State
+import kotlin.math.PI
+import kotlin.math.min
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 import kotlin.time.times
-
-/**
- * Linear contour parameters for a single knot point.
- * Each knot defines a target point on the path and the path direction.
- */
-data class LinearContour(
-    /** Target position on the path */
-    val lineP: Vector2d,
-    /** Path direction (unit vector) */
-    val lineD: Vector2d,
-    /** Target heading angle (radians) */
-    val targetTheta: Double,
-    /** Target angular velocity (rad/s) */
-    val targetOmega: Double,
-    /** Target x velocity (m/s) for velocity tracking */
-    val targetVx: Double = 0.0,
-    /** Target y velocity (m/s) for velocity tracking */
-    val targetVy: Double = 0.0,
-) {
-    fun toArray(): DoubleArray = doubleArrayOf(
-        lineP.x, lineP.y,
-        lineD.x, lineD.y,
-        targetTheta, targetOmega,
-        targetVx, targetVy
-    )
-
-    companion object {
-        const val SIZE = 8
-
-        fun fromSample(sample: TrajoptSample, nextSample: TrajoptSample?): LinearContour {
-            // Compute path direction from velocity or position difference
-            val dir = if (sample.vx != 0.0 || sample.vy != 0.0) {
-                val speed = kotlin.math.hypot(sample.vx, sample.vy)
-                if (speed > 1e-6) {
-                    Vector2d(sample.vx / speed, sample.vy / speed)
-                } else {
-                    Vector2d(1.0, 0.0)
-                }
-            } else if (nextSample != null) {
-                val dx = nextSample.x - sample.x
-                val dy = nextSample.y - sample.y
-                val d = kotlin.math.hypot(dx, dy)
-                if (d > 1e-6) {
-                    Vector2d(dx / d, dy / d)
-                } else {
-                    Vector2d(1.0, 0.0)
-                }
-            } else {
-                Vector2d(cos(sample.heading), sin(sample.heading))
-            }
-
-            return LinearContour(
-                lineP = Vector2d(sample.x, sample.y),
-                lineD = dir,
-                targetTheta = sample.heading,
-                targetOmega = sample.omega,
-                targetVx = sample.vx,
-                targetVy = sample.vy,
-            )
-        }
-    }
-}
-
-enum class ContourSelectionMode {
-    POSITION,
-    TIME,
-}
-
-/**
- * MPC tuning parameters matching the mecanum_mpc formulation.
- * See gen_mpc_native.py for cost function details.
- *
- * Cost = w_normal * normal_err² + w_lag * lag_err² + w_heading * heading_err²
- *      + w_u * ||u||² + w_du * ||u - u_last||²
- *      + w_vel * vel_err² + w_omega * omega_err²
- *
- * Tuning guidelines:
- * - wNormal: High values (1000-10000) keep robot close to path. Start high, reduce if too aggressive.
- * - wLag: Moderate values (100-1000) control how tightly robot follows timing. Lower = more relaxed.
- * - wHeading: Lower values (50-500) for heading. Too high causes oscillation when path changes direction.
- * - wU: Control effort penalty (1-50). Higher = slower, smoother movements. Prevents motor saturation.
- * - wDU: Control rate penalty (10-200). CRITICAL for smoothness. Higher = less jitter but slower response.
- * - wVel: Velocity tracking weight (0-100). Penalizes deviation from target linear velocity.
- * - wOmega: Angular velocity tracking weight (0-100). Penalizes deviation from target angular velocity.
- *
- * For jitter issues: Increase wDU first (try 50-100), then wU (try 10-30).
- */
-data class MPCTuning(
-    /** Weight for normal error (perpendicular to path) */
-    var wNormal: Double = 500.0,
-    /** Weight for lag error (along path direction) */
-    var wLag: Double = 350.0,
-    /** Weight for heading error */
-    var wHeading: Double = 80.0,
-    /** Weight for control effort (penalizes torque) */
-    var wU: Double = 0.2,
-    /** Weight for control rate (penalizes rapid changes - reduces jitter) */
-    var wDU: Double = 2.5,
-    /** Weight for velocity tracking error */
-    var wVel: Double = 5.0,
-    /** Weight for angular velocity tracking error */
-    var wOmega: Double = 10.0,
-) {
-    fun toArray(): DoubleArray = doubleArrayOf(
-        wNormal, wLag, wHeading, wU, wDU, wVel, wOmega
-    )
-}
 
 /**
  * Immutable snapshot of trajectory state for thread-safe access.
@@ -688,8 +575,6 @@ class MPCClient(
      * ```
      *
      * @param traj The trajectory to follow
-     * @param io The IO interface for reading state and writing motor powers
-     * @param driveController The drive controller for setting motor powers (optional)
      * @param updateDelay Optional delay between loop iterations (use for simulation)
      * @return A suspend function that runs the MPC and completes when trajectory is finished
      */
