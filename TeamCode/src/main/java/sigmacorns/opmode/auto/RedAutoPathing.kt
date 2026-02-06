@@ -124,10 +124,10 @@ class RedAutoPathing: SigmaOpMode() {
                 val n = measureNanoTime {
                     mpcLock.withLock {
                         sharedMecanumState = state.mecanumState
-                        sharedVoltage = min(11.0,io.voltage())
+                        sharedVoltage = min(12.0,io.voltage())
                         sharedTime = t
                         u = latestU.copyOf().map {
-                            it*11.0/io.voltage()
+                            it*12.0/io.voltage()
                         }
                     }
                 }

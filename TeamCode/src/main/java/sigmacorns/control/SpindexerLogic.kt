@@ -414,7 +414,7 @@ class SpindexerLogic(val io: SigmaIO) {
         resetTransfer()
 
         // Continue shooting if requested, otherwise go to IDLE
-        if (shootingRequested) {
+        return if (shootingRequested) {
             sortBehavior()
             sortCycle =+ 1
             State.SHOOTING

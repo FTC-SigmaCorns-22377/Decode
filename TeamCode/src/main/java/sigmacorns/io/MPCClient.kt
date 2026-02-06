@@ -46,15 +46,20 @@ data class LinearContour(
     val targetTheta: Double,
     /** Target angular velocity (rad/s) */
     val targetOmega: Double,
+    /** Target x velocity (m/s) for velocity tracking */
+    val targetVx: Double = 0.0,
+    /** Target y velocity (m/s) for velocity tracking */
+    val targetVy: Double = 0.0,
 ) {
     fun toArray(): DoubleArray = doubleArrayOf(
         lineP.x, lineP.y,
         lineD.x, lineD.y,
-        targetTheta, targetOmega
+        targetTheta, targetOmega,
+        targetVx, targetVy
     )
 
     companion object {
-        const val SIZE = 6
+        const val SIZE = 8
 
         fun fromSample(sample: TrajoptSample, nextSample: TrajoptSample?): LinearContour {
             // Compute path direction from velocity or position difference
@@ -83,6 +88,8 @@ data class LinearContour(
                 lineD = dir,
                 targetTheta = sample.heading,
                 targetOmega = sample.omega,
+                targetVx = sample.vx,
+                targetVy = sample.vy,
             )
         }
     }
@@ -99,6 +106,7 @@ enum class ContourSelectionMode {
  *
  * Cost = w_normal * normal_err² + w_lag * lag_err² + w_heading * heading_err²
  *      + w_u * ||u||² + w_du * ||u - u_last||²
+ *      + w_vel * vel_err² + w_omega * omega_err²
  *
  * Tuning guidelines:
  * - wNormal: High values (1000-10000) keep robot close to path. Start high, reduce if too aggressive.
@@ -106,6 +114,8 @@ enum class ContourSelectionMode {
  * - wHeading: Lower values (50-500) for heading. Too high causes oscillation when path changes direction.
  * - wU: Control effort penalty (1-50). Higher = slower, smoother movements. Prevents motor saturation.
  * - wDU: Control rate penalty (10-200). CRITICAL for smoothness. Higher = less jitter but slower response.
+ * - wVel: Velocity tracking weight (0-100). Penalizes deviation from target linear velocity.
+ * - wOmega: Angular velocity tracking weight (0-100). Penalizes deviation from target angular velocity.
  *
  * For jitter issues: Increase wDU first (try 50-100), then wU (try 10-30).
  */
@@ -113,16 +123,20 @@ data class MPCTuning(
     /** Weight for normal error (perpendicular to path) */
     var wNormal: Double = 500.0,
     /** Weight for lag error (along path direction) */
-    var wLag: Double = 500.0,
+    var wLag: Double = 350.0,
     /** Weight for heading error */
     var wHeading: Double = 80.0,
     /** Weight for control effort (penalizes torque) */
-    var wU: Double = 0.8,
+    var wU: Double = 0.2,
     /** Weight for control rate (penalizes rapid changes - reduces jitter) */
-    var wDU: Double = 3.0,
+    var wDU: Double = 2.5,
+    /** Weight for velocity tracking error */
+    var wVel: Double = 5.0,
+    /** Weight for angular velocity tracking error */
+    var wOmega: Double = 10.0,
 ) {
     fun toArray(): DoubleArray = doubleArrayOf(
-        wNormal, wLag, wHeading, wU, wDU
+        wNormal, wLag, wHeading, wU, wDU, wVel, wOmega
     )
 }
 
@@ -163,10 +177,10 @@ class MPCClient(
         const val K: Int = N + 1  // Number of knot points
         const val NX: Int = 6
         const val NU: Int = 3  // drive, strafe, turn
-        const val NP: Int = 7
-        const val NTUNING: Int = 5  // [w_normal, w_lag, w_heading, w_u, w_du]
-        const val N_CONTOUR_PER_KNOT: Int = 6
-        const val N_CONTOUR_PARAMS: Int = K * N_CONTOUR_PER_KNOT  // 114 doubles
+        const val NP: Int = 9
+        const val NTUNING: Int = 7  // [w_normal, w_lag, w_heading, w_u, w_du, w_vel, w_omega]
+        const val N_CONTOUR_PER_KNOT: Int = 8
+        const val N_CONTOUR_PARAMS: Int = K * N_CONTOUR_PER_KNOT  // 152 doubles
 
         // Variable timesteps: first N_FAST use DT_FAST, next N_MED use DT_MED, rest use DT_SLOW
         const val N_FAST: Int = 4      // steps 0-3: 15ms
@@ -320,7 +334,7 @@ class MPCClient(
                 val dx = ref.x() - state[3]
                 val dy = ref.y() - state[4]
                 val dt = kotlin.math.abs((timestamps.getOrNull(i) ?: elapsed) - elapsed)
-                dx * dx + dy * dy + dt*2.0
+                dx * dx + dy * dy + dt*0.5
             }.index
         }
 
@@ -350,7 +364,7 @@ class MPCClient(
     private fun interpolateContourAt(time: Double): LinearContour {
         val traj = trajectory
         val contours = path
-        if (contours.isEmpty()) return LinearContour(Vector2d(), Vector2d(1.0, 0.0), 0.0, 0.0)
+        if (contours.isEmpty()) return LinearContour(Vector2d(), Vector2d(1.0, 0.0), 0.0, 0.0, 0.0, 0.0)
 
         // Use trajectory's sampleAt for interpolation if available
         if (traj != null) {
@@ -366,7 +380,7 @@ class MPCClient(
 
     /**
      * Build the contour parameters array for all K knots.
-     * Each knot has N_CONTOUR_PER_KNOT (6) values.
+     * Each knot has N_CONTOUR_PER_KNOT (8) values.
      * Contours are interpolated at variable time intervals (first N_FAST at DT_FAST, rest at DT_SLOW).
      */
     private fun buildContourParams(startTime: Double): DoubleArray {
@@ -394,6 +408,8 @@ class MPCClient(
                 lineD = contour.lineD,
                 targetTheta = theta,
                 targetOmega = contour.targetOmega,
+                targetVx = contour.targetVx,
+                targetVy = contour.targetVy,
             )
             interpolatedContours.add(unwrappedContour)
 
@@ -448,7 +464,7 @@ class MPCClient(
         p[0] *= V / parameters.motor.vRef
         p[1] *= V / parameters.motor.vRef
 
-        // Contour params (K * 6 doubles) - interpolated at variable time intervals
+        // Contour params (K * 8 doubles) - interpolated at variable time intervals
         putArray(buf, buildContourParams(startTime))
 
         // Unnormalize heading so MPC turns in shortest direction
@@ -457,8 +473,8 @@ class MPCClient(
 
         putArray(buf, stateArray)  // x0 (6 doubles)
         putArray(buf, predictedU)  // u_last (4 doubles)
-        putArray(buf, p)           // p (7 doubles)
-        putArray(buf, tuning.toArray())  // tuning (6 doubles)
+        putArray(buf, p)           // p (9 doubles)
+        putArray(buf, tuning.toArray())  // tuning (7 doubles)
 
         buf.flip()
 

@@ -200,7 +200,7 @@ object TrajoptLoader {
             name = entry.name,
             samples = samples,
             totalTime = data.totalTime,
-            waypointTimes = data.waypoint_times ?: emptyList(),
+            waypointTimes = data.waypoint_times!!,
             eventMarkers = entry.eventMarkers ?: emptyList(),
         )
     }
@@ -208,7 +208,7 @@ object TrajoptLoader {
     /**
      * Load all trajectories ordered by followsTrajectoryId chain (roots first, then children).
      */
-    fun loadAllTrajectoriesOrdered(file: File): List<TrajoptTrajectory> {
+    fun loadAllTrajectoriesOrdered(file: File, root: String?): List<TrajoptTrajectory> {
         val project = loadProject(file)
         val childrenOf = project.trajectories.groupBy { it.followsTrajectoryId }
         val ordered = mutableListOf<TrajoptTrajectoryEntry>()
@@ -216,7 +216,13 @@ object TrajoptLoader {
             ordered.add(entry)
             childrenOf[entry.id]?.forEach { walk(it) }
         }
-        childrenOf[null]?.forEach { walk(it) }
+
+        if(root != null) {
+            walk(project.trajectories.find { it.name == root  }!!)
+        } else {
+            childrenOf[null]?.forEach { walk(it) }
+        }
+
         return ordered.mapNotNull { parseTrajectory(it) }
     }
 

@@ -1,6 +1,7 @@
 package sigmacorns.constants
 
 import org.joml.Vector2d
+import sigmacorns.control.MotorRangeMapper
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
@@ -39,8 +40,9 @@ val drivetrainParameters = MecanumParameters(
     0.2,
     0.048,
     15.0,
-    0.5
-    //1.32129857491
+    1.3,
+    0.1,
+    0.05
 )
 
 
@@ -96,3 +98,10 @@ const val BALL_GRAVITY_MAGNITUDE = 9.81
  */
 
 const val TIME_LAG_LAUNCH = 0.00
+
+val turretTicksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2*PI) * 76 / 19
+val turretRange = MotorRangeMapper(
+    limits = -PI/2.0..PI/2.0,           // turret can rotate +/- 190 degrees
+    limitsTick = -PI/2.0*turretTicksPerRad..PI/2.0*turretTicksPerRad,           // turret can rotate +/- 190 degrees
+    slowdownDist = 0.3           // slow down within 0.3 rad of limits
+)
