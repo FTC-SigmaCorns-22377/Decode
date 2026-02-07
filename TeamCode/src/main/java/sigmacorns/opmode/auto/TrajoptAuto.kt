@@ -95,11 +95,18 @@ class TrajoptAuto : SigmaOpMode() {
 
             val runner = MPCRunner(mpc)
 
+            spindexerLogic.spindexerState = mutableListOf(
+                Balls.Green,
+                Balls.Purple,
+                Balls.Purple
+            )
+
             waitForStart()
 
             runner.start()
 
             val schedule = CoroutineScope(dispatcher).launch {
+                shootAllBalls(spindexerLogic)
                 for (traj in trajectories) {
                     followTrajectory(traj, mpc, spindexerLogic)
                 }
@@ -118,7 +125,7 @@ class TrajoptAuto : SigmaOpMode() {
                 runner.driveWithMPC(io, io.voltage())
 
                 val dt = t - lastTime
-                spindexerLogic.update(io.spindexerPosition(), dt, 12.0 / io.voltage())
+                spindexerLogic.update( dt, 12.0 / io.voltage())
                 lastTime = t
 
                 autoAim.update(io.position(), turret.pos, null)

@@ -133,7 +133,7 @@ class SimpleAuto : SigmaOpMode() {
             spindexerLogic.targetShotPower = shotPower
 
             // Update spindexer logic
-            spindexerLogic.update(io.spindexerPosition(), dt, dVoltage)
+            spindexerLogic.update(dt, dVoltage)
 
             telemetry.addData("State", spindexerLogic.currentState)
             telemetry.addData("Balls", spindexerLogic.spindexerState.count { it != null })

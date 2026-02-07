@@ -2,25 +2,15 @@ package sigmacorns.opmode.teleop
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
-import org.joml.Quaterniond
-import org.joml.Vector2d
-import org.joml.Vector3d
+import sigmacorns.control.AimingSystem
 import sigmacorns.control.DriveController
-import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
-import sigmacorns.control.Turret
-import sigmacorns.control.aim.AutoAimGTSAM
-import sigmacorns.control.aim.VisionTracker
 import sigmacorns.globalFieldState
-import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.opmode.test.AutoAimGTSAMTest
-import sigmacorns.opmode.test.AutoAimGTSAMTest.Companion.applyRuntimeConfig
 import kotlin.math.PI
 import kotlin.math.absoluteValue
-import kotlin.math.hypot
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.DurationUnit
@@ -35,25 +25,13 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
 
     // Subsystems
     private lateinit var spindexerLogic: SpindexerLogic
-    private lateinit var turret: Turret
-    private lateinit var autoAim: AutoAimGTSAM
-    private lateinit var visionTracker: VisionTracker
+    private lateinit var aiming: AimingSystem
     private val driveController = DriveController()
 
-    val ticksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2*PI) * 76 / 19
-
-    private val turretRange = MotorRangeMapper(
-        limits = -PI/2.0..PI/2.0,           // turret can rotate +/- 190 degrees
-        limitsTick = -PI/2.0*ticksPerRad..PI/2.0*ticksPerRad,           // turret can rotate +/- 190 degrees
-        slowdownDist = 0.3           // slow down within 0.3 rad of limits
-    )
-
     // State
-    private var targetDistance = 3.0  // default 3m for flywheel speed
-    private var dVoltage = 1.0        // voltage compensation factor
+    private var dVoltage = 1.0
     private var lockedShotPower: Double? = null
     private var manualOverridePower: Double? = null
-    private var goalPosition: Vector2d? = null
 
     // Tracking for edge detection on triggers
     private var wasIntaking = false
@@ -77,78 +55,19 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
     override fun runOpMode() {
         gm1 = gamepad1
         gm2 = gamepad2
+
         // Initialize subsystems
         spindexerLogic = SpindexerLogic(io)
-        turret = Turret(turretRange, io)
 
         io.configurePinpoint()
-        io.setPosition(Pose2d(0.0,0.0,PI/2.0))
+        io.setPosition(Pose2d(0.0, 0.0, PI / 2.0))
 
-        val ll = (io as? HardwareIO)?.limelight
-        ll?.pipelineSwitch(0)
-        ll?.start()
-
-
-        // Initialize auto-aim
-        val hardwareIO = io as? HardwareIO
-        val limelight = hardwareIO?.limelight
-
-        val q20 = Quaterniond().rotateX(-PI/2.0).rotateLocalZ(Math.toRadians(54.046000))
-        val ypr20 = Vector3d()
-        q20.getEulerAnglesZYX(ypr20)
-
-        val q24 = Quaterniond().rotateX(-PI/2.0).rotateLocalZ(-Math.toRadians(54.046000))
-        val ypr24 = Vector3d()
-        q24.getEulerAnglesZYX(ypr24)
-
-        val landmarks = mapOf(
-            20 to AutoAimGTSAM.LandmarkSpec(
-                Vector3d(-1.413321, 1.481870, 0.7493),
-                pitch = ypr20.y,
-                roll = ypr20.x,
-                yaw = ypr20.z,
-                size = 0.165
-            ),
-            24 to AutoAimGTSAM.LandmarkSpec(
-                Vector3d(1.413321, 1.481870, 0.7493),
-                pitch = ypr24.y,
-                roll = ypr24.x,
-                yaw = ypr24.z,
-                size = 0.165
-            ),
-            22 to AutoAimGTSAM.LandmarkSpec(
-                position = Vector3d(0.0,1.818888,0.459341),
-                roll = -PI/2.0,
-                pitch = 0.0,
-                yaw = 0.0,
-                size = 0.165
-            )
-        )
-
-        // Goal position based on alliance
-        goalPosition = if (blue) {
-            Vector2d(-1.480126, 1.598982)
-        } else {
-             Vector2d(1.480126, 1.598982)
-        }
-        
-        autoAim = AutoAimGTSAM(
-            landmarkPositions = landmarks,
-            goalPosition = goalPosition!!,
-            initialPose = io.position(), // Use current pose as initial
-            estimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig()
-        )
-        
-        visionTracker = VisionTracker(
-            limelight = limelight,
-            allowedTagIds = landmarks.keys
-        )
-
-        applyRuntimeConfig(autoAim)
-        visionTracker.configure(pipeline = AutoAimGTSAMTest.AutoAimGTSAMTestConfig.pipeline)
-        autoAim.enabled = true
+        // Initialize shared aiming system
+        aiming = AimingSystem(io, blue)
+        aiming.init(io.position())
 
         try {
+            spindexerLogic.autoSort = false
             waitForStart()
 
             var loopStartTime = System.nanoTime()
@@ -157,13 +76,10 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
                 // Update voltage compensation
                 dVoltage = 12.0 / io.voltage()
 
-                applyRuntimeConfig(autoAim)
-
-                // Update auto-aim system with profiling
+                // Update vision + auto-aim
                 val visionStartTime = System.nanoTime()
-                val visionResult = visionTracker.read()
-                autoAim.update(io.position(), turret.pos, visionResult)
-                profileVisionTime = (System.nanoTime() - visionStartTime) / 1_000_000  // convert to ms
+                aiming.updateVision()
+                profileVisionTime = (System.nanoTime() - visionStartTime) / 1_000_000
 
                 // Process all controls with profiling
                 val driveStartTime = System.nanoTime()
@@ -196,12 +112,15 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
                     io.spindexer = 0.0
                 }
 
+                if(gm1.b) {
+                    io.intake = 1.0
+                }
+
                 loopStartTime = System.nanoTime()
                 false // continue loop
             }
         } finally {
-            autoAim.close()
-            visionTracker.stop()
+            aiming.close()
         }
     }
 
@@ -210,9 +129,8 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
     }
 
     private fun processTurret(dt: Duration) {
-        // Update robot heading for field-relative aiming
-        turret.robotHeading = autoAim.fusedPose.rot
-        turret.robotAngularVelocity = io.velocity().rot
+        val turret = aiming.turret
+        val autoAim = aiming.autoAim
 
         // Auto-aim toggle (operator back button)
         val autoAimToggle = gm2.back
@@ -225,50 +143,27 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         val fieldRelativeToggle = gm2.start
         if (fieldRelativeToggle && !wasFieldRelativeToggle) {
             turret.fieldRelativeMode = !turret.fieldRelativeMode
-            // When switching to field-relative, initialize field target from current position
             if (turret.fieldRelativeMode) {
                 turret.fieldTargetAngle = turret.pos + turret.robotHeading
             }
         }
         wasFieldRelativeToggle = fieldRelativeToggle
-        
-        // Calculate target distance using fused pose and goal position
-        val pose = autoAim.fusedPose
-        goalPosition?.let { goal ->
-            targetDistance = hypot(goal.x - pose.v.x, goal.y - pose.v.y)
-        }
 
-        // Turret yaw control
-        // Check for manual control input
+        // Turret yaw control — check for manual control input
         val yawInput = -gm2.left_stick_x.toDouble()
         val isManualControl = yawInput.absoluteValue > 0.1 || gm2.left_stick_button
 
         if (autoAim.enabled && autoAim.hasTarget && !isManualControl) {
-            // Auto-aim mode: use sensor fusion for target tracking
-            if (turret.fieldRelativeMode) {
-                // Use field-relative target angle from sensor fusion
-                autoAim.getTargetFieldAngle()?.let { fieldAngle ->
-                    turret.fieldTargetAngle = fieldAngle
-                }
-            } else {
-                // Use robot-relative target angle from sensor fusion
-                autoAim.getTargetTurretAngle()?.let { robotAngle ->
-                    turret.targetAngle = robotAngle
-                }
-            }
-            // Limit target distance for flywheel calculations
-            targetDistance = targetDistance.coerceIn(0.1, 10.0)
+            // Auto-aim: delegate to aiming system
+            aiming.applyAutoAimTarget()
         } else if (isManualControl) {
             // Manual turret yaw control (operator left stick X)
             if (turret.fieldRelativeMode) {
-                // In field-relative mode, adjust field target angle
                 turret.fieldTargetAngle += yawInput * Math.toRadians(60.0) * dt.toDouble(DurationUnit.SECONDS)
             } else {
                 turret.targetAngle += yawInput * Math.toRadians(60.0) * dt.toDouble(DurationUnit.SECONDS)
             }
         }
-
-        turret.targetDistance = targetDistance
 
         // Flywheel controls
         var flywheelPower = 0.0
@@ -284,15 +179,19 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
             io.shooter = flywheelPower
         }
 
-        // Update turret PID
-        turret.update(dt)
+        // Update turret PID (uses heading from aiming system)
+        aiming.updateTurret(dt)
     }
 
     private fun processIntakeAndShooting(dt: Duration) {
+        val targetDistance = aiming.targetDistance
+
         // Zone Selection (Operator D-pad)
         if (gm2.dpad_down) manualOverridePower = ShotPowers.shortShotPower
         if (gm2.dpad_left || gm2.dpad_right) manualOverridePower = ShotPowers.midShotPower
         if (gm2.dpad_up) manualOverridePower = ShotPowers.longShotPower
+
+        if(gm2.aWasPressed()) spindexerLogic.autoSort = !spindexerLogic.autoSort
 
         // Auto Power Calculation
         val autoPower = when {
@@ -302,13 +201,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         }
 
         val activePower = manualOverridePower ?: autoPower
-
-        // Locking Logic
-        if (spindexerLogic.shootingRequested) {
-            spindexerLogic.targetShotPower = activePower
-        } else {
-            spindexerLogic.targetShotPower = activePower
-        }
+        spindexerLogic.targetShotPower = activePower
 
         // Intake control (driver left trigger)
         val intaking = gm1.left_trigger > 0.1
@@ -330,8 +223,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         }
         wasRightBumper = gm1.right_bumper
 
-        // Shooting controls
-        // Driver right trigger - shoot
+        // Shooting controls — Driver right trigger
         val isShooting = gm1.right_trigger > 0.5
         spindexerLogic.shootingRequested = isShooting
 
@@ -345,7 +237,6 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
 
         // Operator quick shot (right bumper)
         if (gm2.right_bumper && !gm2.left_bumper) {
-            // Single press shoot - edge detection handled by checking state
             if (spindexerLogic.currentState == SpindexerLogic.State.IDLE ||
                 spindexerLogic.currentState == SpindexerLogic.State.FULL) {
                 spindexerLogic.shoot()
@@ -353,21 +244,22 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         }
 
         // Update spindexer FSM
-        spindexerLogic.update(io.spindexerPosition(), dt, dVoltage)
+        spindexerLogic.update(dt, dVoltage)
     }
 
     private var lastTimestep = 0.milliseconds
     private fun updateTelemetry(state: sigmacorns.State) {
+        val turret = aiming.turret
+        val autoAim = aiming.autoAim
+        val targetDistance = aiming.targetDistance
+
         // Driver telemetry (essential info)
         telemetry.addLine("=== DRIVER ===")
         telemetry.addData("Spindexer", spindexerLogic.currentState.name)
-
-        // Count balls in spindexer
-        val ballCount = spindexerLogic.spindexerState.count { it != null }
-        telemetry.addData("Balls", "$ballCount/3")
+        telemetry.addData("Balls", "${spindexerLogic.spindexerState}")
         telemetry.addData("Speed", if (driveController.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
 
-        val looptime = state.timestamp-lastTimestep
+        val looptime = state.timestamp - lastTimestep
         lastTimestep = state.timestamp
         telemetry.addData("Looptime", "%.1f ms", looptime.inWholeMilliseconds.toDouble())
 
@@ -383,7 +275,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         }
         telemetry.addData("Turret Pitch", "%.2f", turret.targetPitch)
         telemetry.addData("Distance", "%.1f m", targetDistance)
-        
+
         val zone = when (spindexerLogic.targetShotPower) {
             ShotPowers.shortShotPower -> "SHORT"
             ShotPowers.midShotPower -> "MID"
@@ -394,7 +286,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         telemetry.addData("Shot Power", "%.0f%%", spindexerLogic.targetShotPower * 100)
         telemetry.addData("Power Locked", if (lockedShotPower != null) "YES" else "NO")
         telemetry.addData("Manual Override", if (manualOverridePower != null) "YES" else "NO")
-        
+
         telemetry.addData("Flywheel", "%.0f%%", io.shooter * 100)
 
         telemetry.addLine("")
@@ -430,8 +322,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
             telemetry.addData("Raw TX", "%.2f deg", autoAim.rawTxDegrees)
             telemetry.addData("Adjusted TX", "%.2f deg", Math.toDegrees(autoAim.targetTx))
             telemetry.addData("Target Distance", "%.2f m", targetDistance)
-            
-            // Fused pose telemetry
+
             val fusedPose = autoAim.fusedPose
             telemetry.addData("Fused Pose (m, m, rad)",
                 "%.2f, %.2f, %.2f",
@@ -439,7 +330,7 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
                 fusedPose.v.y,
                 fusedPose.rot
             )
-            
+
             telemetry.addData("Current Turret", "%.1f deg", Math.toDegrees(turret.pos))
             val timeSinceDetection = System.currentTimeMillis() - autoAim.lastDetectionTimeMs
             telemetry.addData("Last Detection", "${timeSinceDetection}ms ago")
@@ -459,9 +350,8 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         // Practice game ramp
         telemetry.addData("Ramp", globalFieldState.ramp.contentToString())
 
-
         //testing for autosorting
-        telemetry.addData("if nay balls were found:" ,spindexerLogic.foundAnyBall)
+        telemetry.addData("if nay balls were found:", spindexerLogic.foundAnyBall)
         telemetry.addData("current ball being detected:", io.colorSensorGetBallColor())
         telemetry.update()
     }

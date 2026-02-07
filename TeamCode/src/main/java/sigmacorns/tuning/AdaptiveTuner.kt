@@ -1,181 +1,95 @@
 package sigmacorns.tuning
 
-import sigmacorns.tuning.model.FeedbackType
-import kotlin.math.sin
-import kotlin.math.sqrt
-
 /**
- * Smart adaptive tuner that estimates initial flywheel speed from physics
- * and refines based on user feedback using binary-search-like adjustment.
+ * Simple interpolation-based shot tuner.
+ * Stores (distance, speed) data points and linearly interpolates between them.
+ * No physics-based estimation — user sets the first two points manually,
+ * then the tuner interpolates/extrapolates from the nearest neighbors.
  */
 class AdaptiveTuner(
     private val dataStore: ShotDataStore
 ) {
     companion object {
-        // Physics constants
-        const val GRAVITY = 9.81                    // m/s^2
-        const val LAUNCH_ANGLE_RAD = 0.5236         // 30 degrees in radians
-        const val FLYWHEEL_RADIUS = 0.05            // meters (wheel radius)
-        const val CORRECTION_FACTOR = 1.3           // empirical adjustment
-
-        // Tuning parameters
-        const val INITIAL_STEP_SIZE = 50.0          // rad/s
-        const val MIN_STEP_SIZE = 5.0               // rad/s
-        const val MAX_FLYWHEEL_SPEED = 628.0        // rad/s (~6000 RPM)
-        const val MIN_FLYWHEEL_SPEED = 100.0        // rad/s
+        const val MAX_FLYWHEEL_SPEED = 628.0  // rad/s (~6000 RPM)
+        const val MIN_FLYWHEEL_SPEED = 50.0   // rad/s
     }
 
     /**
-     * Per-bucket tuning state for the adaptive algorithm.
+     * Get the recommended speed for a given distance by linearly interpolating
+     * between the stored data points. Returns null if fewer than 2 points exist.
      */
-    private data class TuningState(
-        var lowerBound: Double = MIN_FLYWHEEL_SPEED,
-        var upperBound: Double = MAX_FLYWHEEL_SPEED,
-        var currentGuess: Double = 0.0,
-        var stepSize: Double = INITIAL_STEP_SIZE,
-        var lowerBoundSet: Boolean = false,
-        var upperBoundSet: Boolean = false
-    )
+    fun getRecommendedSpeed(distance: Double): Double? {
+        val points = dataStore.getPoints()
+        if (points.size < 2) return null
 
-    private val tuningStates = mutableMapOf<Double, TuningState>()
+        val sorted = points.sortedBy { it.distance }
 
-    /**
-     * Get the recommended speed for testing at this distance.
-     * Uses lookup table if available, otherwise physics estimate or current tuning state.
-     */
-    fun getRecommendedSpeed(distance: Double): Double {
-        val bucketKey = dataStore.distanceToBucket(distance)
+        // Find the two nearest bracketing points
+        val lower = sorted.lastOrNull { it.distance <= distance }
+        val upper = sorted.firstOrNull { it.distance > distance }
 
-        // First, check if we have a confirmed speed from lookup table
-        dataStore.getOptimalSpeed(distance)?.let { return it }
-
-        // Get or create tuning state for this bucket
-        val state = tuningStates.getOrPut(bucketKey) {
-            TuningState(currentGuess = calculateInitialEstimate(distance))
-        }
-
-        // If both bounds are set, use bisection
-        if (state.lowerBoundSet && state.upperBoundSet) {
-            state.currentGuess = (state.lowerBound + state.upperBound) / 2
-        }
-
-        return state.currentGuess.coerceIn(MIN_FLYWHEEL_SPEED, MAX_FLYWHEEL_SPEED)
-    }
-
-    /**
-     * Calculate physics-based initial estimate.
-     * Based on projectile motion: v = sqrt(distance * g / sin(2 * angle))
-     * Then convert linear velocity to flywheel angular velocity.
-     */
-    fun calculateInitialEstimate(distance: Double): Double {
-        // Required launch velocity for projectile to travel 'distance' horizontally
-        // Assuming flat trajectory start/end: range = v^2 * sin(2*theta) / g
-        // Solving for v: v = sqrt(range * g / sin(2*theta))
-        val sin2Theta = sin(2 * LAUNCH_ANGLE_RAD)
-        if (sin2Theta <= 0.01) return MIN_FLYWHEEL_SPEED
-
-        val linearVelocity = sqrt(distance * GRAVITY / sin2Theta)
-
-        // Convert linear velocity to flywheel angular velocity
-        // Linear velocity at ball contact = omega * radius
-        val angularVelocity = (linearVelocity / FLYWHEEL_RADIUS) * CORRECTION_FACTOR
-
-        return angularVelocity.coerceIn(MIN_FLYWHEEL_SPEED, MAX_FLYWHEEL_SPEED)
-    }
-
-    /**
-     * Process user feedback and update the tuning state.
-     */
-    fun processFeedback(distance: Double, feedbackType: FeedbackType, intensity: Int) {
-        val bucketKey = dataStore.distanceToBucket(distance)
-        val state = tuningStates.getOrPut(bucketKey) {
-            TuningState(currentGuess = calculateInitialEstimate(distance))
-        }
-
-        when (feedbackType) {
-            FeedbackType.UNDERSHOOT -> {
-                // Speed too low, need to increase
-                state.lowerBound = maxOf(state.lowerBound, state.currentGuess)
-                state.lowerBoundSet = true
-
-                val multiplier = if (intensity >= 2) 2.0 else 1.0
-                state.currentGuess += state.stepSize * multiplier
-
-                // Shrink step size on slight feedback
-                if (intensity == 1) {
-                    state.stepSize = maxOf(state.stepSize * 0.7, MIN_STEP_SIZE)
-                }
+        val speed = when {
+            lower != null && upper != null -> {
+                // Interpolate between lower and upper
+                val t = (distance - lower.distance) / (upper.distance - lower.distance)
+                lower.speed + t * (upper.speed - lower.speed)
             }
-
-            FeedbackType.OVERSHOOT -> {
-                // Speed too high, need to decrease
-                state.upperBound = minOf(state.upperBound, state.currentGuess)
-                state.upperBoundSet = true
-
-                val multiplier = if (intensity >= 2) 2.0 else 1.0
-                state.currentGuess -= state.stepSize * multiplier
-
-                // Shrink step size on slight feedback
-                if (intensity == 1) {
-                    state.stepSize = maxOf(state.stepSize * 0.7, MIN_STEP_SIZE)
-                }
+            lower != null -> {
+                // Beyond the highest point — extrapolate from last two
+                val last = sorted[sorted.size - 1]
+                val secondLast = sorted[sorted.size - 2]
+                val slope = (last.speed - secondLast.speed) / (last.distance - secondLast.distance)
+                last.speed + slope * (distance - last.distance)
             }
-
-            FeedbackType.GOOD -> {
-                // Found optimal speed, reset state for this bucket
-                resetBucket(distance)
+            upper != null -> {
+                // Below the lowest point — extrapolate from first two
+                val first = sorted[0]
+                val second = sorted[1]
+                val slope = (second.speed - first.speed) / (second.distance - first.distance)
+                first.speed + slope * (distance - first.distance)
             }
+            else -> return null
         }
 
-        // Clamp current guess
-        state.currentGuess = state.currentGuess.coerceIn(MIN_FLYWHEEL_SPEED, MAX_FLYWHEEL_SPEED)
-
-        // If both bounds set, use bisection
-        if (state.lowerBoundSet && state.upperBoundSet) {
-            state.currentGuess = (state.lowerBound + state.upperBound) / 2
-        }
+        return speed.coerceIn(MIN_FLYWHEEL_SPEED, MAX_FLYWHEEL_SPEED)
     }
 
     /**
-     * Check if we've converged for this distance (step size very small).
+     * Add a new data point. If a point already exists at this exact distance,
+     * it will be a separate entry (use updatePoint to modify existing).
      */
-    fun isConverged(distance: Double): Boolean {
-        val bucketKey = dataStore.distanceToBucket(distance)
-        val state = tuningStates[bucketKey] ?: return false
-
-        if (state.lowerBoundSet && state.upperBoundSet) {
-            return (state.upperBound - state.lowerBound) < MIN_STEP_SIZE * 2
-        }
-
-        return state.stepSize <= MIN_STEP_SIZE
+    fun addPoint(distance: Double, speed: Double) {
+        dataStore.addPoint(SpeedPoint(distance, speed.coerceIn(MIN_FLYWHEEL_SPEED, MAX_FLYWHEEL_SPEED)))
     }
 
     /**
-     * Reset tuning state for a distance bucket.
+     * Update an existing data point by index.
      */
-    fun resetBucket(distance: Double) {
-        val bucketKey = dataStore.distanceToBucket(distance)
-        tuningStates.remove(bucketKey)
+    fun updatePoint(index: Int, distance: Double, speed: Double) {
+        dataStore.updatePoint(index, SpeedPoint(distance, speed.coerceIn(MIN_FLYWHEEL_SPEED, MAX_FLYWHEEL_SPEED)))
     }
 
     /**
-     * Get current tuning state info for display.
+     * Remove a data point by index.
      */
-    fun getTuningStateInfo(distance: Double): String {
-        val bucketKey = dataStore.distanceToBucket(distance)
-        val state = tuningStates[bucketKey]
-
-        return if (state != null) {
-            val bounds = when {
-                state.lowerBoundSet && state.upperBoundSet ->
-                    "bounds: [${state.lowerBound.toInt()}, ${state.upperBound.toInt()}]"
-                state.lowerBoundSet -> "lower: ${state.lowerBound.toInt()}"
-                state.upperBoundSet -> "upper: ${state.upperBound.toInt()}"
-                else -> "no bounds"
-            }
-            "step: ${state.stepSize.toInt()}, $bounds"
-        } else {
-            "initial estimate"
-        }
+    fun removePoint(index: Int) {
+        dataStore.removePoint(index)
     }
+
+    /**
+     * Get all data points sorted by distance.
+     */
+    fun getPointsSorted(): List<SpeedPoint> {
+        return dataStore.getPoints().sortedBy { it.distance }
+    }
+
+    /**
+     * Number of data points.
+     */
+    fun pointCount(): Int = dataStore.getPoints().size
+
+    /**
+     * Whether we have enough points to interpolate.
+     */
+    fun canInterpolate(): Boolean = dataStore.getPoints().size >= 2
 }

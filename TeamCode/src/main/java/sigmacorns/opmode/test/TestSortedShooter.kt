@@ -362,7 +362,7 @@ open class TestSortedShooter(val blue: Boolean) : SigmaOpMode() {
         }
 
         // Update spindexer FSM
-        spindexerLogic.update(io.spindexerPosition(), dt, dVoltage)
+        spindexerLogic.update( dt, dVoltage)
     }
 
     private var lastTimestep = 0.milliseconds
