@@ -50,8 +50,8 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     ),io)
 
     // Error thresholds
-    internal val POSITION_ERROR_THRESHOLD = 0.05  // radians - position threshold for spindexer
-    internal val VELOCITY_ERROR_THRESHOLD = 20.0   // rad/s - velocity threshold for flywheel
+    internal val POSITION_ERROR_THRESHOLD = 0.15  // radians - position threshold for spindexer
+    internal val VELOCITY_ERROR_THRESHOLD = 25.0   // rad/s - velocity threshold for flywheel
 
     // Timeout for safety (fallback if threshold never reached)
     internal val MAX_WAIT_TIME = 3000.milliseconds
@@ -299,7 +299,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     var foundAnyBall = false
     var requiredColor = motif[0]
     private suspend fun sortBehavior() {
-        requiredColor = motif[sortCycle]
+        requiredColor = motif[sortCycle % 3]
 
         foundAnyBall = spindexerState.contains(requiredColor)
 
@@ -335,11 +335,11 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
         // Mark current ball as shot
         spindexerState[1] = null
+        sortCycle =+ 1
 
         // Check if spindexer is empty
         return if (spindexerState.all { it == null } && !shootingRequested) {
             io.shooter = 0.0
-            sortCycle = 0
             State.IDLE
         } else {
             State.MOVING_SHOOT
@@ -360,7 +360,6 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
                 nudgeDirection = 1.0
                 movingBehavior()
             }
-            sortCycle =+ 1
             State.SHOOTING
         } else {
             State.IDLE
