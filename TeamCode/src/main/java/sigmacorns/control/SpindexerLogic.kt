@@ -73,13 +73,10 @@ class SpindexerLogic(val io: SigmaIO) {
 
     /** Target power fraction for the shot */
     var targetShotPower: Double = 0.0
-    var motif: List<Balls?> = listOf(Balls.Green, Balls.Green, Balls.Purple)
+    var motif: List<Balls?> = listOf(Balls.Green, Balls.Purple, Balls.Purple)
 
     /** Whether continuous shooting is requested */
     var shootingRequested: Boolean = false
-
-    /** The motif the sorted shooter will target. */
-    internal var targetMotif: List<Balls?> = listOf(Balls.Green, Balls.Green, Balls.Purple)
 
 
     enum class State {
@@ -200,11 +197,18 @@ class SpindexerLogic(val io: SigmaIO) {
         transferNeedsReset = true  // Mark that we need to reset next time
     }
 
+    private fun pollColor(): Boolean {
+        val ballDetected = io.colorSensorDetectsBall()
+        if (ballDetected) {
+            spindexerState[0] = io.colorSensorGetBallColor() ?: Balls.Green
+        }
+        return ballDetected
+    }
+
     private suspend fun intakingBehavior(): State {
         // Run intake motor
         println("Entered intaking state")
-        io.intake = -1.0
-        if (offsetActive == true) {
+        if (offsetActive) {
             println("changed offset angle")
             spindexerRotation += MODE_CHANGE_ANGLE
             offsetActive = false
@@ -212,7 +216,7 @@ class SpindexerLogic(val io: SigmaIO) {
             // Wait until spindexer reaches target position
             val startTime = io.time()
             while (true) {
-                val error = kotlin.math.abs(spindexer.curRotation - spindexerRotation)
+                val error = abs(spindexer.curRotation - spindexerRotation)
 
                 if (error < POSITION_ERROR_THRESHOLD) {
                     break
@@ -225,24 +229,21 @@ class SpindexerLogic(val io: SigmaIO) {
             }
         }
 
+        io.intake = -1.0
+
         // Check for ball detection (polling)
-        while (spindexerState[0] == null) {
-            // Poll color sensor for automatic ball detection
-            val ballDetected = io.colorSensorDetectsBall()
-            if (ballDetected) {
-                spindexerState[0] = io.colorSensorGetBallColor() ?: Balls.Green
-                break
-            }
-            delay(10)
-        }
+        while (!pollColor()) delay(10)
 
         // Ball detected -> transition to MOVING
+        nudgeDirection = 1.0
         return State.MOVING
     }
 
     private suspend fun movingBehavior(): State {
         // Stop intake while moving
         io.intake = 0.0
+
+        if(nudgeDirection==0.0) return State.IDLE
 
         // Rotate spindexer to next position based on nudge direction
         val rotationAngle = nudgeDirection * ROTATE_ANGLE
@@ -264,7 +265,7 @@ class SpindexerLogic(val io: SigmaIO) {
         // Wait for spindexer to reach target position
         val startTime = io.time()
         while (true) {
-            val error = kotlin.math.abs(spindexer.curRotation - spindexerRotation)
+            val error = abs(spindexer.curRotation - spindexerRotation)
 
             if (error < POSITION_ERROR_THRESHOLD) {
                 break
@@ -277,7 +278,7 @@ class SpindexerLogic(val io: SigmaIO) {
         }
 
         // Check if spindexer is full
-        return if (spindexerState.all { it != null }) State.FULL else State.IDLE
+        return if (spindexerState.all { it != null }) State.FULL else State.INTAKING
     }
 
     private suspend fun fullBehavior(): State {
@@ -289,84 +290,30 @@ class SpindexerLogic(val io: SigmaIO) {
     var foundAnyBall = false
     var requiredColor = motif[0]
     private suspend fun sortBehavior() {
-        if (sortCycle == 0) {
-            requiredColor = motif[0]
-        }
-        if (sortCycle == 1) {
-            requiredColor = motif[1]
-        }
-        if (sortCycle == 2) {
-            requiredColor = motif[2]
-        }
+        requiredColor = motif[sortCycle]
 
-        // Check if there are any balls left at all
-        foundAnyBall = false
-//        for (checkRotation in 0..2) {
-//            if (io.colorSensorDetectsBall()) {
-//                foundAnyBall = true
-//                break
-//            }
-//            if (checkRotation < 2) {
-//                movingBehavior()()
-//            }
-//
-//
-//            // If no balls found anywhere, we're done
-//            if (!foundAnyBall) {
-//                println("Sorted shoot: No balls remaining")
-//                break
-//            }
+        foundAnyBall = spindexerState.contains(requiredColor)
 
-            // If we need a specific color, rotate until we find it
-            if (requiredColor != null) {
-                var rotations = 0
-                var foundColor = false
+        val nudgePairs = mapOf(1 to 0.0, 0 to 1.0, 2 to -1.0)
+        nudgeDirection = nudgePairs.firstNotNullOfOrNull { p ->
+            p.value.takeIf { spindexerState[p.key]==requiredColor }
+        } ?: nudgePairs.firstNotNullOfOrNull { p ->
+            p.value.takeIf {spindexerState[p.key] != null}
+        } ?: 1.0
 
-                while (rotations < 3) {
-                    if (io.colorSensorDetectsBall()) {
-                        val currentColor = io.colorSensorGetBallColor()
-                        println("SORT: Found Ball: $currentColor Required Color: $requiredColor")
-                        if (currentColor == requiredColor) {
-                            foundColor = true
-                            break
-                        }
-                    }
-
-                    // Try next slot
-                    if (rotations < 2) {
-                        movingBehavior()
-                        rotations++
-                    } else {
-                        break
-                    }
-                }
-
-                // If we didn't find the required color, skip this motif slot
-                if (!foundColor) {
-                    println("Sorted shoot: Color $requiredColor not found, skipping")
-
-                    //continue
-                }
-            }
-       }
-
+        println("SPINDEXER: sort found=$foundAnyBall required=$requiredColor nudgeDirection=$nudgeDirection")
+        movingBehavior()
+    }
 
     private suspend fun shootingBehavior(): State {
-        // Flywheel control is handled in update() based on state
-
-
-        //add shooting logic here
-
         // Wait for flywheel to spin up
         val startTime = io.time()
         while (true) {
             val currentVelocity = io.flywheelVelocity()
             // Target is calculated in update()
-            val error = kotlin.math.abs(currentVelocity - (targetShotPower * ShooterFlywheelPIDConfig.maxVelocity))
+            val error = abs(currentVelocity - (targetShotPower * ShooterFlywheelPIDConfig.maxVelocity))
 
-            if (error < VELOCITY_ERROR_THRESHOLD) {
-                break
-            }
+            if (error < VELOCITY_ERROR_THRESHOLD) break
             if (io.time() - startTime > MAX_WAIT_TIME) {
                 println("Warning: Flywheel spinup timeout")
                 break
@@ -379,7 +326,7 @@ class SpindexerLogic(val io: SigmaIO) {
         activateTransfer()
 
         // Mark current ball as shot
-        spindexerState[0] = null
+        spindexerState[1] = null
 
         // Check if spindexer is empty
         return if (spindexerState.all { it == null } && !shootingRequested) {
@@ -398,7 +345,7 @@ class SpindexerLogic(val io: SigmaIO) {
             // Wait until spindexer reaches target position
             val startTime = io.time()
             while (true) {
-                val error = kotlin.math.abs(spindexer.curRotation - spindexerRotation)
+                val error = abs(spindexer.curRotation - spindexerRotation)
 
                 if (error < POSITION_ERROR_THRESHOLD) {
                     break
@@ -453,7 +400,7 @@ class SpindexerLogic(val io: SigmaIO) {
      * Public API to start sorted shooting.
      */
     fun startSortedShoot(motif: List<Balls?>) {
-        targetMotif = motif
+        this.motif = motif
         fsm.sendEvent(Event.SORTED_SHOOT)
     }
 

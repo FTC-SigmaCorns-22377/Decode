@@ -305,13 +305,8 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
 
         // Locking Logic
         if (spindexerLogic.shootingRequested) {
-            wasShooting
-            if (lockedShotPower == null) {
-                lockedShotPower = activePower
-            }
-            spindexerLogic.targetShotPower = lockedShotPower!!
+            spindexerLogic.targetShotPower = activePower
         } else {
-            lockedShotPower = null
             spindexerLogic.targetShotPower = activePower
         }
 
@@ -319,14 +314,10 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         val intaking = gm1.left_trigger > 0.1
         if (intaking && !wasIntaking) {
             spindexerLogic.startIntaking()
-        } else if (!intaking && wasIntaking) {
+        } else if (!intaking) {
             spindexerLogic.stopIntaking()
         }
         wasIntaking = intaking
-
-        /*if (io.distance() < 0.15) {
-            spindexerLogic.fsm.sendEvent(SpindexerLogic.Event.BALL_DETECTED)
-        }*/
 
         // Spindexer Nudge Controls (Driver Bumpers)
         if (gm1.left_bumper && !wasLeftBumper) {

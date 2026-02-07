@@ -27,6 +27,7 @@ import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.opmode.test.AutoAimGTSAMTest
 import sigmacorns.opmode.test.AutoAimGTSAMTest.Companion.applyRuntimeConfig
 import sigmacorns.sim.Balls
+import kotlin.math.hypot
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -39,6 +40,7 @@ class TrajoptAuto : SigmaOpMode() {
         val INTAKE_SEGMENTS: Map<String, List<Pair<Int, Int>>> = mapOf(
             "intake_1" to listOf(1 to 2),
             "intake_2" to listOf(1 to 2),
+            "intake_3" to listOf(1 to 2),
         )
         val SHOT_POWER = ShotPowers.longShotPower
         val PROJECT_FILE_NAME = "base"
@@ -125,6 +127,16 @@ class TrajoptAuto : SigmaOpMode() {
                     goalPosition.x, goalPosition.y, dt
                 )
 
+                val pose = autoAim.fusedPose
+                val goal = goalPosition
+                val targetDistance = hypot(goal.x - pose.v.x, goal.y - pose.v.y)
+
+                spindexerLogic.targetShotPower = when {
+                    targetDistance < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
+                    targetDistance < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
+                    else -> ShotPowers.longShotPower
+                }
+
                 io.update()
             }
 
@@ -171,9 +183,6 @@ class TrajoptAuto : SigmaOpMode() {
                 !shouldIntake && intaking -> {
                     println("TrajoptAuto: stop intaking")
                     spindexerLogic.stopIntaking()
-                    spindexerLogic.spindexerState[0] = Balls.Purple
-                    spindexerLogic.spindexerState[1] = Balls.Purple
-                    spindexerLogic.spindexerState[2] = Balls.Purple
                     intaking = false
                 }
             }
