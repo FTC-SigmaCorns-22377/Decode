@@ -205,7 +205,6 @@ class ShotTuningOpMode : SigmaOpMode() {
     private fun isReadyToShoot(): Boolean {
         return aiming.autoAim.hasTarget &&
                 isTurretAligned() &&
-                isFlywheelAtSpeed() &&
                 spindexerLogic.currentState == SpindexerLogic.State.IDLE
     }
 

@@ -51,7 +51,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     // Error thresholds
     internal val POSITION_ERROR_THRESHOLD = 0.15  // radians - position threshold for spindexer
-    internal val VELOCITY_ERROR_THRESHOLD = 25.0   // rad/s - velocity threshold for flywheel
+    internal val VELOCITY_ERROR_THRESHOLD = 10.0   // rad/s - velocity threshold for flywheel
 
     // Timeout for safety (fallback if threshold never reached)
     internal val MAX_WAIT_TIME = 3000.milliseconds
