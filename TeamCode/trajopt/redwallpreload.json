@@ -1,0 +1,589 @@
+{
+  "version": 3,
+  "name": "RedWallPreload",
+  "updatedAt": "2026-02-08T03:02:15.455560Z",
+  "fieldSize": 3.66,
+  "backgroundImageFilename": "6fb5ea3496da8d70c2dfe3ae7babf07384dd2f611379c1161f142f4677d83275.svg",
+  "backgroundSettings": {
+    "scale": 1,
+    "rotation": 90,
+    "opacity": 1,
+    "mirrorH": false,
+    "mirrorV": false
+  },
+  "variables": {
+    "vars": [
+      {
+        "name": "intake_start_x",
+        "value": 0.9,
+        "linkedFrom": "base.json"
+      },
+      {
+        "name": "intake_end_x",
+        "value": 1.3,
+        "linkedFrom": "base.json"
+      },
+      {
+        "name": "intake_vel",
+        "value": 0.2,
+        "linkedFrom": "base.json"
+      }
+    ],
+    "linkedFrom": "base.json"
+  },
+  "robotParams": {
+    "mass": 15,
+    "inertia": 0.5,
+    "wheel_radius": 0.05,
+    "lx": 0.15,
+    "ly": 0.15,
+    "w_max": 100,
+    "t_max": 1,
+    "f_traction_max": 20,
+    "default_intake_distance": 0.5,
+    "default_intake_velocity": 1,
+    "linkedFrom": null
+  },
+  "trajectories": [
+    {
+      "id": "59f4f00f-335d-4a73-9499-79160af74b45",
+      "name": "Intake_1",
+      "waypoints": [
+        {
+          "x": 0.7557875055816271,
+          "y": 1.0126354841375005,
+          "heading": 0.6711438354360088,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 1.7713366336633665,
+          "intake_y": 1.2381188118811883,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 0.9,
+          "y": 0.29230829447546836,
+          "heading": 0,
+          "stop": false,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 1.3485643564356438,
+          "intake_y": 0.28990099009900994,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1,
+          "x_exp": "intake_start_x"
+        },
+        {
+          "x": 1.5551980198019804,
+          "y": 0.301980198019802,
+          "heading": 0,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "unconstrained",
+          "intake_x": 2.0551980198019804,
+          "intake_y": 0.301980198019802,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 0.890841584158416,
+          "y": 0.8817821782178219,
+          "heading": 0,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 1.3908415841584159,
+          "intake_y": 0.8817821782178219,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        }
+      ],
+      "constraints": [
+        {
+          "id": "dec77c53-9643-4af8-97fd-42803f651e42",
+          "type": "heading-tangent",
+          "fromWaypoint": 1,
+          "toWaypoint": 2,
+          "params": {},
+          "enabled": true
+        },
+        {
+          "id": "12518e6d-2001-4cac-8da3-599a57c036a8",
+          "type": "max-velocity",
+          "fromWaypoint": 1,
+          "toWaypoint": 2,
+          "params": {
+            "v_max": 0.2
+          },
+          "enabled": true,
+          "params_exp": {
+            "v_max": "intake_vel"
+          }
+        }
+      ],
+      "eventMarkers": [],
+      "solverSettings": {
+        "samplesPerMeter": 20,
+        "minSamplesPerSegment": 3,
+        "controlEffortWeight": 0.09
+      },
+      "trajectory": null,
+      "followsTrajectoryId": "0fca84fa-c3cd-4fcd-816a-c52de0c69584"
+    },
+    {
+      "id": "93a03490-d951-4078-b08f-c75038ac4877",
+      "name": "Intake_2",
+      "waypoints": [
+        {
+          "x": 0.890841584158416,
+          "y": 0.8817821782178219,
+          "heading": 0,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 1.4129291951205825,
+          "intake_y": 0.9445629192246027,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 0.7937466534293148,
+          "y": -0.31593469053157053,
+          "heading": 0,
+          "stop": false,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 1.3127262273531586,
+          "intake_y": -0.32226121517285183,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 1.5908887582307574,
+          "y": -0.32226121517285183,
+          "heading": 0,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 2.0908887582307574,
+          "intake_y": -0.32226121517285183,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 0.1357880907360606,
+          "y": -1.3598112563429834,
+          "heading": 0.5667292175235039,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 0.6357880907360606,
+          "intake_y": -1.3598112563429834,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        }
+      ],
+      "constraints": [
+        {
+          "id": "3ea00943-d420-46d0-869c-54ba93e26a51",
+          "type": "heading-tangent",
+          "fromWaypoint": 1,
+          "toWaypoint": 2,
+          "params": {},
+          "enabled": true
+        },
+        {
+          "id": "c21cb716-aa15-4f24-9ddc-f91b7a3b3402",
+          "type": "max-velocity",
+          "fromWaypoint": 1,
+          "toWaypoint": 2,
+          "params": {
+            "v_max": 0.2
+          },
+          "enabled": true,
+          "params_exp": {
+            "v_max": "intake_vel"
+          }
+        }
+      ],
+      "eventMarkers": [],
+      "solverSettings": {
+        "samplesPerMeter": 20,
+        "minSamplesPerSegment": 3,
+        "controlEffortWeight": 0.07
+      },
+      "trajectory": null,
+      "followsTrajectoryId": "59f4f00f-335d-4a73-9499-79160af74b45"
+    },
+    {
+      "id": "a919f62b-a148-439d-abf4-943ce6b4503a",
+      "name": "Intake_3",
+      "waypoints": [
+        {
+          "x": 0.1357880907360606,
+          "y": -1.3598112563429834,
+          "heading": 0.5667292175235039,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 0.6357880907360606,
+          "intake_y": -1.3471582070604209,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 0.7368079316577832,
+          "y": -0.9232810560945743,
+          "heading": 0,
+          "stop": false,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 1.3317058012770024,
+          "intake_y": -0.9296075807358556,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 1.5529296103830696,
+          "y": -0.9232810560945743,
+          "heading": 0,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 2.0529296103830696,
+          "intake_y": -0.9232810560945743,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 0.028237171834278665,
+          "y": -1.2585868620824827,
+          "heading": 0.8042638494191191,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 0.5282371718342787,
+          "intake_y": -1.2585868620824827,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        }
+      ],
+      "constraints": [
+        {
+          "id": "b318c8a2-086b-4519-92d8-53f7fad55c02",
+          "type": "heading-tangent",
+          "fromWaypoint": 1,
+          "toWaypoint": 2,
+          "params": {},
+          "enabled": true
+        },
+        {
+          "id": "908188f8-8183-4154-951f-449ccdaa2b71",
+          "type": "max-velocity",
+          "fromWaypoint": 1,
+          "toWaypoint": 2,
+          "params": {
+            "v_max": 0.2
+          },
+          "enabled": true,
+          "params_exp": {
+            "v_max": "intake_vel"
+          }
+        }
+      ],
+      "eventMarkers": [],
+      "solverSettings": {
+        "samplesPerMeter": 20,
+        "minSamplesPerSegment": 3,
+        "controlEffortWeight": 0.06
+      },
+      "trajectory": null,
+      "followsTrajectoryId": "93a03490-d951-4078-b08f-c75038ac4877"
+    },
+    {
+      "id": "0fca84fa-c3cd-4fcd-816a-c52de0c69584",
+      "name": "preload",
+      "waypoints": [
+        {
+          "x": 1.2872155754492554,
+          "y": 1.4112065365382218,
+          "heading": 0.601073754497749,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 1.799868624731818,
+          "intake_y": 1.2910025683538773,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        },
+        {
+          "x": 0.7557875055816271,
+          "y": 1.0126354841375005,
+          "heading": 0.6711438354360088,
+          "stop": true,
+          "v_max": 3,
+          "omega_max": 10,
+          "type": "constrained",
+          "intake_x": 0.926808224235,
+          "intake_y": 0.6899827274321547,
+          "intake_distance": 0.5,
+          "intake_velocity_max": 1,
+          "intake_velocity_slack": 0.1
+        }
+      ],
+      "constraints": [],
+      "eventMarkers": [],
+      "solverSettings": {
+        "samplesPerMeter": 20,
+        "minSamplesPerSegment": 3,
+        "controlEffortWeight": 0
+      },
+      "trajectory": {
+        "times": [
+          0,
+          0.05310020181735091,
+          0.10620040363470182,
+          0.1593006054520527,
+          0.21240080726940364,
+          0.26550100908675456,
+          0.3186012109041055,
+          0.3717014127214564,
+          0.4248016145388073,
+          0.47790181635615825,
+          0.5310020181735091,
+          0.58410221999086,
+          0.6372024218082109,
+          0.6903026236255617,
+          0.7434028254429126
+        ],
+        "states": [
+          [
+            -1.99277593773932e-31,
+            8.835247317360713e-32,
+            6.831059875037826e-33,
+            1.2872155754492554,
+            1.4112065365382218,
+            0.601073754497749
+          ],
+          [
+            -0.20823396729163599,
+            -0.14334369011869777,
+            0.19336245085534098,
+            1.281631420374998,
+            1.4073696206041735,
+            0.6063386937273799
+          ],
+          [
+            -0.4221903517772088,
+            -0.2934606296728884,
+            0.16629428040373762,
+            1.2648329786422199,
+            1.3957447367993057,
+            0.6158692574477516
+          ],
+          [
+            -0.6229442443067993,
+            -0.43734006100363576,
+            0.14296005322132663,
+            1.237028098384074,
+            1.3763144033832526,
+            0.6240641649442807
+          ],
+          [
+            -0.8113880098372044,
+            -0.5750362594662892,
+            0.12294977706454115,
+            1.1988938322824936,
+            1.349408565341754,
+            0.6311105259484739
+          ],
+          [
+            -0.9883476835536166,
+            -0.7066402772603055,
+            0.10589377494696595,
+            1.1510616261925302,
+            1.3153532809354775,
+            0.6371747772385596
+          ],
+          [
+            -1.1545572307216239,
+            -0.8322530040342738,
+            0.09176688473995474,
+            1.0941215273320009,
+            1.2744695001484154,
+            0.6424131062386867
+          ],
+          [
+            -1.273321114418634,
+            -0.9250276077804203,
+            0.4760400484590117,
+            1.02962133955279,
+            1.2278033746043024,
+            0.6577490680827914
+          ],
+          [
+            -1.292227790248326,
+            -1.0259951969783048,
+            0.016820193210014874,
+            0.9614931798208559,
+            1.1759819060530132,
+            0.6705230947785632
+          ],
+          [
+            -1.0778895475648502,
+            -0.855922373832225,
+            0.0021578680388114977,
+            0.8986203028316492,
+            1.1260591377553117,
+            0.6710170195668128
+          ],
+          [
+            -0.8623882027421151,
+            -0.6848202844698801,
+            0.0007826159834908771,
+            0.8471598015894561,
+            1.0851951084123104,
+            0.6710941569538537
+          ],
+          [
+            -0.6468099980544244,
+            -0.5136378464795284,
+            0.0003443132020592886,
+            0.8071445010115369,
+            1.0534188183689126,
+            0.6711237797607026
+          ],
+          [
+            -0.4312125031162188,
+            -0.34243245854336307,
+            0.00015393135583878666,
+            0.7785769545379788,
+            1.0307329768258955,
+            0.6711368790785879
+          ],
+          [
+            -0.21560794596686325,
+            -0.17121817434295752,
+            5.600482145694432e-05,
+            0.7614578632606063,
+            1.017138420115806,
+            0.6711423864872267
+          ],
+          [
+            0,
+            0,
+            0,
+            0.7557875055816271,
+            1.0126354841375005,
+            0.6711438354360088
+          ]
+        ],
+        "controls": [
+          [
+            -0.9181793328904055,
+            -1.908795896058742e-06,
+            0.08181288579765923
+          ],
+          [
+            -0.9998465098424879,
+            -1.0756166339488963e-06,
+            0.00014903155281286088
+          ],
+          [
+            -0.999889974527263,
+            -1.2283371016547954e-06,
+            0.0001047965296431341
+          ],
+          [
+            -0.999882519469038,
+            -1.4520426320928358e-06,
+            0.00011112777067412645
+          ],
+          [
+            -0.9998313323542392,
+            -1.8180103035409684e-06,
+            0.00016048338403336316
+          ],
+          [
+            -0.999611764153735,
+            -2.5402904601928865e-06,
+            0.0003764491873630062
+          ],
+          [
+            -0.8318831180681244,
+            -4.624431739763204e-06,
+            0.16809443798328036
+          ],
+          [
+            -0.5951753719324279,
+            -0.23295442541805159,
+            -0.16573644450508082
+          ],
+          [
+            0.6637729052860298,
+            -0.00017171635313267472,
+            -0.005194512123289037
+          ],
+          [
+            0.7241289453430676,
+            -2.520694696362652e-05,
+            -0.00045240589484116624
+          ],
+          [
+            0.7795623879896619,
+            -6.798959361866806e-06,
+            -0.0001384917520840446
+          ],
+          [
+            0.8347244769354963,
+            -1.3711663844535873e-06,
+            -5.989298332351405e-05
+          ],
+          [
+            0.8898259195624532,
+            3.0527542691722177e-07,
+            -3.2197460574031174e-05
+          ],
+          [
+            0.9449078195327788,
+            7.044516533078649e-07,
+            -2.0335708120456624e-05
+          ]
+        ],
+        "waypoint_times": [
+          0,
+          0.7434028254429126
+        ],
+        "totalTime": 0.7434028254429126
+      },
+      "followsTrajectoryId": null
+    }
+  ]
+}
