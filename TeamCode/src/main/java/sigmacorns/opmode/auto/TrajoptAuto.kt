@@ -41,7 +41,7 @@ import kotlin.time.Duration.Companion.seconds
 data class TrajoptAutoData(
     val INTAKE_SEGMENTS: Map<String, List<Pair<Int, Int>>>,
     val SHOT_POWER: Double ,
-    val PROJECT_FILE_NAME: String ,
+    val PROJECT_FILE_NAME: (Boolean) -> String , //blue -> name
     val ROOT: String ,
     val PRELOAD: Boolean
 )
@@ -53,7 +53,7 @@ val RedWallPreload = TrajoptAutoData (
         "intake_3" to listOf(2 to 3),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
-    PROJECT_FILE_NAME = "redwallpreload",
+    PROJECT_FILE_NAME = { "redwallpreload" },
     ROOT = "preload", false
 )
 
@@ -64,27 +64,31 @@ val base = TrajoptAutoData(
         "intake_3" to listOf(1 to 2),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
-    PROJECT_FILE_NAME = "base",
+    PROJECT_FILE_NAME = { if(it) "base-mirrored" else "base" },
     ROOT = "intake_1",
     PRELOAD = true
 )
 
 @Autonomous(name = "Auto Red Far", group = "Auto")
-class AutoRedFar: TrajoptAuto(base)
+class AutoRedFar: TrajoptAuto(base,false)
+
+@Autonomous(name = "Auto Blue Far", group = "Auto")
+class AutoBlueFar: TrajoptAuto(base, true)
 
 @Autonomous(name = "RedWallAuto", group = "Auto")
-class RedWallAuto: TrajoptAuto(RedWallPreload)
+class RedWallAuto: TrajoptAuto(RedWallPreload, false)
 
 
 open class TrajoptAuto(
-    val data: TrajoptAutoData
+    val data: TrajoptAutoData,
+    val blue: Boolean
 ) : SigmaOpMode() {
     lateinit var aiming: AimingSystem
 
     override fun runOpMode() {
         val robotDir = TrajoptLoader.robotTrajoptDir()
         val projectFile = TrajoptLoader.findProjectFiles(robotDir).find {
-            it.nameWithoutExtension == data.PROJECT_FILE_NAME
+            it.nameWithoutExtension == data.PROJECT_FILE_NAME(blue)
         }!!
 
         val trajectories = TrajoptLoader.loadAllTrajectoriesOrdered(projectFile, data.ROOT)
@@ -102,8 +106,6 @@ open class TrajoptAuto(
                 Pose2d(v,it.rot)
             })
         }
-
-        val blue = false
 
         // Initialize AimingSystem
         aiming = AimingSystem(io, blue)
@@ -136,10 +138,20 @@ open class TrajoptAuto(
 
             waitForStart()
 
+            val startTime = io.time()
+            var zero = false
+
             val schedule = CoroutineScope(dispatcher).launch {
                 if(data.PRELOAD) shootAllBalls(spindexerLogic)
                 println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {
+                    if(30.seconds - (io.time()-startTime) < 10.seconds) {
+                        spindexerLogic.fsm.curState = SpindexerLogic.State.ZERO
+                        zero = true
+                        while(true) {
+                            delay(10)
+                        }
+                    }
                     println("TrajoptAuto: following traj ${traj.name}")
                     followTrajectory(traj, runner, spindexerLogic)
                     println("TrajoptAuto: done traj ${traj.name}")
@@ -163,7 +175,11 @@ open class TrajoptAuto(
                 lastTime = t
 
                 // Update aiming system
-                aiming.update(dt)
+                if(!zero) aiming.update(dt) else {
+                    aiming.turret.fieldRelativeMode = false
+                    aiming.turret.targetAngle = 0.0
+                    aiming.turret.update(dt)
+                }
 
                 // Use AdaptiveTuner for velocity, fallback to zones if not calibrated
                 val recommendedVelocity = aiming.getRecommendedFlywheelVelocity()

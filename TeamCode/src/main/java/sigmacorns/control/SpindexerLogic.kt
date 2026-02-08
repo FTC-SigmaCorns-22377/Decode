@@ -87,14 +87,15 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     var autoSort: Boolean = true
 
-    enum class State {
+    public enum class State {
         IDLE,
         INTAKING,
         MOVING,
         FULL,
         SHOOTING,
         MOVING_SHOOT,
-        SORTED_SHOOTING
+        SORTED_SHOOTING,
+        ZERO
     }
 
     enum class Event {
@@ -172,6 +173,15 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         State.SHOOTING -> this::shootingBehavior
         State.MOVING_SHOOT -> this::movingShootBehavior
         State.SORTED_SHOOTING -> this::sortedShootingBehavior
+        State.ZERO -> this::zeroBehavior
+    }
+
+    private suspend fun zeroBehavior(): State {
+        if(offsetActive) spindexerRotation -= MODE_CHANGE_ANGLE
+
+        while(true) {
+            delay(100)
+        }
     }
 
     private suspend fun idleBehavior(): State {
