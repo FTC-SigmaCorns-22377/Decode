@@ -53,7 +53,7 @@ val RedWallPreload = TrajoptAutoData (
         "intake_3" to listOf(2 to 3),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
-    PROJECT_FILE_NAME = "RedWallPreload",
+    PROJECT_FILE_NAME = "redwallpreload",
     ROOT = "preload", false
 )
 
