@@ -1,5 +1,6 @@
 package sigmacorns.opmode.auto
 
+import android.app.ActivityManager
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -51,7 +52,6 @@ val RedWallPreload = TrajoptAutoData (
     INTAKE_SEGMENTS = mapOf(
         "intake_1" to listOf(2 to 3),
         "intake_2" to listOf(2 to 3),
-        "intake_3" to listOf(2 to 3),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { "redwallpreload" },
@@ -62,7 +62,6 @@ val base = TrajoptAutoData(
     INTAKE_SEGMENTS= mapOf(
         "intake_1" to listOf(1 to 2),
         "intake_2" to listOf(1 to 2),
-        "intake_3" to listOf(1 to 2),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { if(it) "base-mirrored" else "base" },
@@ -70,13 +69,13 @@ val base = TrajoptAutoData(
     PRELOAD = true
 )
 
-@Autonomous(name = "Auto Red Far", group = "Auto")
+@Autonomous(name = "Auto Red Far", group = "Auto", preselectTeleOp = "TeleopRed")
 class AutoRedFar: TrajoptAuto(base,false)
 
-@Autonomous(name = "Auto Blue Far", group = "Auto")
+@Autonomous(name = "Auto Blue Far", group = "Auto", preselectTeleOp = "TeleopBlue")
 class AutoBlueFar: TrajoptAuto(base, true)
 
-@Autonomous(name = "RedWallAuto", group = "Auto")
+@Autonomous(name = "RedWallAuto", group = "Auto", preselectTeleOp = "TeleopRed")
 class RedWallAuto: TrajoptAuto(RedWallPreload, false)
 
 
@@ -99,8 +98,10 @@ open class TrajoptAuto(
         val spindexerLogic = SpindexerLogic(io, flywheel)
         val dispatcher = PollableDispatcher(io)
 
+        io.configurePinpoint()
+
         // Set initial position from first trajectory
-        trajectories.firstOrNull()?.getInitialSample()?.let {
+        trajectories.firstOrNull()?.getInitialSample()!!.let {
             io.setPosition(it.pos.let {
                 val v = Vector2d()
                 it.v.sub(drivetrainCenter.rotate(it.rot),v)
@@ -146,12 +147,9 @@ open class TrajoptAuto(
                 if(data.PRELOAD) shootAllBalls(spindexerLogic)
                 println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {
-                    if(30.seconds - (io.time()-startTime) < 10.seconds) {
+                    if(traj.name == "intake_3") {
                         spindexerLogic.fsm.curState = SpindexerLogic.State.ZERO
                         zero = true
-                        while(true) {
-                            delay(10)
-                        }
                     }
                     println("TrajoptAuto: following traj ${traj.name}")
                     followTrajectory(traj, runner, spindexerLogic)

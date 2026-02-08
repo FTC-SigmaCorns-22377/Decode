@@ -22,13 +22,15 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.DurationUnit
 
 @TeleOp(name = "TeleopBlue", group = "Competition")
-class TeleopBlue: TeleopBase(true)
+class TeleopBlue(fromAuto: Boolean = false): TeleopBase(true, fromAuto)
 
 @TeleOp(name = "TeleopRed", group = "Competition")
-class TeleopRed: TeleopBase(false)
+class TeleopRed(fromAuto: Boolean = false): TeleopBase(false, fromAuto)
 
-open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
-
+open class TeleopBase(
+    val blue: Boolean,
+    val fromAuto: Boolean = false
+) : SigmaOpMode() {
     // Subsystems
     private lateinit var spindexerLogic: SpindexerLogic
     private lateinit var aiming: AimingSystem
@@ -70,12 +72,16 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         )
         spindexerLogic = SpindexerLogic(io, flywheel)
 
-        io.configurePinpoint()
+        if(!fromAuto && PosePersistence.loadPose(storageDir()) == null) {
+            io.configurePinpoint()
+            io.setPosition(Pose2d(0.0, 0.0, PI / 2.0))
+        }
 
         // Try to load pose from auto, fallback to default if unavailable or too old
         val savedPose = PosePersistence.loadPose(storageDir())
         val initialPose = savedPose ?: Pose2d(0.0, 0.0, PI / 2.0)
-        io.setPosition(initialPose)
+        //val initialPose = if(blue) Pose2d(-0.53,0.53,Math.toRadians(152.0)) else Pose2d(0.53,0.53,Math.toRadians(28.0))
+        //io.setPosition(initialPose)
 
         if (savedPose != null) {
             telemetry.addData("Initial Pose", "Loaded from auto")
@@ -137,6 +143,10 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
 
                 if(gm1.b) {
                     io.intake = 1.0
+                }
+
+                if(gm2.y) {
+                    io.setPosition(Pose2d(0.0,0.0, PI/2.0))
                 }
 
                 loopStartTime = System.nanoTime()

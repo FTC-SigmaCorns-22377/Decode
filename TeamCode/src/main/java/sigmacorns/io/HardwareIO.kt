@@ -144,10 +144,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     var posOffset = Pose2d()
 
     override fun setPosition(p: Pose2d) {
+        pinpoint?.resetPosAndIMU()
+        Thread.sleep(2500)
+        pinpoint?.update()
         val sensorPose = pinpoint?.position?.toPose2d()
         posOffset = when (sensorPose) {
             null -> p
-            else -> p
+            else -> p.compose(sensorPose.inverse())
         }
     }
 
