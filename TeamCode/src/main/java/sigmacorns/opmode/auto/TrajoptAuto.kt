@@ -38,30 +38,41 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-@Autonomous(name = "Trajopt Auto", group = "Auto")
-class TrajoptAuto : SigmaOpMode() {
+data class TrajoptAutoData(
+    val INTAKE_SEGMENTS: Map<String, List<Pair<Int, Int>>>,
+    val SHOT_POWER: Double ,
+    val PROJECT_FILE_NAME: String ,
+    val ROOT: String ,
+    val PRELOAD: Boolean
+)
 
-    companion object {
-        // Intake segments: trajectory name -> list of (startWaypointIndex, endWaypointIndex) pairs
-        val INTAKE_SEGMENTS: Map<String, List<Pair<Int, Int>>> = mapOf(
-            "intake_1" to listOf(1 to 2),
-            "intake_2" to listOf(1 to 2),
-            "intake_3" to listOf(1 to 2),
-        )
-        val SHOT_POWER = ShotPowers.longShotPower
-        val PROJECT_FILE_NAME = "base"
-        val ROOT = "intake_1"
-    }
+val base = TrajoptAutoData(
+    INTAKE_SEGMENTS= mapOf(
+        "intake_1" to listOf(1 to 2),
+        "intake_2" to listOf(1 to 2),
+        "intake_3" to listOf(1 to 2),
+    ),
+    SHOT_POWER = ShotPowers.longShotPower,
+    PROJECT_FILE_NAME = "base",
+    ROOT = "intake_1",
+    PRELOAD = true
+)
 
+@Autonomous(name = "Auto Red Far", group = "Auto")
+class AutoRedFar: TrajoptAuto(base)
+
+open class TrajoptAuto(
+    val data: TrajoptAutoData
+) : SigmaOpMode() {
     lateinit var aiming: AimingSystem
 
     override fun runOpMode() {
         val robotDir = TrajoptLoader.robotTrajoptDir()
         val projectFile = TrajoptLoader.findProjectFiles(robotDir).find {
-            it.nameWithoutExtension == PROJECT_FILE_NAME
+            it.nameWithoutExtension == data.PROJECT_FILE_NAME
         }!!
 
-        val trajectories = TrajoptLoader.loadAllTrajectoriesOrdered(projectFile, ROOT)
+        val trajectories = TrajoptLoader.loadAllTrajectoriesOrdered(projectFile, data.ROOT)
 
         // Initialize with Flywheel controller
         val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
@@ -111,7 +122,7 @@ class TrajoptAuto : SigmaOpMode() {
             waitForStart()
 
             val schedule = CoroutineScope(dispatcher).launch {
-                shootAllBalls(spindexerLogic)
+                if(data.PRELOAD) shootAllBalls(spindexerLogic)
                 println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {
                     println("TrajoptAuto: following traj ${traj.name}")
@@ -240,7 +251,7 @@ class TrajoptAuto : SigmaOpMode() {
         if (recommendedVelocity != null) {
             spindexerLogic.targetVelocityOverride = recommendedVelocity
         } else {
-            spindexerLogic.targetShotPower = SHOT_POWER
+            spindexerLogic.targetShotPower = data.SHOT_POWER
             spindexerLogic.targetVelocityOverride = null
         }
 
@@ -278,7 +289,7 @@ class TrajoptAuto : SigmaOpMode() {
     }
 
     private fun computeIntakeSampleRanges(traj: TrajoptTrajectory): List<IntRange> {
-        val segments = INTAKE_SEGMENTS[traj.name] ?: return emptyList()
+        val segments = data.INTAKE_SEGMENTS[traj.name] ?: return emptyList()
         return segments.mapNotNull { (startWp, endWp) ->
             val startIdx = waypointToSampleIndex(traj, startWp) ?: return@mapNotNull null
             val endIdx = waypointToSampleIndex(traj, endWp) ?: return@mapNotNull null
