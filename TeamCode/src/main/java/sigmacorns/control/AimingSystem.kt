@@ -10,6 +10,8 @@ import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.test.AutoAimGTSAMTest
 import sigmacorns.opmode.test.AutoAimGTSAMTest.Companion.applyRuntimeConfig
+import sigmacorns.tuning.AdaptiveTuner
+import sigmacorns.tuning.ShotDataStore
 import kotlin.math.hypot
 import kotlin.time.Duration
 
@@ -29,6 +31,8 @@ class AimingSystem(
     lateinit var visionTracker: VisionTracker
         private set
     lateinit var turret: Turret
+        private set
+    lateinit var adaptiveTuner: AdaptiveTuner
         private set
 
     val goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
@@ -55,6 +59,11 @@ class AimingSystem(
             limelight = limelight,
             allowedTagIds = FieldLandmarks.landmarkTagIds
         )
+
+        // Initialize adaptive tuner for flywheel velocity
+        val dataStore = ShotDataStore()
+        dataStore.load()
+        adaptiveTuner = AdaptiveTuner(dataStore)
 
         applyRuntimeConfig(autoAim)
         visionTracker.configure(pipeline = AutoAimGTSAMTest.AutoAimGTSAMTestConfig.pipeline)
@@ -98,6 +107,14 @@ class AimingSystem(
         turret.robotAngularVelocity = io.velocity().rot
         turret.targetDistance = targetDistance
         turret.update(dt)
+    }
+
+    /**
+     * Get recommended flywheel velocity in rad/s for current target distance.
+     * Returns null if adaptive tuner doesn't have enough calibration points.
+     */
+    fun getRecommendedFlywheelVelocity(): Double? {
+        return adaptiveTuner.getRecommendedSpeed(targetDistance)
     }
 
     /**

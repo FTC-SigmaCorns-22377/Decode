@@ -11,7 +11,7 @@ import kotlin.math.PI
 @Configurable
 object SpindexerPIDConfig {
     // Single PID coefficients
-    @JvmField var kP = 0.7
+    @JvmField var kP = 0.8
     @JvmField var kD = 0.0
     @JvmField var kI = 0.0
 

@@ -4,6 +4,7 @@ import sigmacorns.control.DriveController
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
@@ -11,6 +12,13 @@ import kotlin.concurrent.withLock
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+
+/**
+ * Commands that can be sent to the MPC thread for safe execution.
+ */
+private sealed class MPCCommand {
+    data class SetTarget(val traj: TrajoptTrajectory) : MPCCommand()
+}
 
 /**
  * Manages a background thread for MPC computation, providing thread-safe
@@ -43,6 +51,13 @@ class MPCRunner(
     private val mpcRunning = AtomicBoolean(false)
     private var mpcThread: Thread? = null
 
+    // Command queue for thread-safe MPC operations
+    private val commandQueue = ConcurrentLinkedQueue<MPCCommand>()
+
+    // Cached state values (updated by MPC thread, read by main thread with lock)
+    private var cachedLatestSampleI = 0
+    private var cachedIsTrajectoryComplete: TrajoptTrajectory? = null
+
     /**
      * Start the background MPC thread.
      * The thread continuously reads shared state, sends it to the solver,
@@ -57,11 +72,25 @@ class MPCRunner(
                     Triple(sharedMecanumState, sharedVoltage, sharedTime)
                 }
 
+                // Process all pending commands first
+                while (true) {
+                    val cmd = commandQueue.poll() ?: break
+                    when (cmd) {
+                        is MPCCommand.SetTarget -> mpc.setTarget(cmd.traj)
+                    }
+                }
+
                 if (mecanumState != null) {
                     val n = measureNanoTime {
                         val u = mpc.getU(time)
-                        mpcLock.withLock { latestU = u }
                         mpc.update(mecanumState, voltage, time)
+
+                        // Update cached state and control under lock
+                        mpcLock.withLock {
+                            latestU = u
+                            if(!mpc.isTrajectoryComplete()) cachedLatestSampleI = mpc.latestSampleI
+                            cachedIsTrajectoryComplete = mpc.trajSnapshot.trajectory.takeIf { mpc.isTrajectoryComplete() }
+                        }
                     }
                     println("MPC thread update took ${n.toDouble() / 1_000_000} ms")
                 }
@@ -114,6 +143,40 @@ class MPCRunner(
         val u = getControl(voltage)
         driveController.drive(Pose2d(u[0], u[1], u[2]), io)
     }
+
+    /**
+     * Set the target trajectory for the MPC to follow.
+     * Thread-safe: posts command to MPC thread for execution.
+     * Non-blocking: returns immediately.
+     */
+    fun setTarget(traj: TrajoptTrajectory) {
+        commandQueue.add(MPCCommand.SetTarget(traj))
+        mpcLock.withLock {
+            cachedLatestSampleI = 0
+        }
+    }
+
+    /**
+     * Check if the current trajectory is complete.
+     * Thread-safe: reads cached value updated by MPC thread.
+     *
+     * @return true if at the last sample of the trajectory or no trajectory set
+     */
+    fun isTrajectoryComplete(traj: TrajoptTrajectory): Boolean {
+        return mpcLock.withLock {
+            cachedIsTrajectoryComplete == traj
+        }
+    }
+
+    /**
+     * Get the current trajectory sample index.
+     * This tracks which sample point the MPC is closest to.
+     * Thread-safe: reads cached value updated by MPC thread.
+     */
+    val latestSampleI: Int
+        get() = mpcLock.withLock {
+            cachedLatestSampleI
+        }
 
     override fun close() {
         stop()

@@ -180,6 +180,10 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         io.shooter = 0.0
         io.transfer = TRANSFER_STOP_POWER
 
+        if(!offsetActive) {
+            pollColor()
+        }
+
         // Reset transfer on first idle if needed
         if (transferNeedsReset) {
             resetTransfer()
@@ -249,10 +253,10 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     }
 
     private suspend fun movingBehavior(): State {
-        // Stop intake while moving
-        io.intake = 0.0
+        // slow intake while moving
+        io.intake = if (fsm.curState == State.MOVING) -0.2 else 0.0
 
-        if(nudgeDirection==0.0) return State.IDLE
+        //if(nudgeDirection==0.0) return State.IDLE
 
         // Rotate spindexer to next position based on nudge direction
         val rotationAngle = nudgeDirection * ROTATE_ANGLE
@@ -264,7 +268,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
             spindexerState[2] = spindexerState[1]
             spindexerState[1] = spindexerState[0]
             spindexerState[0] = temp
-        } else {
+        } else if(nudgeDirection < 0) {
             val temp = spindexerState[0]
             spindexerState[0] = spindexerState[1]
             spindexerState[1] = spindexerState[2]
@@ -275,6 +279,11 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         val startTime = io.time()
         while (true) {
             val error = abs(spindexer.curRotation - spindexerRotation)
+
+            //when close enough start intaking
+            if (error < Math.toRadians(18.0) && fsm.curState == State.MOVING) {
+                io.intake = -1.0
+            }
 
             if (error < POSITION_ERROR_THRESHOLD) {
                 break

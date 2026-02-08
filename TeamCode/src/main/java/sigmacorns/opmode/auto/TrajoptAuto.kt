@@ -7,8 +7,13 @@ import kotlinx.coroutines.launch
 import org.joml.Vector2d
 import sigmacorns.State
 import sigmacorns.constants.Network
+import sigmacorns.constants.drivetrainCenter
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.constants.flywheelMotor
+import sigmacorns.constants.flywheelParameters
 import sigmacorns.constants.turretRange
+import sigmacorns.control.AimingSystem
+import sigmacorns.control.Flywheel
 import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
@@ -22,6 +27,7 @@ import sigmacorns.control.mpc.TrajoptEventMarker
 import sigmacorns.control.mpc.TrajoptLoader
 import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
+import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.opmode.test.AutoAimGTSAMTest
@@ -47,9 +53,7 @@ class TrajoptAuto : SigmaOpMode() {
         val ROOT = "intake_1"
     }
 
-    lateinit var autoAim: AutoAimGTSAM
-    lateinit var turret: Turret
-    lateinit var goalPosition: Vector2d
+    lateinit var aiming: AimingSystem
 
     override fun runOpMode() {
         val robotDir = TrajoptLoader.robotTrajoptDir()
@@ -59,24 +63,25 @@ class TrajoptAuto : SigmaOpMode() {
 
         val trajectories = TrajoptLoader.loadAllTrajectoriesOrdered(projectFile, ROOT)
 
-        val spindexerLogic = SpindexerLogic(io)
+        // Initialize with Flywheel controller
+        val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
+        val spindexerLogic = SpindexerLogic(io, flywheel)
         val dispatcher = PollableDispatcher(io)
-        turret = Turret(turretRange,io)
 
         // Set initial position from first trajectory
-        trajectories.firstOrNull()?.getInitialSample()?.let { io.setPosition(it.pos) }
+        trajectories.firstOrNull()?.getInitialSample()?.let {
+            io.setPosition(it.pos.let {
+                val v = Vector2d()
+                it.v.sub(drivetrainCenter.rotate(it.rot),v)
+                Pose2d(v,it.rot)
+            })
+        }
 
         val blue = false
-        goalPosition = Vector2d(if(blue)-1.480126 else 1.480126, 1.598982)
-        autoAim = AutoAimGTSAM(
-            landmarkPositions = mapOf(),
-            goalPosition,
-            initialPose = io.position(),
-            estimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig()
-        )
 
-        applyRuntimeConfig(autoAim)
-        autoAim.enabled = true
+        // Initialize AimingSystem
+        aiming = AimingSystem(io, blue)
+        aiming.init(io.position())
 
         // Configure Limelight
         (io as? HardwareIO)?.limelight?.pipelineSwitch(1)
@@ -101,14 +106,17 @@ class TrajoptAuto : SigmaOpMode() {
                 Balls.Purple
             )
 
-            waitForStart()
-
             runner.start()
+
+            waitForStart()
 
             val schedule = CoroutineScope(dispatcher).launch {
                 shootAllBalls(spindexerLogic)
+                println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {
-                    followTrajectory(traj, mpc, spindexerLogic)
+                    println("TrajoptAuto: following traj ${traj.name}")
+                    followTrajectory(traj, runner, spindexerLogic)
+                    println("TrajoptAuto: done traj ${traj.name}")
                 }
                 println("TrajoptAuto: All trajectories complete")
                 delay(3000)
@@ -128,20 +136,21 @@ class TrajoptAuto : SigmaOpMode() {
                 spindexerLogic.update( dt, 12.0 / io.voltage())
                 lastTime = t
 
-                autoAim.update(io.position(), turret.pos, null)
-                AutoAimTurretController.update(
-                    autoAim, turret, io,
-                    goalPosition.x, goalPosition.y, dt
-                )
+                // Update aiming system
+                aiming.update(dt)
 
-                val pose = autoAim.fusedPose
-                val goal = goalPosition
-                val targetDistance = hypot(goal.x - pose.v.x, goal.y - pose.v.y)
-
-                spindexerLogic.targetShotPower = when {
-                    targetDistance < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
-                    targetDistance < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
-                    else -> ShotPowers.longShotPower
+                // Use AdaptiveTuner for velocity, fallback to zones if not calibrated
+                val recommendedVelocity = aiming.getRecommendedFlywheelVelocity()
+                if (recommendedVelocity != null) {
+                    spindexerLogic.targetVelocityOverride = recommendedVelocity
+                } else {
+                    val targetDistance = aiming.targetDistance
+                    spindexerLogic.targetShotPower = when {
+                        targetDistance < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
+                        targetDistance < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
+                        else -> ShotPowers.longShotPower
+                    }
+                    spindexerLogic.targetVelocityOverride = null
                 }
 
                 io.update()
@@ -158,7 +167,7 @@ class TrajoptAuto : SigmaOpMode() {
      */
     private suspend fun followTrajectory(
         traj: TrajoptTrajectory,
-        mpc: MPCClient,
+        mpc: MPCRunner,
         spindexerLogic: SpindexerLogic,
     ) {
         println("TrajoptAuto: Starting trajectory '${traj.name}'")
@@ -176,7 +185,7 @@ class TrajoptAuto : SigmaOpMode() {
         var intaking = false
         var nextShootIdx = 0
 
-        while (!mpc.isTrajectoryComplete()) {
+        while (!mpc.isTrajectoryComplete(traj)) {
             val sampleI = mpc.latestSampleI
             println("TrajoptAuto: sampleI=$sampleI")
             // Toggle intake based on sample index
@@ -225,7 +234,15 @@ class TrajoptAuto : SigmaOpMode() {
      */
     private suspend fun shootAllBalls(spindexerLogic: SpindexerLogic) {
         println("TrajoptAuto: Shooting")
-        spindexerLogic.targetShotPower = SHOT_POWER
+
+        // Use AdaptiveTuner if available, otherwise fallback to SHOT_POWER
+        val recommendedVelocity = aiming.getRecommendedFlywheelVelocity()
+        if (recommendedVelocity != null) {
+            spindexerLogic.targetVelocityOverride = recommendedVelocity
+        } else {
+            spindexerLogic.targetShotPower = SHOT_POWER
+            spindexerLogic.targetVelocityOverride = null
+        }
 
         while (spindexerLogic.spindexerState.any { it != null }) {
             spindexerLogic.shootingRequested = true

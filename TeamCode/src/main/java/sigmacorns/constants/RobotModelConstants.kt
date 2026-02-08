@@ -58,7 +58,7 @@ val spinMotor = LinearDcMotor(bareMotorTopSpeed/spindexerGearRatio,bareMotorStal
  */
 val flywheelParameters = FlywheelParameters(
     flywheelMotor,
-    0.025,
+    0.2,
     0.0001,
 )
 

@@ -4,6 +4,10 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import sigmacorns.constants.flywheelMotor
+import sigmacorns.constants.flywheelParameters
+import sigmacorns.control.AimingSystem
+import sigmacorns.control.Flywheel
 import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.PollableDispatcher
@@ -23,6 +27,7 @@ class SimpleAuto : SigmaOpMode() {
     private lateinit var spindexerLogic: SpindexerLogic
     private lateinit var dispatcher: PollableDispatcher
     private lateinit var autoAim: AutoAim
+    private lateinit var aiming: AimingSystem
     private lateinit var turret: Turret
 
     private val ticksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2 * PI) * 76 / 19
@@ -33,7 +38,9 @@ class SimpleAuto : SigmaOpMode() {
     )
 
     override fun runOpMode() {
-        spindexerLogic = SpindexerLogic(io)
+        // Initialize with Flywheel controller
+        val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
+        spindexerLogic = SpindexerLogic(io, flywheel)
         dispatcher = PollableDispatcher(io)
         turret = Turret(turretRange, io)
 
@@ -42,6 +49,10 @@ class SimpleAuto : SigmaOpMode() {
         autoAim = AutoAim(hardwareIO?.limelight, targetAprilTagIds = setOf(20))
         autoAim.configure()
         autoAim.enabled = true
+
+        // Initialize AimingSystem for adaptive tuner (use blue=false as default)
+        aiming = AimingSystem(io, blue = false)
+        aiming.init(io.position())
 
         // Preload spindexer state with balls
         spindexerLogic.spindexerState[0] = Balls.Green
@@ -123,14 +134,26 @@ class SimpleAuto : SigmaOpMode() {
             // Update turret PID
             turret.update(dt)
 
-            // Calculate shot power based on distance (same logic as TeleopBase)
-            val dist = if (autoAim.hasTarget) autoAim.targetDistance else 3.0
-            val shotPower = when {
-                dist < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
-                dist < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
-                else -> ShotPowers.longShotPower
+            // Use AdaptiveTuner for velocity, fallback to zones if not calibrated
+            val recommendedVelocity = aiming.getRecommendedFlywheelVelocity()
+            val usingAdaptiveTuner: Boolean
+            val shotPower: Double
+            if (recommendedVelocity != null) {
+                spindexerLogic.targetVelocityOverride = recommendedVelocity
+                usingAdaptiveTuner = true
+                shotPower = 0.0 // Not used when adaptive tuner is active
+            } else {
+                // Calculate shot power based on distance (same logic as TeleopBase)
+                val dist = if (autoAim.hasTarget) autoAim.targetDistance else 3.0
+                shotPower = when {
+                    dist < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
+                    dist < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
+                    else -> ShotPowers.longShotPower
+                }
+                spindexerLogic.targetShotPower = shotPower
+                spindexerLogic.targetVelocityOverride = null
+                usingAdaptiveTuner = false
             }
-            spindexerLogic.targetShotPower = shotPower
 
             // Update spindexer logic
             spindexerLogic.update(dt, dVoltage)
@@ -140,14 +163,20 @@ class SimpleAuto : SigmaOpMode() {
             telemetry.addData("AutoAim", if (autoAim.hasTarget) "LOCKED" else "SEARCHING")
             telemetry.addData("Target Dist", "%.2f m", autoAim.targetDistance)
             telemetry.addData("Turret Angle", "%.1f deg", Math.toDegrees(turret.pos))
-            val zone = when (shotPower) {
-                ShotPowers.shortShotPower -> "SHORT"
-                ShotPowers.midShotPower -> "MID"
-                ShotPowers.longShotPower -> "LONG"
-                else -> "CUSTOM"
+            if (usingAdaptiveTuner) {
+                telemetry.addData("Mode", "ADAPTIVE")
+                telemetry.addData("Target Vel", "%.0f rad/s", recommendedVelocity ?: 0.0)
+            } else {
+                val zone = when (shotPower) {
+                    ShotPowers.shortShotPower -> "SHORT"
+                    ShotPowers.midShotPower -> "MID"
+                    ShotPowers.longShotPower -> "LONG"
+                    else -> "CUSTOM"
+                }
+                telemetry.addData("Mode", "ZONES")
+                telemetry.addData("Shot Zone", zone)
+                telemetry.addData("Shot Power", "%.0f%%", shotPower * 100)
             }
-            telemetry.addData("Shot Zone", zone)
-            telemetry.addData("Shot Power", "%.0f%%", shotPower * 100)
             telemetry.addData("Flywheel", "%.0f%%", io.shooter * 100)
             telemetry.update()
 

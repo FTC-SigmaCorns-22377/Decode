@@ -31,7 +31,7 @@ import kotlin.time.times
 /**
  * Immutable snapshot of trajectory state for thread-safe access.
  */
-private data class TrajectorySnapshot(
+data class TrajectorySnapshot(
     val trajectory: TrajoptTrajectory?,
     val path: List<LinearContour>,
     val referencePositions: List<Vector2d>,
@@ -146,7 +146,7 @@ class MPCClient(
 
     /** Thread-safe trajectory state - swap atomically via volatile reference */
     @Volatile
-    private var trajSnapshot: TrajectorySnapshot = TrajectorySnapshot.EMPTY
+    var trajSnapshot: TrajectorySnapshot = TrajectorySnapshot.EMPTY
 
     @Volatile
     private var trajectoryStartTime: Duration? = null
@@ -555,7 +555,7 @@ class MPCClient(
 
     fun isTrajectoryComplete(): Boolean {
         val snapshot = trajSnapshot
-        if (snapshot.trajectory == null) return true
+        if (snapshot.trajectory == null) return false
         if (trajectoryStartTime == null) return false
 
         // Check if we're at the last sample

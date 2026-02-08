@@ -2,13 +2,18 @@ package sigmacorns.opmode.teleop
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
+import sigmacorns.constants.flywheelMotor
+import sigmacorns.constants.flywheelParameters
 import sigmacorns.control.AimingSystem
 import sigmacorns.control.DriveController
+import sigmacorns.control.Flywheel
 import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
 import sigmacorns.globalFieldState
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
+import sigmacorns.opmode.tune.FlywheelDeadbeatConfig
+import sigmacorns.opmode.tune.FlywheelDeadbeatTuner
 import kotlin.math.PI
 import kotlin.math.absoluteValue
 import kotlin.time.Duration
@@ -56,8 +61,13 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         gm1 = gamepad1
         gm2 = gamepad2
 
-        // Initialize subsystems
-        spindexerLogic = SpindexerLogic(io)
+        // Initialize subsystems with Flywheel controller
+        val flywheel = Flywheel(flywheelMotor,
+            FlywheelDeadbeatConfig.inertia,
+            io,
+            lag = FlywheelDeadbeatConfig.lagMs.milliseconds
+        )
+        spindexerLogic = SpindexerLogic(io, flywheel)
 
         io.configurePinpoint()
         io.setPosition(Pose2d(0.0, 0.0, PI / 2.0))
@@ -184,24 +194,34 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
     }
 
     private fun processIntakeAndShooting(dt: Duration) {
-        val targetDistance = aiming.targetDistance
+        // Use AdaptiveTuner for flywheel velocity, fallback to old zones if not calibrated
+        val recommendedVelocity = aiming.getRecommendedFlywheelVelocity()!!
 
-        // Zone Selection (Operator D-pad)
-        if (gm2.dpad_down) manualOverridePower = ShotPowers.shortShotPower
-        if (gm2.dpad_left || gm2.dpad_right) manualOverridePower = ShotPowers.midShotPower
-        if (gm2.dpad_up) manualOverridePower = ShotPowers.longShotPower
+        if (recommendedVelocity != null) {
+            // Use adaptive tuner velocity
+            spindexerLogic.targetVelocityOverride = recommendedVelocity
+        } else {
+            // Fallback to old shot power zones if adaptive tuner not calibrated
+            val targetDistance = aiming.targetDistance
 
-        if(gm2.aWasPressed()) spindexerLogic.autoSort = !spindexerLogic.autoSort
+            // Zone Selection (Operator D-pad)
+            if (gm2.dpad_down) manualOverridePower = ShotPowers.shortShotPower
+            if (gm2.dpad_left || gm2.dpad_right) manualOverridePower = ShotPowers.midShotPower
+            if (gm2.dpad_up) manualOverridePower = ShotPowers.longShotPower
 
-        // Auto Power Calculation
-        val autoPower = when {
-            targetDistance < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
-            targetDistance < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
-            else -> ShotPowers.longShotPower
+            // Auto Power Calculation
+            val autoPower = when {
+                targetDistance < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
+                targetDistance < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
+                else -> ShotPowers.longShotPower
+            }
+
+            val activePower = manualOverridePower ?: autoPower
+            spindexerLogic.targetShotPower = activePower
+            spindexerLogic.targetVelocityOverride = null
         }
 
-        val activePower = manualOverridePower ?: autoPower
-        spindexerLogic.targetShotPower = activePower
+        if(gm2.aWasPressed()) spindexerLogic.autoSort = !spindexerLogic.autoSort
 
         // Intake control (driver left trigger)
         val intaking = gm1.left_trigger > 0.1
@@ -276,18 +296,26 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         telemetry.addData("Turret Pitch", "%.2f", turret.targetPitch)
         telemetry.addData("Distance", "%.1f m", targetDistance)
 
-        val zone = when (spindexerLogic.targetShotPower) {
-            ShotPowers.shortShotPower -> "SHORT"
-            ShotPowers.midShotPower -> "MID"
-            ShotPowers.longShotPower -> "LONG"
-            else -> "CUSTOM"
+        val usingAdaptiveTuner = spindexerLogic.targetVelocityOverride != null && aiming.adaptiveTuner.canInterpolate()
+        if (usingAdaptiveTuner) {
+            telemetry.addData("Mode", "ADAPTIVE")
+            telemetry.addData("Target Vel", "%.0f rad/s", spindexerLogic.targetVelocityOverride ?: 0.0)
+        } else {
+            val zone = when (spindexerLogic.targetShotPower) {
+                ShotPowers.shortShotPower -> "SHORT"
+                ShotPowers.midShotPower -> "MID"
+                ShotPowers.longShotPower -> "LONG"
+                else -> "CUSTOM"
+            }
+            telemetry.addData("Mode", "ZONES")
+            telemetry.addData("Shot Zone", zone)
+            telemetry.addData("Shot Power", "%.0f%%", spindexerLogic.targetShotPower * 100)
         }
-        telemetry.addData("Shot Zone", zone)
-        telemetry.addData("Shot Power", "%.0f%%", spindexerLogic.targetShotPower * 100)
         telemetry.addData("Power Locked", if (lockedShotPower != null) "YES" else "NO")
         telemetry.addData("Manual Override", if (manualOverridePower != null) "YES" else "NO")
 
         telemetry.addData("Flywheel", "%.0f%%", io.shooter * 100)
+        telemetry.addData("Tuner Points", aiming.adaptiveTuner.pointCount())
 
         telemetry.addLine("")
 
