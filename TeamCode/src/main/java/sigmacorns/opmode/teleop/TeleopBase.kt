@@ -10,6 +10,7 @@ import sigmacorns.control.Flywheel
 import sigmacorns.control.ShotPowers
 import sigmacorns.control.SpindexerLogic
 import sigmacorns.globalFieldState
+import sigmacorns.io.PosePersistence
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.opmode.tune.FlywheelDeadbeatConfig
@@ -70,7 +71,19 @@ open class TeleopBase(val blue: Boolean) : SigmaOpMode() {
         spindexerLogic = SpindexerLogic(io, flywheel)
 
         io.configurePinpoint()
-        io.setPosition(Pose2d(0.0, 0.0, PI / 2.0))
+
+        // Try to load pose from auto, fallback to default if unavailable or too old
+        val savedPose = PosePersistence.loadPose(storageDir())
+        val initialPose = savedPose ?: Pose2d(0.0, 0.0, PI / 2.0)
+        io.setPosition(initialPose)
+
+        if (savedPose != null) {
+            telemetry.addData("Initial Pose", "Loaded from auto")
+            telemetry.addData("Position", "(%.2f, %.2f, %.2f rad)", savedPose.v.x, savedPose.v.y, savedPose.rot)
+        } else {
+            telemetry.addData("Initial Pose", "Using default")
+        }
+        telemetry.update()
 
         // Initialize shared aiming system
         aiming = AimingSystem(io, blue)

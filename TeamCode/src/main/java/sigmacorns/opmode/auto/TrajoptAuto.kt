@@ -27,6 +27,7 @@ import sigmacorns.control.mpc.TrajoptEventMarker
 import sigmacorns.control.mpc.TrajoptLoader
 import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
+import sigmacorns.io.PosePersistence
 import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
@@ -197,6 +198,9 @@ open class TrajoptAuto(
 
                 io.update()
             }
+
+            // Save final pose for teleop to resume from
+            PosePersistence.savePose(io.position(), storageDir())
 
             runner.stop()
         }
