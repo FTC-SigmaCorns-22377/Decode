@@ -69,11 +69,28 @@ val base = TrajoptAutoData(
     PRELOAD = true
 )
 
+val baseFar = TrajoptAutoData(
+    INTAKE_SEGMENTS= mapOf(
+        "intake_1" to listOf(1 to 2),
+        "intake_2" to listOf(1 to 2),
+    ),
+    SHOT_POWER = ShotPowers.longShotPower,
+    PROJECT_FILE_NAME = { if(it) "basefar" else "basefarred" },
+    ROOT = "intake_1",
+    PRELOAD = true
+)
+
 @Autonomous(name = "Auto Red Far", group = "Auto", preselectTeleOp = "TeleopRed")
 class AutoRedFar: TrajoptAuto(base,false)
 
 @Autonomous(name = "Auto Blue Far", group = "Auto", preselectTeleOp = "TeleopBlue")
 class AutoBlueFar: TrajoptAuto(base, true)
+
+@Autonomous(name = "Auto Red Far Full", group = "Auto", preselectTeleOp = "TeleopRed")
+class AutoRedFarFull: TrajoptAuto(baseFar,false)
+
+@Autonomous(name = "Auto Blue Far Full", group = "Auto", preselectTeleOp = "TeleopBlue")
+class AutoBlueFarFull: TrajoptAuto(baseFar, true)
 
 @Autonomous(name = "RedWallAuto", group = "Auto", preselectTeleOp = "TeleopRed")
 class RedWallAuto: TrajoptAuto(RedWallPreload, false)
@@ -297,9 +314,9 @@ open class TrajoptAuto(
         spindexerLogic.shootingRequested = false
         println("TrajoptAuto: Finished shooting, waiting for IDLE")
 
-        while (spindexerLogic.currentState != SpindexerLogic.State.IDLE) {
-            delay(10)
-        }
+//        while (spindexerLogic.currentState != SpindexerLogic.State.IDLE) {
+//            delay(10)
+//        }
 
         println("TrajoptAuto: FSM idle, continuing")
     }

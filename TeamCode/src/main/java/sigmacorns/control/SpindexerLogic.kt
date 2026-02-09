@@ -366,6 +366,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     }
 
     private suspend fun movingShootBehavior(): State {
+        if (shootingRequested) io.shooter
         resetTransfer()
         if (!offsetActive) {
             spindexerRotation += MODE_CHANGE_ANGLE
