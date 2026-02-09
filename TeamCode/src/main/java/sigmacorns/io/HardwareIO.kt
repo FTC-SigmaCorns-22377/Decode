@@ -114,7 +114,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override fun velocity(): Pose2d {
         if (pinpoint == null ) return Pose2d()
 
-
         val vx = pinpoint!!.getVelX(DistanceUnit.METER)
         val vy = pinpoint!!.getVelY(DistanceUnit.METER)
         return Pose2d(
@@ -144,9 +143,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     var posOffset = Pose2d()
 
     override fun setPosition(p: Pose2d) {
-        pinpoint?.resetPosAndIMU()
-        Thread.sleep(2500)
-        pinpoint?.update()
         val sensorPose = pinpoint?.position?.toPose2d()
         posOffset = when (sensorPose) {
             null -> p
@@ -231,6 +227,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         //resetting the positions for the IMU
         pinpoint?.resetPosAndIMU()
+        Thread.sleep(300)
+        pinpoint?.update()
     }
 
     override fun voltage(): Double = savedVoltage
