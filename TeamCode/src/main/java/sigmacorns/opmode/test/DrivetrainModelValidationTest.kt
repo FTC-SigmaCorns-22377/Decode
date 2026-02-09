@@ -1,23 +1,18 @@
 package sigmacorns.opmode.test
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import org.firstinspires.ftc.robotcore.external.Telemetry
-import org.firstinspires.ftc.robotcore.internal.opmode.TelemetryImpl
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.io.RerunLogging
-import sigmacorns.control.DriveController
+import sigmacorns.control.subsystem.DriveController
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MECANUM_DT
 import sigmacorns.sim.MecanumDynamics
 import sigmacorns.sim.MecanumState
-import sigmacorns.State
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.sin
-import java.util.Locale
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
 

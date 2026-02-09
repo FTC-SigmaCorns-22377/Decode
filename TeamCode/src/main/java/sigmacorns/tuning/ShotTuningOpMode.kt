@@ -2,9 +2,9 @@ package sigmacorns.tuning
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.constants.flywheelMotor
-import sigmacorns.control.AimingSystem
-import sigmacorns.control.Flywheel
-import sigmacorns.control.SpindexerLogic
+import sigmacorns.control.subsystem.AimingSystem
+import sigmacorns.control.subsystem.Flywheel
+import sigmacorns.control.subsystem.SpindexerLogic
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.opmode.tune.FlywheelDeadbeatConfig

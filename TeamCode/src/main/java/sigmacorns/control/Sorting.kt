@@ -1,6 +1,7 @@
 package sigmacorns.control
 
 import kotlinx.coroutines.delay
+import sigmacorns.control.subsystem.SpindexerLogic
 import sigmacorns.sim.Balls
 import sigmacorns.opmode.tune.ShooterFlywheelPIDConfig
 

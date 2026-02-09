@@ -7,7 +7,7 @@ import kotlin.math.hypot
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.control.DriveController
+import sigmacorns.control.subsystem.DriveController
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.math.Pose2d
 import sigmacorns.io.HardwareIO
@@ -15,7 +15,6 @@ import sigmacorns.control.mpc.MPCClient
 import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.control.mpc.TrajoptLoader
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.sim.MecanumState
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds

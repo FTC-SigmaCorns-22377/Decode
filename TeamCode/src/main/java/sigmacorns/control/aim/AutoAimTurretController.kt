@@ -1,6 +1,6 @@
 package sigmacorns.control.aim
 
-import sigmacorns.control.Turret
+import sigmacorns.control.subsystem.Turret
 import sigmacorns.io.SigmaIO
 import kotlin.math.hypot
 import kotlin.time.Duration

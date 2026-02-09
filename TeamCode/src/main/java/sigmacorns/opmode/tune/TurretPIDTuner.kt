@@ -5,7 +5,7 @@ import com.bylazar.telemetry.PanelsTelemetry
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.constants.bareMotorTopSpeed
 import sigmacorns.control.MotorRangeMapper
-import sigmacorns.control.Turret
+import sigmacorns.control.subsystem.Turret
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.math.PI
 

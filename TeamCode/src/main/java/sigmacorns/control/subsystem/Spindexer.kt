@@ -1,7 +1,12 @@
-package sigmacorns.control
+package sigmacorns.control.subsystem
 
+import sigmacorns.control.MotorRangeMapper
+import sigmacorns.control.PIDController
+import sigmacorns.control.TrapezoidalProfile
 import sigmacorns.io.SigmaIO
 import sigmacorns.opmode.tune.SpindexerPIDConfig
+import kotlin.math.abs
+import kotlin.math.sign
 import kotlin.ranges.coerceIn
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
@@ -51,12 +56,12 @@ class Spindexer(
 
         // Check if we are falling behind the profile
         // If profile velocity is non-zero and error is in the direction of motion and exceeds threshold
-        if (profilingEnabled && kotlin.math.abs(profile.currentVelocity) > 1e-6) {
+        if (profilingEnabled && abs(profile.currentVelocity) > 1e-6) {
             val error = profile.currentPosition - curRotation
             // If moving positive, error > threshold means we are lagging below profile
             // If moving negative, error < -threshold means we are lagging above profile
             // Combined: error * sign(velocity) > threshold
-            if (error * kotlin.math.sign(profile.currentVelocity) > lagThreshold) {
+            if (error * sign(profile.currentVelocity) > lagThreshold) {
                  profile.reset(curRotation, actualVelocity)
             }
         }

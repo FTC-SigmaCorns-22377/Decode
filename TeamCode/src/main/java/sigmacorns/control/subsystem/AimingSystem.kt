@@ -1,4 +1,4 @@
-package sigmacorns.control
+package sigmacorns.control.subsystem
 
 import org.joml.Vector2d
 import sigmacorns.constants.FieldLandmarks

@@ -1,4 +1,4 @@
-package sigmacorns.control
+package sigmacorns.control.subsystem
 
 import com.qualcomm.robotcore.hardware.Gamepad
 import org.joml.Vector4d

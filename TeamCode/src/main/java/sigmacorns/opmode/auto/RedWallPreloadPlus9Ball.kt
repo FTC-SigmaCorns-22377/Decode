@@ -10,9 +10,9 @@ import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.turretRange
 import sigmacorns.control.PollableDispatcher
-import sigmacorns.control.ShotPowers
-import sigmacorns.control.SpindexerLogic
-import sigmacorns.control.Turret
+import sigmacorns.control.subsystem.ShotPowers
+import sigmacorns.control.subsystem.SpindexerLogic
+import sigmacorns.control.subsystem.Turret
 import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.aim.AutoAimTurretController
 import sigmacorns.control.mpc.ContourSelectionMode
@@ -28,7 +28,6 @@ import sigmacorns.opmode.test.AutoAimGTSAMTest
 import sigmacorns.opmode.test.AutoAimGTSAMTest.Companion.applyRuntimeConfig
 import sigmacorns.sim.Balls
 import kotlin.math.hypot
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 

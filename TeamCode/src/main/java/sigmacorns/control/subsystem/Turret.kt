@@ -1,23 +1,29 @@
-package sigmacorns.control
+package sigmacorns.control.subsystem
 
+import sigmacorns.control.MotorRangeMapper
+import sigmacorns.control.PIDController
+import sigmacorns.control.SlewRateLimiter
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.normalizeAngle
 import sigmacorns.opmode.tune.TurretPIDConfig
+import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.absoluteValue
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sign
 import kotlin.time.Duration
-import kotlin.time.DurationUnit
 
 class Turret(
     val range: MotorRangeMapper,
     val io: SigmaIO
 ) {
     val angleController: PIDController = PIDController(
-        TurretPIDConfig.kP, TurretPIDConfig.kD, TurretPIDConfig.kI, 0.0)
+        TurretPIDConfig.kP, TurretPIDConfig.kD, TurretPIDConfig.kI, 0.0
+    )
     val slewRateLimiter: SlewRateLimiter = SlewRateLimiter(maxRate = TurretPIDConfig.slewRate)
-    val outputSlewRateLimiter: SlewRateLimiter = SlewRateLimiter(maxRate = TurretPIDConfig.outputSlewRate)
+    val outputSlewRateLimiter: SlewRateLimiter =
+        SlewRateLimiter(maxRate = TurretPIDConfig.outputSlewRate)
 
     // distance(m) from target
     var targetDistance: Double = 0.0
@@ -73,11 +79,11 @@ class Turret(
         goalTargetAngle = rawTarget
 
         // Check aliases
-        val candidates = listOf(rawTarget, rawTarget - 2 * kotlin.math.PI, rawTarget + 2 * kotlin.math.PI)
+        val candidates = listOf(rawTarget, rawTarget - 2 * PI, rawTarget + 2 * PI)
         val validCandidates = candidates.filter { it in range.limits }
 
         val targetToUse = if (validCandidates.isNotEmpty()) {
-            validCandidates.minByOrNull { kotlin.math.abs(it - currentAngle) }!!
+            validCandidates.minByOrNull { abs(it - currentAngle) }!!
         } else {
             // Saturated - use hysteresis to prevent rapid switching
             val start = range.limits.start

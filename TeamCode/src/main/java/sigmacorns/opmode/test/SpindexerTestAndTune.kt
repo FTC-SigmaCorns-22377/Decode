@@ -2,7 +2,7 @@ package sigmacorns.opmode.test
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.control.SpindexerLogic
+import sigmacorns.control.subsystem.SpindexerLogic
 import kotlin.time.Duration.Companion.seconds
 
 @TeleOp

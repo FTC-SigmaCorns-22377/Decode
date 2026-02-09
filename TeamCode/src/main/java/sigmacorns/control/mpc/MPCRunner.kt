@@ -1,6 +1,6 @@
 package sigmacorns.control.mpc
 
-import sigmacorns.control.DriveController
+import sigmacorns.control.subsystem.DriveController
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState

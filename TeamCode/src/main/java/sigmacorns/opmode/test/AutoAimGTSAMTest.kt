@@ -6,12 +6,11 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.joml.Quaterniond
 import org.joml.Vector2d
 import org.joml.Vector3d
-import sigmacorns.constants.FieldZones
-import sigmacorns.control.DriveController
+import sigmacorns.control.subsystem.DriveController
 import sigmacorns.control.aim.AimConfig
 import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.MotorRangeMapper
-import sigmacorns.control.Turret
+import sigmacorns.control.subsystem.Turret
 import sigmacorns.control.aim.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d

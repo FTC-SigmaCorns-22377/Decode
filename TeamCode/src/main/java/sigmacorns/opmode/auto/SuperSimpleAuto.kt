@@ -2,7 +2,7 @@ package sigmacorns.opmode.auto
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import sigmacorns.State
-import sigmacorns.control.DriveController
+import sigmacorns.control.subsystem.DriveController
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.time.Duration

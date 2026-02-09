@@ -4,7 +4,7 @@ import com.bylazar.configurables.annotations.Configurable
 import com.bylazar.telemetry.PanelsTelemetry
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.constants.flywheelMotor
-import sigmacorns.control.Flywheel
+import sigmacorns.control.subsystem.Flywheel
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.time.Duration.Companion.milliseconds
 

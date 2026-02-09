@@ -1,16 +1,14 @@
-package sigmacorns.control
+package sigmacorns.control.subsystem
 
 import com.bylazar.configurables.annotations.Configurable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.yield
+import sigmacorns.control.FSM
+import sigmacorns.control.MotorRangeMapper
+import sigmacorns.control.PIDController
 import sigmacorns.sim.Balls
 import sigmacorns.io.SigmaIO
 import sigmacorns.opmode.tune.ShooterFlywheelPIDConfig
 import kotlin.math.abs
-import kotlin.math.sign
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -43,11 +41,12 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         0.0
     )
 
-    val spindexer = Spindexer(MotorRangeMapper(
-        0.0..2.0*PI,
-        0.0..(((1.0+(46.0/17.0))) * (1.0+(46.0/11.0))) * 28.0,
-        Double.POSITIVE_INFINITY
-    ),io)
+    val spindexer = Spindexer(
+        MotorRangeMapper(
+            0.0..2.0 * PI,
+            0.0..(((1.0 + (46.0 / 17.0))) * (1.0 + (46.0 / 11.0))) * 28.0,
+            Double.POSITIVE_INFINITY
+        ),io)
 
     // Error thresholds
     internal val POSITION_ERROR_THRESHOLD = 0.15  // radians - position threshold for spindexer

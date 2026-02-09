@@ -1,6 +1,5 @@
 package sigmacorns.opmode.auto
 
-import android.app.ActivityManager
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -12,15 +11,11 @@ import sigmacorns.constants.drivetrainCenter
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.flywheelParameters
-import sigmacorns.constants.turretRange
-import sigmacorns.control.AimingSystem
-import sigmacorns.control.Flywheel
+import sigmacorns.control.subsystem.AimingSystem
+import sigmacorns.control.subsystem.Flywheel
 import sigmacorns.control.PollableDispatcher
-import sigmacorns.control.ShotPowers
-import sigmacorns.control.SpindexerLogic
-import sigmacorns.control.Turret
-import sigmacorns.control.aim.AutoAimGTSAM
-import sigmacorns.control.aim.AutoAimTurretController
+import sigmacorns.control.subsystem.ShotPowers
+import sigmacorns.control.subsystem.SpindexerLogic
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.control.mpc.MPCClient
 import sigmacorns.control.mpc.MPCRunner
@@ -32,11 +27,7 @@ import sigmacorns.io.PosePersistence
 import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.opmode.test.AutoAimGTSAMTest
-import sigmacorns.opmode.test.AutoAimGTSAMTest.Companion.applyRuntimeConfig
 import sigmacorns.sim.Balls
-import kotlin.math.hypot
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 

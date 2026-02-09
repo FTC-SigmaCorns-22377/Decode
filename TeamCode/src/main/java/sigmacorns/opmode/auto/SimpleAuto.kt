@@ -6,20 +6,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.flywheelParameters
-import sigmacorns.control.AimingSystem
-import sigmacorns.control.Flywheel
+import sigmacorns.control.subsystem.AimingSystem
+import sigmacorns.control.subsystem.Flywheel
 import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.PollableDispatcher
-import sigmacorns.control.ShotPowers
-import sigmacorns.control.SpindexerLogic
-import sigmacorns.control.Turret
+import sigmacorns.control.subsystem.ShotPowers
+import sigmacorns.control.subsystem.SpindexerLogic
+import sigmacorns.control.subsystem.Turret
 import sigmacorns.io.HardwareIO
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.Balls
 import kotlin.math.PI
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 @Autonomous(name = "Simple Auto", group = "Auto")
 class SimpleAuto : SigmaOpMode() {
