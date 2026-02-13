@@ -73,7 +73,7 @@ suspend fun SpindexerLogic.sortedShoot(motif: List<Balls?> = listOf(Balls.Green,
         val startTime = io.time()
         while (true) {
             val currentVelocity = io.flywheelVelocity()
-            val targetVelocity = targetShotPower * ShooterFlywheelPIDConfig.maxVelocity
+            val targetVelocity = shotPower * ShooterFlywheelPIDConfig.maxVelocity
             val error = kotlin.math.abs(currentVelocity - targetVelocity)
 
             if (error < VELOCITY_ERROR_THRESHOLD) {

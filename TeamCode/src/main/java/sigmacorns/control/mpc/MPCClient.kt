@@ -63,6 +63,8 @@ class MPCClient(
     companion object {
         const val N: Int = 18
         const val K: Int = N + 1  // Number of knot points
+        /** Squared distance threshold (meters) for trajectory completion check. */
+        const val COMPLETION_DISTANCE_SQ = 0.2 * 0.2
         const val NX: Int = 6
         const val NU: Int = 3  // drive, strafe, turn
         const val NP: Int = 9
@@ -151,6 +153,10 @@ class MPCClient(
     @Volatile
     private var trajectoryStartTime: Duration? = null
 
+    /** True until the MPC solver responds for the current trajectory. */
+    @Volatile
+    private var awaitingFirstResponse = true
+
     // Convenience accessors for the snapshot
     private val trajectory: TrajoptTrajectory? get() = trajSnapshot.trajectory
     val path: List<LinearContour> get() = trajSnapshot.path
@@ -205,12 +211,17 @@ class MPCClient(
             return null
         }
 
-
-        if (trajectoryStartTime == null) {
-            trajectoryStartTime = time
+        // Fix C: Don't start trajectory timer until solver has responded.
+        // This prevents elapsed time from growing while the robot is stationary
+        // waiting for the first MPC solution.
+        val elapsed = if (trajectoryStartTime == null) {
+            if (!awaitingFirstResponse) {
+                trajectoryStartTime = time
+            }
+            0.0
+        } else {
+            (time - trajectoryStartTime!!).toDouble(DurationUnit.SECONDS)
         }
-
-        val elapsed = (time - trajectoryStartTime!!).toDouble(DurationUnit.SECONDS)
 
         val closestIndex = when {
             contourSelectionMode == ContourSelectionMode.TIME && timestamps.isNotEmpty() -> {
@@ -404,6 +415,7 @@ class MPCClient(
                         if (t0 >= latestUTime) {
                             println("UPDATED LATEST U")
                             latestUTime = t0
+                            awaitingFirstResponse = false
                             getArray(buf, latestU)
                             println("MPC: UPDATED U = ${latestU.toList().chunked(3).map { "(${it[0]},${it[1]},${it[2]}), " }.reduce(String::plus)}")
                             val matched = sentTargetContours.find { it.first == t0 }
@@ -441,6 +453,7 @@ class MPCClient(
         )
         // Reset other state
         trajectoryStartTime = null
+        awaitingFirstResponse = true
         latestSampleI = 0
         lastTargetContour = null
         lastSentContours = emptyList()
@@ -459,6 +472,7 @@ class MPCClient(
             timestamps = timestamps
         )
         trajectoryStartTime = null
+        awaitingFirstResponse = true
         latestSampleI = 0
         lastTargetContour = null
         lastSentContours = emptyList()
@@ -560,7 +574,13 @@ class MPCClient(
 
         // Check if we're at the last sample
         val pathSize = snapshot.path.size
-        return pathSize > 0 && latestSampleI >= pathSize - 1
+        if (pathSize <= 0 || latestSampleI < pathSize - 1) return false
+
+        val state = x0 ?: return false
+        val lastPos = snapshot.path.last().lineP
+        val dx = state.pos.v.x() - lastPos.x()
+        val dy = state.pos.v.y() - lastPos.y()
+        return dx * dx + dy * dy < COMPLETION_DISTANCE_SQ
     }
 
     /**

@@ -2,6 +2,7 @@ package sigmacorns.control.subsystem
 
 import org.joml.Vector2d
 import sigmacorns.constants.FieldLandmarks
+import sigmacorns.constants.Limelight
 import sigmacorns.constants.turretRange
 import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.aim.VisionTracker
@@ -28,7 +29,7 @@ class AimingSystem(
 ) {
     lateinit var autoAim: AutoAimGTSAM
         private set
-    lateinit var visionTracker: VisionTracker
+    var visionTracker: VisionTracker? = null
         private set
     lateinit var turret: Turret
         private set
@@ -37,6 +38,8 @@ class AimingSystem(
 
     val goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
 
+    var positionOverride: Double? = null
+
     /** Distance from fused pose to goal, updated each [updateVision] call. */
     var targetDistance: Double = 3.0
         private set
@@ -44,7 +47,7 @@ class AimingSystem(
     /**
      * Initialize all subsystems. Call once before the main loop.
      */
-    fun init(initialPose: Pose2d) {
+    fun init(initialPose: Pose2d, apriltagTracking: Boolean) {
         turret = Turret(turretRange, io)
 
         autoAim = AutoAimGTSAM(
@@ -66,7 +69,7 @@ class AimingSystem(
         adaptiveTuner = AdaptiveTuner(dataStore)
 
         applyRuntimeConfig(autoAim)
-        visionTracker.configure(pipeline = AutoAimGTSAMTest.AutoAimGTSAMTestConfig.pipeline)
+        if(apriltagTracking) visionTracker?.configure(pipeline = Limelight.APRILTAG_PIPELINE)
         autoAim.enabled = true
     }
 
@@ -76,7 +79,7 @@ class AimingSystem(
      */
     fun updateVision() {
         applyRuntimeConfig(autoAim)
-        val visionResult = visionTracker.read()
+        val visionResult = visionTracker?.read()
         autoAim.update(io.position(), turret.pos, visionResult)
 
         val fusedPose = autoAim.fusedPose
@@ -106,6 +109,11 @@ class AimingSystem(
         turret.robotHeading = autoAim.fusedPose.rot
         turret.robotAngularVelocity = io.velocity().rot
         turret.targetDistance = targetDistance
+
+        positionOverride?.let {
+            if(turret.fieldRelativeMode) turret.targetAngle = it else turret.fieldTargetAngle = it
+        }
+
         turret.update(dt)
     }
 
@@ -129,6 +137,6 @@ class AimingSystem(
 
     fun close() {
         autoAim.close()
-        visionTracker.stop()
+        visionTracker?.stop()
     }
 }

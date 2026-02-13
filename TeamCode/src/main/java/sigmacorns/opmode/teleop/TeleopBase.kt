@@ -3,6 +3,7 @@ package sigmacorns.opmode.teleop
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
 import sigmacorns.constants.flywheelMotor
+import sigmacorns.control.Robot
 import sigmacorns.control.subsystem.AimingSystem
 import sigmacorns.control.subsystem.DriveController
 import sigmacorns.control.subsystem.Flywheel
@@ -29,10 +30,7 @@ open class TeleopBase(
     val blue: Boolean,
     val fromAuto: Boolean = false
 ) : SigmaOpMode() {
-    // Subsystems
-    private lateinit var spindexerLogic: SpindexerLogic
-    private lateinit var aiming: AimingSystem
-    private val driveController = DriveController()
+    private lateinit var robot: Robot
 
     // State
     private var dVoltage = 1.0
@@ -43,7 +41,6 @@ open class TeleopBase(
     private var wasIntaking = false
     private var wasShooting = false
     private var wasAutoAimToggle = false
-    private var wasFieldRelativeToggle = false
     private var wasLeftBumper = false
     private var wasRightBumper = false
 
@@ -62,51 +59,22 @@ open class TeleopBase(
         gm1 = gamepad1
         gm2 = gamepad2
 
-        // Initialize subsystems with Flywheel controller
-        val flywheel = Flywheel(flywheelMotor,
-            FlywheelDeadbeatConfig.inertia,
-            io,
-            lag = FlywheelDeadbeatConfig.lagMs.milliseconds
+        robot = Robot(io,blue)
+        robot.init(
+            PosePersistence.loadPose(storageDir()) ?: Pose2d(0.0,0.0,PI/2.0),
+            true
         )
-        spindexerLogic = SpindexerLogic(io, flywheel)
+        robot.startApriltag()
 
-        if(!fromAuto && PosePersistence.loadPose(storageDir()) == null) {
-            io.configurePinpoint()
-            io.setPosition(Pose2d(0.0, 0.0, PI / 2.0))
-        }
-
-        // Try to load pose from auto, fallback to default if unavailable or too old
-        val savedPose = PosePersistence.loadPose(storageDir())
-        val initialPose = savedPose ?: Pose2d(0.0, 0.0, PI / 2.0)
-        //val initialPose = if(blue) Pose2d(-0.53,0.53,Math.toRadians(152.0)) else Pose2d(0.53,0.53,Math.toRadians(28.0))
-        //io.setPosition(initialPose)
-
-        if (savedPose != null) {
-            telemetry.addData("Initial Pose", "Loaded from auto")
-            telemetry.addData("Position", "(%.2f, %.2f, %.2f rad)", savedPose.v.x, savedPose.v.y, savedPose.rot)
-        } else {
-            telemetry.addData("Initial Pose", "Using default")
-        }
         telemetry.update()
 
-        // Initialize shared aiming system
-        aiming = AimingSystem(io, blue)
-        aiming.init(io.position())
-
         try {
-            spindexerLogic.autoSort = false
+            robot.logic.autoSort = false
             waitForStart()
 
             var loopStartTime = System.nanoTime()
             ioLoop { state, dt ->
-
-                // Update voltage compensation
                 dVoltage = 12.0 / io.voltage()
-
-                // Update vision + auto-aim
-                val visionStartTime = System.nanoTime()
-                aiming.updateVision()
-                profileVisionTime = (System.nanoTime() - visionStartTime) / 1_000_000
 
                 // Process all controls with profiling
                 val driveStartTime = System.nanoTime()
@@ -151,125 +119,65 @@ open class TeleopBase(
                 false // continue loop
             }
         } finally {
-            aiming.close()
+            robot.close()
         }
     }
 
     private fun processDrivetrain(dt: Duration) {
-        driveController.update(gm1, io)
+        robot.drive.update(gm1, io)
     }
 
     private fun processTurret(dt: Duration) {
-        val turret = aiming.turret
-        val autoAim = aiming.autoAim
-
         // Auto-aim toggle (operator back button)
         val autoAimToggle = gm2.back
+        val autoAim = robot.aim.autoAim
         if (autoAimToggle && !wasAutoAimToggle) {
             autoAim.enabled = !autoAim.enabled
         }
         wasAutoAimToggle = autoAimToggle
 
-        // Field-relative mode toggle (operator start button)
-        val fieldRelativeToggle = gm2.start
-        if (fieldRelativeToggle && !wasFieldRelativeToggle) {
-            turret.fieldRelativeMode = !turret.fieldRelativeMode
-            if (turret.fieldRelativeMode) {
-                turret.fieldTargetAngle = turret.pos + turret.robotHeading
-            }
-        }
-        wasFieldRelativeToggle = fieldRelativeToggle
-
         // Turret yaw control — check for manual control input
         val yawInput = -gm2.left_stick_x.toDouble()
-        val isManualControl = yawInput.absoluteValue > 0.1 || gm2.left_stick_button
 
-        if (autoAim.enabled && autoAim.hasTarget && !isManualControl) {
-            // Auto-aim: delegate to aiming system
-            aiming.applyAutoAimTarget()
-        } else if (isManualControl) {
-            // Manual turret yaw control (operator left stick X)
-            if (turret.fieldRelativeMode) {
-                turret.fieldTargetAngle += yawInput * Math.toRadians(60.0) * dt.toDouble(DurationUnit.SECONDS)
-            } else {
-                turret.targetAngle += yawInput * Math.toRadians(60.0) * dt.toDouble(DurationUnit.SECONDS)
-            }
-        }
-
-        // Flywheel controls
-        var flywheelPower = 0.0
+        robot.aim.positionOverride = (robot.aim.positionOverride ?: 0.0).let {
+            it + yawInput * Math.toRadians(60.0) * dt.toDouble(DurationUnit.SECONDS)
+        }.takeIf { yawInput.absoluteValue > 0.1 || gm2.left_stick_button }
 
         // Manual flywheel override (operator right stick)
         if (gm2.right_stick_y.absoluteValue > 0.1) {
-            flywheelPower = -gm2.right_stick_y.toDouble() * dVoltage
+            io.shooter = -gm2.right_stick_y.toDouble() * dVoltage
         }
-
-        // Apply flywheel power (only if not being controlled by SpindexerLogic shooting)
-        if (spindexerLogic.currentState != SpindexerLogic.State.SHOOTING &&
-            spindexerLogic.currentState != SpindexerLogic.State.MOVING_SHOOT) {
-            io.shooter = flywheelPower
-        }
-
-        // Update turret PID (uses heading from aiming system)
-        aiming.updateTurret(dt)
     }
 
     private fun processIntakeAndShooting(dt: Duration) {
-        // Use AdaptiveTuner for flywheel velocity, fallback to old zones if not calibrated
-        val recommendedVelocity = aiming.getRecommendedFlywheelVelocity()!!
-
-        if (recommendedVelocity != null) {
-            // Use adaptive tuner velocity
-            spindexerLogic.targetVelocityOverride = recommendedVelocity
-        } else {
-            // Fallback to old shot power zones if adaptive tuner not calibrated
-            val targetDistance = aiming.targetDistance
-
-            // Zone Selection (Operator D-pad)
-            if (gm2.dpad_down) manualOverridePower = ShotPowers.shortShotPower
-            if (gm2.dpad_left || gm2.dpad_right) manualOverridePower = ShotPowers.midShotPower
-            if (gm2.dpad_up) manualOverridePower = ShotPowers.longShotPower
-
-            // Auto Power Calculation
-            val autoPower = when {
-                targetDistance < ShotPowers.shortDistanceLimit -> ShotPowers.shortShotPower
-                targetDistance < ShotPowers.midDistanceLimit -> ShotPowers.midShotPower
-                else -> ShotPowers.longShotPower
-            }
-
-            val activePower = manualOverridePower ?: autoPower
-            spindexerLogic.targetShotPower = activePower
-            spindexerLogic.targetVelocityOverride = null
-        }
-
-        if(gm2.aWasPressed()) spindexerLogic.autoSort = !spindexerLogic.autoSort
+        if(gm2.aWasPressed()) robot.logic.autoSort = !robot.logic.autoSort
 
         // Intake control (driver left trigger)
         val intaking = gm1.left_trigger > 0.1
-        if (intaking && !wasIntaking) {
-            spindexerLogic.startIntaking()
-        } else if (!intaking) {
-            spindexerLogic.stopIntaking()
-        }
+        if (intaking && !wasIntaking)
+            robot.logic.startIntaking()
+        else if (!intaking)
+            robot.logic.stopIntaking()
+
         wasIntaking = intaking
 
         // Spindexer Nudge Controls (Driver Bumpers)
         if (gm1.left_bumper && !wasLeftBumper) {
-            spindexerLogic.nudge(true)
+            robot.logic.nudge(true)
         }
         wasLeftBumper = gm1.left_bumper
 
         if (gm1.right_bumper && !wasRightBumper) {
-            spindexerLogic.nudge(false)
+            robot.logic.nudge(false)
         }
         wasRightBumper = gm1.right_bumper
 
         // Shooting controls — Driver right trigger
         val isShooting = gm1.right_trigger > 0.5
-        spindexerLogic.shootingRequested = isShooting
+        robot.logic.shootingRequested = isShooting
 
         if (isShooting && !wasShooting) {
-            spindexerLogic.shoot()
+            robot.logic.shoot()
         }
         if (!isShooting && wasShooting) {
             manualOverridePower = null
@@ -278,27 +186,24 @@ open class TeleopBase(
 
         // Operator quick shot (right bumper)
         if (gm2.right_bumper && !gm2.left_bumper) {
-            if (spindexerLogic.currentState == SpindexerLogic.State.IDLE ||
-                spindexerLogic.currentState == SpindexerLogic.State.FULL) {
-                spindexerLogic.shoot()
+            if (robot.logic.currentState == SpindexerLogic.State.IDLE ||
+                robot.logic.currentState == SpindexerLogic.State.FULL) {
+                robot.logic.shoot()
             }
         }
-
-        // Update spindexer FSM
-        spindexerLogic.update(dt, dVoltage)
     }
 
     private var lastTimestep = 0.milliseconds
     private fun updateTelemetry(state: sigmacorns.State) {
-        val turret = aiming.turret
-        val autoAim = aiming.autoAim
-        val targetDistance = aiming.targetDistance
+        val turret = robot.aim.turret
+        val autoAim = robot.aim.autoAim
+        val targetDistance = robot.aim.targetDistance
 
         // Driver telemetry (essential info)
         telemetry.addLine("=== DRIVER ===")
-        telemetry.addData("Spindexer", spindexerLogic.currentState.name)
-        telemetry.addData("Balls", "${spindexerLogic.spindexerState}")
-        telemetry.addData("Speed", if (driveController.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
+        telemetry.addData("Spindexer", robot.logic.currentState.name)
+        telemetry.addData("Balls", "${robot.logic.spindexerState}")
+        telemetry.addData("Speed", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
 
         val looptime = state.timestamp - lastTimestep
         lastTimestep = state.timestamp
@@ -317,26 +222,13 @@ open class TeleopBase(
         telemetry.addData("Turret Pitch", "%.2f", turret.targetPitch)
         telemetry.addData("Distance", "%.1f m", targetDistance)
 
-        val usingAdaptiveTuner = spindexerLogic.targetVelocityOverride != null && aiming.adaptiveTuner.canInterpolate()
-        if (usingAdaptiveTuner) {
-            telemetry.addData("Mode", "ADAPTIVE")
-            telemetry.addData("Target Vel", "%.0f rad/s", spindexerLogic.targetVelocityOverride ?: 0.0)
-        } else {
-            val zone = when (spindexerLogic.targetShotPower) {
-                ShotPowers.shortShotPower -> "SHORT"
-                ShotPowers.midShotPower -> "MID"
-                ShotPowers.longShotPower -> "LONG"
-                else -> "CUSTOM"
-            }
-            telemetry.addData("Mode", "ZONES")
-            telemetry.addData("Shot Zone", zone)
-            telemetry.addData("Shot Power", "%.0f%%", spindexerLogic.targetShotPower * 100)
-        }
+        telemetry.addData("Mode", "ADAPTIVE")
+        telemetry.addData("Target Vel", "%.0f rad/s", robot.logic.shotVelocity ?: 0.0)
         telemetry.addData("Power Locked", if (lockedShotPower != null) "YES" else "NO")
         telemetry.addData("Manual Override", if (manualOverridePower != null) "YES" else "NO")
 
         telemetry.addData("Flywheel", "%.0f%%", io.shooter * 100)
-        telemetry.addData("Tuner Points", aiming.adaptiveTuner.pointCount())
+        telemetry.addData("Tuner Points", robot.aim.adaptiveTuner.pointCount())
 
         telemetry.addLine("")
 
@@ -400,7 +292,7 @@ open class TeleopBase(
         telemetry.addData("Ramp", globalFieldState.ramp.contentToString())
 
         //testing for autosorting
-        telemetry.addData("if nay balls were found:", spindexerLogic.foundAnyBall)
+        telemetry.addData("if nay balls were found:", robot.logic.foundAnyBall)
         telemetry.addData("current ball being detected:", io.colorSensorGetBallColor())
         telemetry.update()
     }

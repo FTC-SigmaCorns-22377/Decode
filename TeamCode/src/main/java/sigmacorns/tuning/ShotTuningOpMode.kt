@@ -55,7 +55,7 @@ class ShotTuningOpMode : SigmaOpMode() {
 
         // Initialize shared aiming system (hardcoded red for tuning — doesn't affect turret aim)
         aiming = AimingSystem(io, blue = false)
-        aiming.init(io.position())
+        aiming.init(io.position(),true)
 
         // Initialize data store and tuner
         dataStore = ShotDataStore()
@@ -129,7 +129,7 @@ class ShotTuningOpMode : SigmaOpMode() {
                 }
 
                 // Set target velocity on spindexer logic (drives the flywheel)
-                spindexerLogic.targetVelocityOverride = if (targetSpeed > 0) targetSpeed else null
+                spindexerLogic.shotVelocity = if (targetSpeed > 0) targetSpeed else null
 
                 // Handle shoot requests
                 if (shootRequested) {
@@ -141,7 +141,7 @@ class ShotTuningOpMode : SigmaOpMode() {
                 }
 
                 // Update spindexer logic (handles FSM + flywheel control)
-                spindexerLogic.update(dt, dVoltage)
+                spindexerLogic.update(dt)
 
                 // Record velocity history
                 recordVelocity()

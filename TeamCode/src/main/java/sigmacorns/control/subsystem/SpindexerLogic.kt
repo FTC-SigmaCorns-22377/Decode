@@ -2,6 +2,7 @@ package sigmacorns.control.subsystem
 
 import com.bylazar.configurables.annotations.Configurable
 import kotlinx.coroutines.delay
+import sigmacorns.constants.flywheelMotor
 import sigmacorns.control.FSM
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.control.PIDController
@@ -31,7 +32,6 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private val PI = kotlin.math.PI
     internal val ROTATE_ANGLE = (2 * PI) / 3  // rotation for cycling to next ball
     internal val MODE_CHANGE_ANGLE = PI / 3   // rotation for switching intake to shoot mode
-
 
     // PID controller for flywheel
     val flywheelPID = PIDController(
@@ -67,18 +67,11 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private var transferNeedsReset: Boolean = true  // Track if transfer needs to be reset
     private var nudgeDirection: Double = 1.0  // Track the direction of the last nudge (1.0 for forward/CW, -1.0 for backward/CCW)
     private var sortCycle: Int = 0 //Tracks the number of iterations the sorting has been through
-    /** Current calculated target velocity for flywheel */
-    var targetFlywheelVelocity: Double = 0.0
 
-    /** Target power fraction for the shot (used when targetVelocityOverride is null) */
-    var targetShotPower: Double = 0.0
+    var shotPower: Double = 0.0
+    var shotVelocity: Double? = null
 
-    /** Direct target velocity override in rad/s. When non-null, takes precedence over targetShotPower. */
-    var targetVelocityOverride: Double? = null
-
-    /** Effective target velocity in rad/s, resolving override vs power-based calculation. */
-    val effectiveTargetVelocity: Double
-        get() = targetVelocityOverride ?: (targetShotPower * ShooterFlywheelPIDConfig.maxVelocity)
+    private var flywheelTargetVelocity: Double = 0.0
     var motif: List<Balls?> = listOf(Balls.Green, Balls.Purple, Balls.Purple)
 
     /** Whether continuous shooting is requested */
@@ -178,15 +171,16 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private suspend fun zeroBehavior(): State {
         if(offsetActive) spindexerRotation -= MODE_CHANGE_ANGLE
 
-        while(true) {
-            delay(100)
-        }
+
+        delay(100)
+
+        return State.ZERO
     }
 
     private suspend fun idleBehavior(): State {
         // Idle: wait for events, no automatic transitions
         io.intake = 0.0
-        io.shooter = 0.0
+        flywheelTargetVelocity = 0.0
         io.transfer = TRANSFER_STOP_POWER
 
         if(!offsetActive) {
@@ -265,8 +259,6 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         // slow intake while moving
         io.intake = if (fsm.curState == State.MOVING) -0.2 else 0.0
 
-        //if(nudgeDirection==0.0) return State.IDLE
-
         // Rotate spindexer to next position based on nudge direction
         val rotationAngle = nudgeDirection * ROTATE_ANGLE
         spindexerRotation += rotationAngle
@@ -337,7 +329,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         val startTime = io.time()
         while (true) {
             val currentVelocity = io.flywheelVelocity()
-            val error = abs(currentVelocity - effectiveTargetVelocity)
+            val error = abs(currentVelocity - flywheelTargetVelocity)
 
             if (error < VELOCITY_ERROR_THRESHOLD) break
             if (io.time() - startTime > MAX_WAIT_TIME) {
@@ -365,7 +357,8 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     }
 
     private suspend fun movingShootBehavior(): State {
-        if (shootingRequested) io.shooter
+        if (shootingRequested) flywheelTargetVelocity = shotVelocity ?: (shotPower* flywheelMotor.freeSpeed)
+
         resetTransfer()
         if (!offsetActive) {
             spindexerRotation += MODE_CHANGE_ANGLE
@@ -394,7 +387,6 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     fun nudge(ccw: Boolean) {
         if (currentState == State.INTAKING || currentState == State.IDLE || currentState == State.FULL) {
-//            spindexerState[0] = Balls.Purple
             nudgeDirection = if(ccw) 1.0 else -1.0
 
             // Transition to MOVING state to execute the nudge with directionality
@@ -418,37 +410,31 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         fsm.sendEvent(Event.SORTED_SHOOT)
     }
 
-    fun update(deltaT: Duration, dVoltage: Double = 1.0) {
+    fun update(dt: Duration) {
         fsm.update()
 
         // Update spindexer control
         spindexer.target = spindexerRotation
-        spindexer.update(deltaT)
+        spindexer.update(dt)
 
-        // Flywheel control - active in shooting states
-        if (fsm.curState == State.SHOOTING || fsm.curState == State.MOVING_SHOOT) {
-            targetFlywheelVelocity = targetVelocityOverride ?: effectiveTargetVelocity
+        flywheel?.also {
+            it.target = flywheelTargetVelocity
+            it.update(io.voltage(),dt)
+        } ?: {
+            // Use PID + feedforward
+            flywheelPID.kp = ShooterFlywheelPIDConfig.kP
+            flywheelPID.kd = ShooterFlywheelPIDConfig.kD
+            flywheelPID.ki = ShooterFlywheelPIDConfig.kI
 
-            if (flywheel != null) {
-                // Use deadbeat controller
-                flywheel!!.target = targetFlywheelVelocity
-                flywheel!!.update(io.flywheelVelocity(), deltaT)
-            } else {
-                // Use PID + feedforward
-                flywheelPID.kp = ShooterFlywheelPIDConfig.kP
-                flywheelPID.kd = ShooterFlywheelPIDConfig.kD
-                flywheelPID.ki = ShooterFlywheelPIDConfig.kI
+            val maxVel = ShooterFlywheelPIDConfig.maxVelocity
+            flywheelPID.setpoint = flywheelTargetVelocity
 
-                val maxVel = ShooterFlywheelPIDConfig.maxVelocity
-                flywheelPID.setpoint = targetFlywheelVelocity
+            val currentVel = io.flywheelVelocity()
+            val pidOut = flywheelPID.update(currentVel, dt)
+            val feedforward = flywheelTargetVelocity / maxVel
 
-                val currentVel = io.flywheelVelocity()
-                val pidOut = flywheelPID.update(currentVel, deltaT)
-                val feedforward = targetFlywheelVelocity / maxVel
-
-                val totalPower = (feedforward + pidOut).coerceIn(-1.0, 1.0)
-                io.shooter = totalPower * dVoltage
-            }
+            val totalPower = (feedforward + pidOut).coerceIn(-1.0, 1.0)
+            io.shooter = totalPower * 12.0/io.voltage()
         }
     }
 }

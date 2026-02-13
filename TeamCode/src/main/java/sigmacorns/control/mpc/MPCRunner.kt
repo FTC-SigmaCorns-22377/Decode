@@ -48,7 +48,7 @@ class MPCRunner(
     private var sharedMecanumState: MecanumState? = null
     private var sharedVoltage = 12.0
     private var sharedTime: Duration = 0.seconds
-    private val mpcRunning = AtomicBoolean(false)
+    val mpcRunning = AtomicBoolean(false)
     private var mpcThread: Thread? = null
 
     // Command queue for thread-safe MPC operations

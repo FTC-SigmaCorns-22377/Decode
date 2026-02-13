@@ -308,10 +308,10 @@ open class TestSortedShooter(val blue: Boolean) : SigmaOpMode() {
             if (lockedShotPower == null) {
                 lockedShotPower = activePower
             }
-            spindexerLogic.targetShotPower = lockedShotPower!!
+            spindexerLogic.shotPower = lockedShotPower!!
         } else {
             lockedShotPower = null
-            spindexerLogic.targetShotPower = activePower
+            spindexerLogic.shotPower = activePower
         }
 
         // Intake control (driver left trigger)
@@ -361,7 +361,7 @@ open class TestSortedShooter(val blue: Boolean) : SigmaOpMode() {
         }
 
         // Update spindexer FSM
-        spindexerLogic.update( dt, dVoltage)
+        spindexerLogic.update(dt)
     }
 
     private var lastTimestep = 0.milliseconds
@@ -392,14 +392,14 @@ open class TestSortedShooter(val blue: Boolean) : SigmaOpMode() {
         telemetry.addData("Turret Pitch", "%.2f", turret.targetPitch)
         telemetry.addData("Distance", "%.1f m", targetDistance)
 
-        val zone = when (spindexerLogic.targetShotPower) {
+        val zone = when (spindexerLogic.shotPower) {
             ShotPowers.shortShotPower -> "SHORT"
             ShotPowers.midShotPower -> "MID"
             ShotPowers.longShotPower -> "LONG"
             else -> "CUSTOM"
         }
         telemetry.addData("Shot Zone", zone)
-        telemetry.addData("Shot Power", "%.0f%%", spindexerLogic.targetShotPower * 100)
+        telemetry.addData("Shot Power", "%.0f%%", spindexerLogic.shotPower * 100)
         telemetry.addData("Power Locked", if (lockedShotPower != null) "YES" else "NO")
         telemetry.addData("Manual Override", if (manualOverridePower != null) "YES" else "NO")
 

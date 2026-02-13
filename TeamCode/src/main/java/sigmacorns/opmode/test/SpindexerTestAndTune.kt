@@ -33,7 +33,7 @@ class SpindexerTestAndTune(): SigmaOpMode() {
                 spindexerLogic.fsm.sendEvent(SpindexerLogic.Event.BALL_DETECTED)
             }
 
-            spindexerLogic.update( deltaT = 0.seconds)
+            spindexerLogic.update( 0.seconds)
             io.update()
 
         }
