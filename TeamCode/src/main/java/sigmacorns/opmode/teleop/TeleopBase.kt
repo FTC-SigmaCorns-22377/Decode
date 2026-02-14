@@ -2,18 +2,11 @@ package sigmacorns.opmode.teleop
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
-import sigmacorns.constants.flywheelMotor
 import sigmacorns.control.Robot
-import sigmacorns.control.subsystem.AimingSystem
-import sigmacorns.control.subsystem.DriveController
-import sigmacorns.control.subsystem.Flywheel
-import sigmacorns.control.subsystem.ShotPowers
-import sigmacorns.control.subsystem.SpindexerLogic
 import sigmacorns.globalFieldState
 import sigmacorns.io.PosePersistence
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.opmode.tune.FlywheelDeadbeatConfig
 import kotlin.math.PI
 import kotlin.math.absoluteValue
 import kotlin.time.Duration
@@ -115,6 +108,8 @@ open class TeleopBase(
                     io.setPosition(Pose2d(0.0,0.0, PI/2.0))
                 }
 
+                robot.update()
+
                 loopStartTime = System.nanoTime()
                 false // continue loop
             }
@@ -144,7 +139,7 @@ open class TeleopBase(
         }.takeIf { yawInput.absoluteValue > 0.1 || gm2.left_stick_button }
 
         // Manual flywheel override (operator right stick)
-        if (gm2.right_stick_y.absoluteValue > 0.1) {
+        if (gm2.right_stick_y.absoluteValue > 0.1 || gm2.right_stick_button) {
             io.shooter = -gm2.right_stick_y.toDouble() * dVoltage
         }
     }
@@ -183,14 +178,6 @@ open class TeleopBase(
             manualOverridePower = null
         }
         wasShooting = isShooting
-
-        // Operator quick shot (right bumper)
-        if (gm2.right_bumper && !gm2.left_bumper) {
-            if (robot.logic.currentState == SpindexerLogic.State.IDLE ||
-                robot.logic.currentState == SpindexerLogic.State.FULL) {
-                robot.logic.shoot()
-            }
-        }
     }
 
     private var lastTimestep = 0.milliseconds

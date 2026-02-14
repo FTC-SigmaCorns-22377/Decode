@@ -49,7 +49,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         ),io)
 
     // Error thresholds
-    internal val POSITION_ERROR_THRESHOLD = 0.15  // radians - position threshold for spindexer
+    internal val POSITION_ERROR_THRESHOLD = 0.10  // radians - position threshold for spindexer
     internal val VELOCITY_ERROR_THRESHOLD = 10.0   // rad/s - velocity threshold for flywheel
 
     // Timeout for safety (fallback if threshold never reached)
@@ -181,6 +181,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         // Idle: wait for events, no automatic transitions
         io.intake = 0.0
         flywheelTargetVelocity = 0.0
+        flywheel?.hold = true
         io.transfer = TRANSFER_STOP_POWER
 
         if(!offsetActive) {
@@ -207,6 +208,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     /** Activate transfer servo by running it up for a set duration to transfer a ball */
     internal suspend fun activateTransfer() {
+        flywheel?.hold = true
         io.transfer = TRANSFER_UP_POWER
         delay(TRANSFER_UP_DURATION.inWholeMilliseconds)
         io.transfer = TRANSFER_STOP_POWER
@@ -357,7 +359,10 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     }
 
     private suspend fun movingShootBehavior(): State {
-        if (shootingRequested) flywheelTargetVelocity = shotVelocity ?: (shotPower* flywheelMotor.freeSpeed)
+        if (shootingRequested) {
+            flywheelTargetVelocity = shotVelocity ?: (shotPower* flywheelMotor.freeSpeed)
+            flywheel?.hold = false
+        }
 
         resetTransfer()
         if (!offsetActive) {
@@ -419,7 +424,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
         flywheel?.also {
             it.target = flywheelTargetVelocity
-            it.update(io.voltage(),dt)
+            it.update(io.flywheelVelocity(),dt)
         } ?: {
             // Use PID + feedforward
             flywheelPID.kp = ShooterFlywheelPIDConfig.kP
