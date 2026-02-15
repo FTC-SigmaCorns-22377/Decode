@@ -48,7 +48,7 @@ val drivetrainParameters = MecanumParameters(
 
 val drivetrainCenter = Vector2d(0.03996203, 0.0)
 
-val flywheelGearRatio = 13.7
+val flywheelGearRatio = 1.0
 val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio,bareMotorStallTorque*flywheelGearRatio)
 val spindexerGearRatio = 10.0
 val spinMotor = LinearDcMotor(bareMotorTopSpeed/spindexerGearRatio,bareMotorStallTorque*spindexerGearRatio)

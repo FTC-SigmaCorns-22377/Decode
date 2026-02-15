@@ -110,13 +110,7 @@ class ShotTuningOpMode : SigmaOpMode() {
                 pendingInertia?.let { newInertia ->
                     pendingInertia = null
                     FlywheelDeadbeatConfig.inertia = newInertia
-                    flywheel = Flywheel(
-                        motor = flywheelMotor,
-                        inertia = newInertia,
-                        io = io,
-                        lag = FlywheelDeadbeatConfig.lagMs.milliseconds
-                    )
-                    spindexerLogic.flywheel = flywheel
+                    spindexerLogic.flywheel?.inertia = newInertia
                 }
 
                 // Update vision + auto-aim turret (full pipeline)

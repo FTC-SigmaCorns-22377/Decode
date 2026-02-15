@@ -21,7 +21,7 @@ import kotlin.time.DurationUnit
  */
 class Flywheel(
     val motor: LinearDcMotor,
-    val inertia: Double,
+    var inertia: Double,
     val io: SigmaIO,
     val lag: Duration = 0.seconds
 ) {
