@@ -3,7 +3,6 @@ package sigmacorns.io
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.hardware.lynx.LynxModule
-import com.qualcomm.robotcore.hardware.CRServo
 import com.qualcomm.robotcore.hardware.ColorRangeSensor
 import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.DcMotorEx
@@ -48,7 +47,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val spindexerMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"spindexer")
     //breakServo
     private val breakServo: Servo? = hardwareMap.tryGet(Servo::class.java,"break")
-    private val transferServo: CRServo? = hardwareMap.tryGet(CRServo::class.java,"transfer")
+    private val transferServo: Servo? = hardwareMap.tryGet(Servo::class.java,"transfer")
 
     //sensors
     val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
@@ -190,7 +189,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
             lastBreakPower = breakPower
         }
         if (shouldUpdate(transfer, lastTransfer)) {
-            transferServo?.power = transfer
+            transferServo?.position = transfer
             lastTransfer = transfer
         }
 
@@ -303,7 +302,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         spindexerMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
 
-        transferServo?.direction = DcMotorSimple.Direction.REVERSE
+        transferServo?.direction = Servo.Direction.REVERSE
 
         // configuring pinpoint
         configurePinpoint()

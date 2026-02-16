@@ -55,12 +55,9 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     // Timeout for safety (fallback if threshold never reached)
     internal val MAX_WAIT_TIME = 3000.milliseconds
 
-    // Transfer servo timing constants (continuous servo: -1 to 1, 0 = stopped)
-    private val TRANSFER_UP_POWER = 1.0       // Power to move transfer up (towards shooter)
-    private val TRANSFER_DOWN_POWER = -1.0    // Power to move transfer down (reset position)
-    private val TRANSFER_STOP_POWER = 0.0     // Stopped
-    private val TRANSFER_UP_DURATION = 300.milliseconds    // Time to transfer ball up
-    private val TRANSFER_DOWN_DURATION = 500.milliseconds  // Time to reset transfer down
+    // Transfer servo position constants (discrete servo: 0.0 = retracted, 1.0 = extended)
+    private val TRANSFER_UP_POSITION = 1.0       // Extended position (towards shooter)
+    private val TRANSFER_DOWN_POSITION = 0.0     // Retracted position (reset)
 
     //extra variables
     internal var offsetActive: Boolean = false
@@ -182,7 +179,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         io.intake = 0.0
         flywheelTargetVelocity = 0.0
         flywheel?.hold = true
-        io.transfer = TRANSFER_STOP_POWER
+        io.transfer = TRANSFER_DOWN_POSITION
 
         if(!offsetActive) {
             pollColor()
@@ -198,20 +195,16 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         return State.IDLE
     }
 
-    /** Reset the transfer servo by running it down for a set duration */
-    internal suspend fun resetTransfer() {
-        io.transfer = TRANSFER_DOWN_POWER
-        delay(TRANSFER_DOWN_DURATION.inWholeMilliseconds)
-        io.transfer = TRANSFER_STOP_POWER
+    /** Reset the transfer servo to the retracted position */
+    internal fun resetTransfer() {
+        io.transfer = TRANSFER_DOWN_POSITION
         transferNeedsReset = false
     }
 
-    /** Activate transfer servo by running it up for a set duration to transfer a ball */
-    internal suspend fun activateTransfer() {
+    /** Extend transfer servo to shoot a ball */
+    internal fun activateTransfer() {
         flywheel?.hold = true
-        io.transfer = TRANSFER_UP_POWER
-        delay(TRANSFER_UP_DURATION.inWholeMilliseconds)
-        io.transfer = TRANSFER_STOP_POWER
+        io.transfer = TRANSFER_UP_POSITION
         transferNeedsReset = true  // Mark that we need to reset next time
     }
 
@@ -341,7 +334,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
             delay(10)
         }
 
-        // Activate transfer to shoot ball (continuous servo - runs for set duration)
+        // Extend transfer servo to shoot ball
         transferNeedsReset = true
         activateTransfer()
 
