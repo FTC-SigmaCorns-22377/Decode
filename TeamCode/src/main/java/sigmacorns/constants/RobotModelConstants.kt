@@ -2,6 +2,7 @@ package sigmacorns.constants
 
 import org.joml.Vector2d
 import sigmacorns.control.MotorRangeMapper
+import sigmacorns.opmode.tune.FlywheelDeadbeatConfig
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
@@ -58,7 +59,7 @@ val spinMotor = LinearDcMotor(bareMotorTopSpeed/spindexerGearRatio,bareMotorStal
  */
 val flywheelParameters = FlywheelParameters(
     flywheelMotor,
-    0.2,
+    FlywheelDeadbeatConfig.inertia,
     0.0001,
 )
 

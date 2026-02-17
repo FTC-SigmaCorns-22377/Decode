@@ -53,11 +53,13 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     internal val VELOCITY_ERROR_THRESHOLD = 10.0   // rad/s - velocity threshold for flywheel
 
     // Timeout for safety (fallback if threshold never reached)
-    internal val MAX_WAIT_TIME = 3000.milliseconds
+    internal val MAX_WAIT_TIME = 10000.milliseconds
 
     // Transfer servo position constants (discrete servo: 0.0 = retracted, 1.0 = extended)
-    private val TRANSFER_UP_POSITION = 1.0       // Extended position (towards shooter)
+    private val TRANSFER_UP_POSITION = 0.1       // Extended position (towards shooter)
     private val TRANSFER_DOWN_POSITION = 0.0     // Retracted position (reset)
+    private val TRANSFER_UP_TIME = 400.milliseconds
+    private val TRANSFER_RESET_TIME = 200.milliseconds
 
     //extra variables
     internal var offsetActive: Boolean = false
@@ -196,15 +198,17 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     }
 
     /** Reset the transfer servo to the retracted position */
-    internal fun resetTransfer() {
+    internal suspend fun resetTransfer() {
         io.transfer = TRANSFER_DOWN_POSITION
+        if(transferNeedsReset) delay(TRANSFER_RESET_TIME)
         transferNeedsReset = false
     }
 
     /** Extend transfer servo to shoot a ball */
-    internal fun activateTransfer() {
+    internal suspend fun activateTransfer() {
         flywheel?.hold = true
         io.transfer = TRANSFER_UP_POSITION
+        delay(TRANSFER_UP_TIME)
         transferNeedsReset = true  // Mark that we need to reset next time
     }
 

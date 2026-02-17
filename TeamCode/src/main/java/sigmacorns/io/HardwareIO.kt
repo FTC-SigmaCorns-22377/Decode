@@ -44,7 +44,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 //turret
     private val turretMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"turret")
     //spindexer
-    private val spindexerMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"spindexer")
+    private val spindexerMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"spindexer")
     //breakServo
     private val breakServo: Servo? = hardwareMap.tryGet(Servo::class.java,"break")
     private val transferServo: Servo? = hardwareMap.tryGet(Servo::class.java,"transfer")
@@ -180,7 +180,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
             lastTurret = turret
         }
         if (shouldUpdate(spindexer, lastSpindexer)) {
-            spindexerMotor?.power = spindexer
+            spindexerMotor?.targetPosition = spindexer.toInt()
+            spindexerMotor?.power = 1.0
             lastSpindexer = spindexer
         }
         //updating the positions of all the servos (only if changed beyond threshold)
@@ -221,7 +222,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(
             GoBildaPinpointDriver.EncoderDirection.FORWARD,
-            GoBildaPinpointDriver.EncoderDirection.REVERSED
+            GoBildaPinpointDriver.EncoderDirection.FORWARD
         )
 
         //resetting the positions for the IMU
@@ -300,7 +301,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flywheelMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
-        spindexerMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        spindexerMotor?.targetPosition = 0
+        spindexerMotor?.setPositionPIDFCoefficients(12.0)
+        spindexerMotor?.setVelocityPIDFCoefficients(17.0,0.0,1.0,0.025)
+        spindexerMotor?.mode = DcMotor.RunMode.RUN_TO_POSITION
 
         transferServo?.direction = Servo.Direction.REVERSE
 
