@@ -37,6 +37,9 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     var mpc: MPCClient? = null
     var runner: MPCRunner? = null
 
+    var aimTurret = true
+    var aimFlywheel = true
+
     fun init(pos: Pose2d, apriltagTracking: Boolean) {
         io.configurePinpoint()
         io.setPosition(pos)
@@ -84,8 +87,8 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
             ), 12.0, t)
         runner?.driveWithMPC(io, io.voltage())
 
-        aim.update(dt)
-        aim.getRecommendedFlywheelVelocity()?.let { logic.shotVelocity = it }
+        aim.update(dt, aimTurret)
+        if(aimFlywheel) aim.getRecommendedFlywheelVelocity()?.let { logic.shotVelocity = it }
 
         logic.update( dt)
     }

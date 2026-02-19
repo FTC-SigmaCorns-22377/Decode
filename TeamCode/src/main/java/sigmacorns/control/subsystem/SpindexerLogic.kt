@@ -55,10 +55,10 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     // Timeout for safety (fallback if threshold never reached)
     internal val MAX_WAIT_TIME = 10000.milliseconds
 
-    // Transfer servo position constants (discrete servo: 0.0 = retracted, 1.0 = extended)
-    private val TRANSFER_UP_POSITION = 0.1       // Extended position (towards shooter)
+    // Transfer servo position constants db(discrete servo: 0.0 = retracted, 1.0 = extended)
+    private val TRANSFER_UP_POSITION = 0.135       // Extended position (towards shooter)
     private val TRANSFER_DOWN_POSITION = 0.0     // Retracted position (reset)
-    private val TRANSFER_UP_TIME = 400.milliseconds
+    private val TRANSFER_UP_TIME = 450.milliseconds
     private val TRANSFER_RESET_TIME = 200.milliseconds
 
     //extra variables
@@ -256,7 +256,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     private suspend fun movingBehavior(): State {
         // slow intake while moving
-        io.intake = if (fsm.curState == State.MOVING) -0.2 else 0.0
+        io.intake = if (fsm.curState == State.MOVING) -1.0 else 0.0
 
         // Rotate spindexer to next position based on nudge direction
         val rotationAngle = nudgeDirection * ROTATE_ANGLE
@@ -327,6 +327,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         // Wait for flywheel to spin up
         val startTime = io.time()
         while (true) {
+            flywheelTargetVelocity = shotVelocity ?: (shotPower* flywheelMotor.freeSpeed)
             val currentVelocity = io.flywheelVelocity()
             val error = abs(currentVelocity - flywheelTargetVelocity)
 

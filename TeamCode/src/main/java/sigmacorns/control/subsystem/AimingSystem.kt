@@ -129,9 +129,9 @@ class AimingSystem(
      * Convenience: full pipeline update (vision → auto-aim → turret).
      * Use this when no manual turret override is needed.
      */
-    fun update(dt: Duration) {
+    fun update(dt: Duration, target: Boolean = true) {
         updateVision()
-        applyAutoAimTarget()
+        if(target) applyAutoAimTarget()
         updateTurret(dt)
     }
 

@@ -41,7 +41,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
-//turret
+    //turret
     private val turretMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"turret")
     //spindexer
     private val spindexerMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"spindexer")
@@ -302,8 +302,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         spindexerMotor?.targetPosition = 0
-        spindexerMotor?.setPositionPIDFCoefficients(12.0)
-        spindexerMotor?.setVelocityPIDFCoefficients(17.0,0.0,1.0,0.025)
+        spindexerMotor?.setPositionPIDFCoefficients(25.0)
+        spindexerMotor?.setVelocityPIDFCoefficients(13.0,0.0,2.0,0.025)
         spindexerMotor?.mode = DcMotor.RunMode.RUN_TO_POSITION
 
         transferServo?.direction = Servo.Direction.REVERSE

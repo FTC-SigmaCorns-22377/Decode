@@ -20,10 +20,10 @@ import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.Balls
 
 data class TrajoptAutoData(
-    val INTAKE_SEGMENTS: Map<String, List<Pair<Int, Int>>>,
-    val SHOT_POWER: Double ,
-    val PROJECT_FILE_NAME: (Boolean) -> String , //blue -> name
-    val ROOT: String ,
+    val INTAKE_SEGMENTS: Map<String, List<Pair<Number, Number>>>,
+    val SHOT_POWER: Double,
+    val PROJECT_FILE_NAME: (Boolean) -> String, //blue -> name
+    val ROOT: String,
     val PRELOAD: Boolean
 )
 val RedWallPreload = TrajoptAutoData (
@@ -59,6 +59,25 @@ val baseFar = TrajoptAutoData(
     PRELOAD = true
 )
 
+val intakeTestAuto = TrajoptAutoData(
+    INTAKE_SEGMENTS= mapOf(
+        "Trajectory 1" to listOf(0 to 1),
+        "Trajectory 2" to listOf(0 to 0.5),
+    ),
+    SHOT_POWER = ShotPowers.longShotPower,
+    PROJECT_FILE_NAME = { "intake" },
+    ROOT = "Trajectory 1",
+    PRELOAD = false
+)
+
+val traj3test = TrajoptAutoData(
+    INTAKE_SEGMENTS= mapOf(),
+    SHOT_POWER = ShotPowers.longShotPower,
+    PROJECT_FILE_NAME = { "intake" },
+    ROOT = "Trajectory 3",
+    PRELOAD = false
+)
+
 @Autonomous(name = "Auto Red Far", group = "Auto", preselectTeleOp = "TeleopRed")
 class AutoRedFar: TrajoptAuto(base,false)
 
@@ -74,6 +93,12 @@ class AutoBlueFarFull: TrajoptAuto(baseFar, true)
 @Autonomous(name = "RedWallAuto", group = "Auto", preselectTeleOp = "TeleopRed")
 class RedWallAuto: TrajoptAuto(RedWallPreload, false)
 
+
+@Autonomous(name = "IntakeTestAuto", group = "Auto")
+class IntakeTestAuto: TrajoptAuto(intakeTestAuto, false)
+
+@Autonomous(name = "FAST", group = "Auto")
+class FAST: TrajoptAuto(traj3test, false)
 
 open class TrajoptAuto(
     val data: TrajoptAutoData,
@@ -170,7 +195,7 @@ open class TrajoptAuto(
             // Toggle intake based on sample index
             val shouldIntake = intakeRanges.any { sampleI in it }
             when {
-                shouldIntake && !intaking -> {
+                shouldIntake -> {
                     println("TrajoptAuto: intaking")
                     spindexerLogic.startIntaking()
                     intaking = true
@@ -228,9 +253,12 @@ open class TrajoptAuto(
 
     // ---- Sample-index helpers ----
 
-    private fun waypointToSampleIndex(traj: TrajoptTrajectory, waypointIdx: Int): Int? {
-        val waypointTime = traj.waypointTimes.getOrNull(waypointIdx) ?: return null
-        return traj.samples.indexOfFirst { it.timestamp >= waypointTime }
+    private fun waypointToSampleIndex(traj: TrajoptTrajectory, waypointIdx: Number): Int? {
+        val i = waypointIdx.toDouble().toInt()
+        val startTime = traj.waypointTimes.getOrNull(i)!!
+        val endTime = traj.waypointTimes.getOrNull(i+1) ?: traj.waypointTimes.last()
+        val targetTime = startTime + (endTime - startTime) * (waypointIdx.toDouble() - i.toDouble())
+        return traj.samples.indexOfFirst { it.timestamp >= targetTime }
             .takeIf { it >= 0 } ?: traj.samples.lastIndex
     }
 
