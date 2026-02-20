@@ -68,6 +68,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private var sortCycle: Int = 0 //Tracks the number of iterations the sorting has been through
 
     var shotPower: Double = 0.0
+    var spinupPower: Double = 0.6 * flywheelMotor.freeSpeed
     var shotVelocity: Double? = null
 
     private var flywheelTargetVelocity: Double = 0.0
@@ -75,6 +76,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     /** Whether continuous shooting is requested */
     var shootingRequested: Boolean = false
+    var spinupRequested: Boolean = false
 
     var autoSort: Boolean = true
 
@@ -128,14 +130,17 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
                 State.IDLE, State.FULL -> {
                     curState = State.MOVING_SHOOT
                 }
+
                 State.INTAKING, State.MOVING -> {
                     // Cancel intaking when user requests shooting
                     io.intake = 0.0
                     curState = State.MOVING_SHOOT
                 }
+
                 else -> {}
             }
         }
+
         onEvent(Event.BALL_DETECTED) {
             if(curState == State.INTAKING) {
                 spindexerState[0] = Balls.Green
@@ -179,8 +184,6 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private suspend fun idleBehavior(): State {
         // Idle: wait for events, no automatic transitions
         io.intake = 0.0
-        flywheelTargetVelocity = 0.0
-        flywheel?.hold = true
         io.transfer = TRANSFER_DOWN_POSITION
 
         if(!offsetActive) {
@@ -192,8 +195,17 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
             resetTransfer()
         }
 
-        // Wait indefinitely until cancelled by an event-triggered state change
-        delay(Long.MAX_VALUE)
+        // Poll so spinup changes are picked up
+        while (true) {
+            if (spinupRequested) {
+                flywheelTargetVelocity = spinupPower
+                flywheel?.hold = true
+            } else {
+                flywheelTargetVelocity = 0.0
+                flywheel?.hold = true
+            }
+            delay(10)
+        }
         return State.IDLE
     }
 
@@ -242,6 +254,15 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
                 }
                 delay(10)
             }
+        }
+
+        //if flywheel spinup is requested, spin up flywheel
+        if (spinupRequested == true) {
+            flywheelTargetVelocity = spinupPower
+            flywheel?.hold = true
+        } else {
+            flywheelTargetVelocity = 0.0
+            flywheel?.hold = true
         }
 
         io.intake = -1.0
@@ -302,6 +323,16 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private suspend fun fullBehavior(): State {
         // Full: wait for shoot event, no automatic transitions
         io.intake = 0.0
+
+        //if flywheel spinup is requested, spin up flywheel
+        if (spinupRequested == true) {
+            flywheelTargetVelocity = spinupPower
+            flywheel?.hold = true
+        } else {
+            flywheelTargetVelocity = 0.0
+            flywheel?.hold = true
+        }
+
         delay(Long.MAX_VALUE)
         return State.FULL
     }
@@ -325,6 +356,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     private suspend fun shootingBehavior(): State {
         // Wait for flywheel to spin up
+        spinupRequested = false
         val startTime = io.time()
         while (true) {
             flywheelTargetVelocity = shotVelocity ?: (shotPower* flywheelMotor.freeSpeed)
@@ -345,7 +377,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
         // Mark current ball as shot
         spindexerState[1] = null
-        sortCycle =+ 1
+        sortCycle += 1 //changed this from =+, if there are issues, go back and change it
 
         // Check if spindexer is empty
         return if (spindexerState.all { it == null } && !shootingRequested) {

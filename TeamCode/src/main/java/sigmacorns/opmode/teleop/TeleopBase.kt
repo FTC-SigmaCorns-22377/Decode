@@ -36,6 +36,7 @@ open class TeleopBase(
     private var wasAutoAimToggle = false
     private var wasLeftBumper = false
     private var wasRightBumper = false
+    private var wasOperatorLeftBumper = false
 
     // Profiling
     private var profileVisionTime = 0L
@@ -178,7 +179,12 @@ open class TeleopBase(
             manualOverridePower = null
         }
         wasShooting = isShooting
+        if (gm2.left_bumper && !wasOperatorLeftBumper) {
+            robot.logic.spinupRequested = !robot.logic.spinupRequested
+        }
+        wasOperatorLeftBumper = gm2.left_bumper
     }
+
 
     private var lastTimestep = 0.milliseconds
     private fun updateTelemetry(state: sigmacorns.State) {
