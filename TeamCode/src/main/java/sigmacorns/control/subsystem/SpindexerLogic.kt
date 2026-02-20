@@ -2,6 +2,7 @@ package sigmacorns.control.subsystem
 
 import com.bylazar.configurables.annotations.Configurable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.yield
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.control.FSM
 import sigmacorns.control.MotorRangeMapper
@@ -238,9 +239,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     private suspend fun intakingBehavior(): State {
         // Run intake motor
-        println("Entered intaking state")
         if (offsetActive) {
-            println("changed offset angle")
             spindexerRotation += MODE_CHANGE_ANGLE
             offsetActive = false
 
@@ -256,7 +255,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
                     println("Warning: Spindexer offset timeout")
                     break
                 }
-                delay(10)
+                yield()
             }
         }
 
@@ -272,7 +271,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         io.intake = -1.0
 
         // Check for ball detection (polling)
-        while (!pollColor()) delay(10)
+        while (!pollColor()) yield()
 
         // Ball detected -> transition to MOVING
         nudgeDirection = 1.0
@@ -317,7 +316,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
                 println("Warning: Spindexer movement timeout")
                 break
             }
-            delay(10)
+            yield()
         }
 
         // Check if spindexer is full
@@ -372,7 +371,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
                 println("Warning: Flywheel spinup timeout")
                 break
             }
-            delay(10)
+            yield()
         }
 
         // Extend transfer servo to shoot ball
@@ -465,7 +464,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         flywheel?.also {
             it.target = flywheelTargetVelocity
             it.update(io.flywheelVelocity(),dt)
-        } ?: {
+        } ?: run {
             // Use PID + feedforward
             flywheelPID.kp = ShooterFlywheelPIDConfig.kP
             flywheelPID.kd = ShooterFlywheelPIDConfig.kD

@@ -33,12 +33,10 @@ suspend fun SpindexerLogic.sortedShoot(motif: List<Balls?> = listOf(Balls.Green,
         if (requiredColor != null) {
             // Rotate through slots looking for the required color
             for (rotations in 0..2) {
-                if (io.colorSensorDetectsBall()) {
-                    val currentColor = io.colorSensorGetBallColor()
-                    if (currentColor == requiredColor) {
-                        foundBall = true
-                        break
-                    }
+                val currentColor = io.colorSensorGetBallColor()
+                if (currentColor == requiredColor) {
+                    foundBall = true
+                    break
                 }
 
                 // Try next slot

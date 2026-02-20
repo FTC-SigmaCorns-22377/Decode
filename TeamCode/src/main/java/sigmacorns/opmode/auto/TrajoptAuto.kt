@@ -66,8 +66,9 @@ val baseFar = TrajoptAutoData(
 
 val intakeTestAuto = TrajoptAutoData(
     INTAKE_SEGMENTS= mapOf(
-        "Trajectory 1" to listOf(0 to 1),
+        "Trajectory 1" to listOf(1 to 2),
         "Trajectory 2" to listOf(0 to 0.5),
+        "Trajectory 4" to listOf(1 to 2),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { "intake" },
@@ -213,10 +214,13 @@ open class TrajoptAuto(
         mpc.setTarget(traj)
         var intaking = false
         var nextShootIdx = 0
+        var flywheelPreSpun = false
+
+        // Pre-spin flywheel a few samples before the shoot marker so it's at speed when we arrive
+        val PRESPIN_LEAD_SAMPLES = 15
 
         while (!mpc.isTrajectoryComplete(traj)) {
             val sampleI = mpc.latestSampleI
-            println("TrajoptAuto: sampleI=$sampleI")
             // Toggle intake based on sample index
             val shouldIntake = intakeRanges.any { sampleI in it }
             when {
@@ -232,6 +236,18 @@ open class TrajoptAuto(
                 }
             }
 
+            // Pre-spin flywheel before reaching shoot marker
+            if (!flywheelPreSpun && nextShootIdx < shootSampleIndices.size
+                && sampleI >= shootSampleIndices[nextShootIdx] - PRESPIN_LEAD_SAMPLES) {
+                spindexerLogic.shotPower = data.SHOT_POWER
+                spindexerLogic.flywheel?.let {
+                    it.target = spindexerLogic.shotVelocity ?: (data.SHOT_POWER * sigmacorns.constants.flywheelMotor.freeSpeed)
+                    it.hold = false
+                }
+                flywheelPreSpun = true
+                println("TrajoptAuto: Pre-spinning flywheel at sample $sampleI")
+            }
+
             // Shoot when we reach a shoot marker -- blocks until all balls are fired
             if (nextShootIdx < shootSampleIndices.size && sampleI >= shootSampleIndices[nextShootIdx]) {
                 println("TrajoptAuto: Reached shoot marker at sample $sampleI")
@@ -241,6 +257,7 @@ open class TrajoptAuto(
                 }
                 shootAllBalls(spindexerLogic)
                 nextShootIdx++
+                flywheelPreSpun = false
             }
 
             delay(1)
@@ -267,7 +284,7 @@ open class TrajoptAuto(
         while (spindexerLogic.spindexerState.any { it != null }) {
             spindexerLogic.shootingRequested = true
             spindexerLogic.shoot()
-            delay(100)
+            delay(10)
         }
 
         spindexerLogic.shootingRequested = false
