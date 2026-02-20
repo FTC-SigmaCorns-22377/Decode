@@ -3,7 +3,6 @@ package sigmacorns.io
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.hardware.lynx.LynxModule
-import com.qualcomm.robotcore.hardware.CRServo
 import com.qualcomm.robotcore.hardware.ColorRangeSensor
 import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.DcMotorEx
@@ -18,6 +17,8 @@ import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.joml.Vector2d
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.Balls
+import sigmacorns.math.toPose2d
+import sigmacorns.math.toFtcPose2d
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -37,19 +38,19 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
 
     //shooter
-    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")!!
+    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
     //intake
     private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
-//turret
+    //turret
     private val turretMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"turret")
     //spindexer
-    private val spindexerMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"spindexer")
+    private val spindexerMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"spindexer")
     //breakServo
     private val breakServo: Servo? = hardwareMap.tryGet(Servo::class.java,"break")
-    private val transferServo: CRServo? = hardwareMap.tryGet(CRServo::class.java,"transfer")
+    private val transferServo: Servo? = hardwareMap.tryGet(Servo::class.java,"transfer")
 
     //sensors
-    private val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
+    val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
     private val distanceSensor: DistanceSensor? = hardwareMap.tryGet(DistanceSensor::class.java, "dist")
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
     val imu: IMU? = hardwareMap.tryGet(IMU::class.java,"imu")
@@ -100,19 +101,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         return last.isNaN() || kotlin.math.abs(current - last) >= UPDATE_THRESHOLD
     }
 
-    private fun FTCPose2d.toPose2d(): Pose2d = Pose2d(
-            getX(DistanceUnit.METER),
-            getY(DistanceUnit.METER),
-            getHeading(AngleUnit.RADIANS)
-    )
-
-    private fun Pose2d.toFtcPose2d(): FTCPose2d = FTCPose2d(
-        DistanceUnit.METER,
-        v.x,
-        v.y,
-        AngleUnit.RADIANS,
-        rot
-    )
 
     override fun position(): Pose2d {
         val sensorPose = pinpoint?.position?.toPose2d()
@@ -124,9 +112,13 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     override fun velocity(): Pose2d {
         if (pinpoint == null ) return Pose2d()
+
+        val vx = pinpoint!!.getVelX(DistanceUnit.METER)
+        val vy = pinpoint!!.getVelY(DistanceUnit.METER)
         return Pose2d(
-            pinpoint!!.getVelX(DistanceUnit.METER),
-            pinpoint!!.getVelY(DistanceUnit.METER),
+            cos(-posOffset.rot)*vx + sin(-posOffset.rot)*vy,
+            -sin(-posOffset.rot)*vx + cos(-posOffset.rot)*vy,
+
             pinpoint!!.getHeadingVelocity(UnnormalizedAngleUnit.RADIANS)
         )
     }
@@ -153,7 +145,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         val sensorPose = pinpoint?.position?.toPose2d()
         posOffset = when (sensorPose) {
             null -> p
-            else -> p
+            else -> p.compose(sensorPose.inverse())
         }
     }
 
@@ -188,7 +180,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
             lastTurret = turret
         }
         if (shouldUpdate(spindexer, lastSpindexer)) {
-            spindexerMotor?.power = spindexer
+            spindexerMotor?.targetPosition = spindexer.toInt()
+            spindexerMotor?.power = 1.0
             lastSpindexer = spindexer
         }
         //updating the positions of all the servos (only if changed beyond threshold)
@@ -197,7 +190,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
             lastBreakPower = breakPower
         }
         if (shouldUpdate(transfer, lastTransfer)) {
-            transferServo?.power = transfer
+            transferServo?.position = transfer
             lastTransfer = transfer
         }
 
@@ -229,19 +222,46 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(
             GoBildaPinpointDriver.EncoderDirection.FORWARD,
-            GoBildaPinpointDriver.EncoderDirection.REVERSED
+            GoBildaPinpointDriver.EncoderDirection.FORWARD
         )
 
         //resetting the positions for the IMU
         pinpoint?.resetPosAndIMU()
+        Thread.sleep(300)
+        pinpoint?.update()
     }
 
     override fun voltage(): Double = savedVoltage
     override fun colorSensorDetectsBall(): Boolean {
-        return false
+        if (colorSensor == null) return false
+        val distance = (colorSensor as? DistanceSensor)?.getDistance(DistanceUnit.CM) ?: 100.0
+        return distance < 5.0
     }
 
     override fun colorSensorGetBallColor(): Balls? {
+        if (colorSensor == null) return null
+        if (!colorSensorDetectsBall()) return null
+
+        // Read RGB values from the sensor
+        val red = colorSensor.red()
+        val green = colorSensor.green()
+        val blue = colorSensor.blue()
+
+        // Determine which color this is based on calibration
+        // These thresholds will need to be tuned for your specific balls and lighting
+
+        // Example logic (tune these values for your robot):
+        if (colorSensor.alpha() < 95) return null
+
+        if (green > red && green > blue) {
+            // Green ball detected
+            return Balls.Green
+        } else if ((red + blue) > green * 1.5) {
+            // Purple ball detected (red + blue makes purple)
+            return Balls.Purple
+        }
+
+        // If we can't determine the color clearly, return null
         return null
     }
 
@@ -281,9 +301,12 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flywheelMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
-        spindexerMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        spindexerMotor?.targetPosition = 0
+        spindexerMotor?.setPositionPIDFCoefficients(25.0)
+        spindexerMotor?.setVelocityPIDFCoefficients(13.0,0.0,2.0,0.025)
+        spindexerMotor?.mode = DcMotor.RunMode.RUN_TO_POSITION
 
-        transferServo?.direction = DcMotorSimple.Direction.REVERSE
+        transferServo?.direction = Servo.Direction.REVERSE
 
         // configuring pinpoint
         configurePinpoint()

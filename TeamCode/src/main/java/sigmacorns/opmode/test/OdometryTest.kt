@@ -1,13 +1,9 @@
 package sigmacorns.opmode.test
 
-import com.bylazar.gamepad.PanelsGamepad
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import org.joml.times
-import sigmacorns.constants.drivetrainParameters
-import sigmacorns.io.RerunLogging
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.control.DriveController
+import sigmacorns.control.subsystem.DriveController
 
 @TeleOp(group = "test")
 class OdometryTest : SigmaOpMode() {

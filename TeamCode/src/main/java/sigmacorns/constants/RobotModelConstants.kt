@@ -1,5 +1,8 @@
 package sigmacorns.constants
 
+import org.joml.Vector2d
+import sigmacorns.control.MotorRangeMapper
+import sigmacorns.opmode.tune.FlywheelDeadbeatConfig
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
@@ -25,7 +28,7 @@ val bareMotorStallTorque = 0.187
  * Gear ratio used with a Modern Robotics 12v DC motor.
  * See goBilda website for values
  */
-val driveGearRatio = 19.2
+val driveGearRatio = 13.7
 
 val driveMotor = LinearDcMotor(bareMotorTopSpeed/driveGearRatio,bareMotorStallTorque*driveGearRatio)
 
@@ -37,10 +40,14 @@ val drivetrainParameters = MecanumParameters(
     0.2,
     0.2,
     0.048,
-    20.0,
-    1.0,
-    0.1
+    15.0,
+    1.3,
+    0.1,
+    0.05
 )
+
+
+val drivetrainCenter = Vector2d(0.03996203, 0.0)
 
 // Gear ratios for all robot mechanisms
 val flywheelGearRatio = 1.0
@@ -48,7 +55,6 @@ val spindexerGearRatio = (1.0 + 46.0/17.0) * (1.0 + 46.0/11.0)
 val turretGearRatio = (1.0 + 46.0/11.0) * (76.0/19.0)
 val intakeHoodGearRatio = 10.0
 
-// Motor configurations
 val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio,bareMotorStallTorque*flywheelGearRatio)
 val spindexerMotor = LinearDcMotor(bareMotorTopSpeed/spindexerGearRatio,bareMotorStallTorque*spindexerGearRatio)
 val turretMotor = LinearDcMotor(bareMotorTopSpeed/turretGearRatio,bareMotorStallTorque*turretGearRatio)
@@ -59,7 +65,7 @@ val spinMotor = LinearDcMotor(bareMotorTopSpeed/intakeHoodGearRatio,bareMotorSta
  */
 val flywheelParameters = FlywheelParameters(
     flywheelMotor,
-    0.004,
+    FlywheelDeadbeatConfig.inertia,
     0.0001,
 )
 
@@ -99,3 +105,10 @@ const val BALL_GRAVITY_MAGNITUDE = 9.81
  */
 
 const val TIME_LAG_LAUNCH = 0.00
+
+val turretTicksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2*PI) * 76 / 19
+val turretRange = MotorRangeMapper(
+    limits = -PI/2.0..PI/2.0,           // turret can rotate +/- 190 degrees
+    limitsTick = -PI/2.0*turretTicksPerRad..PI/2.0*turretTicksPerRad,           // turret can rotate +/- 190 degrees
+    slowdownDist = 0.3           // slow down within 0.3 rad of limits
+)

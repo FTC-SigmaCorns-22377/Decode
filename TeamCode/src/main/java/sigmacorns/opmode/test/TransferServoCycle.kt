@@ -5,47 +5,49 @@ import sigmacorns.opmode.SigmaOpMode
 
 @TeleOp(name = "Transfer Servo Cycle", group = "Test")
 class TransferServoCycle : SigmaOpMode() {
-
+    //this might be broken right now bc I changed some things withing out really fully refining them but is just a test opmode
     override fun runOpMode() {
-        // For continuous servo: -1 to 1, 0 = stopped
-        var power = 0.0  // Start stopped
+        // For discrete 180 degree servo: 0 to 1, 0 means completey contracted and 1 means fully extended
+        var position = 0.0  // Start stopped
 
         waitForStart()
 
+        var prevRightBumper = false
+        var prevLeftBumper = false
+
         ioLoop { state, dt ->
             // Dpad for direct power control
-            power = when {
-                gamepad1.dpad_up -> 1.0      // Full power up (transfer)
-                gamepad1.dpad_down -> -1.0   // Full power down (reset)
-                gamepad1.dpad_left -> -0.5   // Slow down
-                gamepad1.dpad_right -> 0.5   // Slow up
-                gamepad1.a -> 0.0            // Stop
-                else -> power                // Hold current power
+            position = when {
+                gamepad1.dpad_up -> 0.5      // Full power up (transfer)
+                gamepad1.dpad_down -> 0.0   // Full power down (reset)/ stop
+                gamepad1.dpad_left -> 0.2   // Half Way
+                else -> position                // Hold current power
             }
 
-            // Manual fine control with bumpers
-            if (gamepad1.right_bumper) {
-                power = (power + 1.0 * dt.inWholeMilliseconds / 1000.0).coerceIn(-1.0, 1.0)
+            // Manual fine control with bumpers (discrete 0.05 increments on press)
+            if (gamepad1.right_bumper && !prevRightBumper) {
+                position = (position + 0.05).coerceIn(0.0, 0.15)
             }
-            if (gamepad1.left_bumper) {
-                power = (power - 1.0 * dt.inWholeMilliseconds / 1000.0).coerceIn(-1.0, 1.0)
+            if (gamepad1.left_bumper && !prevLeftBumper) {
+                position = (position - 0.05).coerceIn(0.0, 0.15)
             }
+            prevRightBumper = gamepad1.right_bumper
+            prevLeftBumper = gamepad1.left_bumper
 
-            io.transfer = power
+            io.transfer = position
 
-            telemetry.addData("Transfer Power", "%.3f", power)
+            telemetry.addData("Transfer Power", "%.3f", position)
             telemetry.addData("Direction", when {
-                power > 0.1 -> "UP (Transfer)"
-                power < -0.1 -> "DOWN (Reset)"
+                position > 0.10 -> "UP (Transfer)"
+                position < 0.03 -> "DOWN (Reset)"
                 else -> "STOPPED"
             })
             telemetry.addLine()
-            telemetry.addLine("Controls (Continuous Servo):")
-            telemetry.addLine("  Dpad Up: Full power up (1.0)")
-            telemetry.addLine("  Dpad Down: Full power down (-1.0)")
-            telemetry.addLine("  Dpad L/R: Slow down/up")
-            telemetry.addLine("  A: Stop (0.0)")
-            telemetry.addLine("  Bumpers: Fine adjust")
+            telemetry.addLine("Controls (Discrete Servo):")
+            telemetry.addLine("  Dpad Up: Fully extended (0.15)")
+            telemetry.addLine("  Dpad Down: Fully retracted (0.0)")
+            telemetry.addLine("  Dpad Left: Half way (0.07)")
+            telemetry.addLine("  Bumpers: +/- 0.05 increment")
             telemetry.update()
 
             false

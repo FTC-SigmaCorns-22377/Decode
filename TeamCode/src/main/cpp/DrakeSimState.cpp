@@ -139,7 +139,7 @@ void DrakeSim::SetMecanumParameters(const std::vector<double>& params) {
     return;
   }
 
-  // params: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia, mu]
+  // params: [freeSpeed, stallTorque, lx, ly, wheelRadius, weight, rotInertia, cDragLin, cDragRot, mu]
   mecanum_params_.drive_motor.free_speed = params[0];
   mecanum_params_.drive_motor.stall_torque = params[1];
   mecanum_params_.lx = params[2];
@@ -147,8 +147,9 @@ void DrakeSim::SetMecanumParameters(const std::vector<double>& params) {
   mecanum_params_.wheel_radius = params[4];
   mecanum_params_.mass = params[5];
   mecanum_params_.rot_inertia = params[6];
-  if (params.size() >= 8) {
-    mecanum_params_.mu = params[7];
+  // params[7] = cDragLin, params[8] = cDragRot (used by Kotlin sim, not Drake)
+  if (params.size() >= 10) {
+    mecanum_params_.mu = params[9];
   }
 }
 

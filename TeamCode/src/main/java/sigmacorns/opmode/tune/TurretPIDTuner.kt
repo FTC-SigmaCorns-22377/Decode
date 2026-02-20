@@ -5,7 +5,7 @@ import com.bylazar.telemetry.PanelsTelemetry
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.constants.bareMotorTopSpeed
 import sigmacorns.control.MotorRangeMapper
-import sigmacorns.control.Turret
+import sigmacorns.control.subsystem.Turret
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.math.PI
 
@@ -14,8 +14,8 @@ object TurretPIDConfig {
     @JvmField var kP = 1.5
     @JvmField var kD = 0.08
     @JvmField var kI = 0.0
-    @JvmField var kVRobot = 1.0 / (bareMotorTopSpeed * (1150.0/6000.0) * 19.0 / 76.0) * 1.2
-    @JvmField var maxTargetLead = 0.25
+    @JvmField var kVRobot = 1.0 / (bareMotorTopSpeed * (1150.0/6000.0) * 19.0 / 76.0) * 0.9
+    @JvmField var maxTargetLead = 1.0
     @JvmField var slewRate = 60000.0
     @JvmField var outputSlewRate = 4000.0
 }

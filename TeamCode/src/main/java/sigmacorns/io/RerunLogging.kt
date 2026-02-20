@@ -66,6 +66,13 @@ class RerunLogging private constructor(
         color: Int,
         radius: Double,
     )
+    private external fun logPoints3DWithColors(
+        connection: Long,
+        name: String,
+        points: FloatArray,
+        colors: IntArray,
+        radius: Double,
+    )
     private external fun logText(
         connection: Long,
         name: String,
@@ -79,6 +86,8 @@ class RerunLogging private constructor(
 
     private var ptr: Long = 0
     private var connectionWarningLogged = false
+
+    var disable: Boolean = false
 
     var isConnected: Boolean = false
         private set
@@ -94,6 +103,7 @@ class RerunLogging private constructor(
     }
 
     private inline fun withConnection(block: (Long) -> Unit) {
+        if(disable) return
         val handle = ptr
         if (!isConnected) {
             logConnectionUnavailable()
@@ -170,6 +180,22 @@ class RerunLogging private constructor(
         }
         withConnection { handle ->
             logPoints3D(handle, name, payload, color, radius.toDouble())
+        }
+    }
+
+    fun logPoints3DWithColors(name: String, points: List<Vector3d>, colors: IntArray, radius: Float = 0.1f) {
+        if (points.isEmpty()) return
+        require(colors.size == points.size) { "Colors array must have same size as points list" }
+        val payload = FloatArray(points.size * 3) { i ->
+            val pt = points[i / 3]
+            when (i % 3) {
+                0 -> pt.x.toFloat()
+                1 -> pt.y.toFloat()
+                else -> pt.z.toFloat()
+            }
+        }
+        withConnection { handle ->
+            logPoints3DWithColors(handle, name, payload, colors, radius.toDouble())
         }
     }
 

@@ -2,7 +2,7 @@ package sigmacorns.opmode.test
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.control.SpindexerLogic
+import sigmacorns.control.subsystem.SpindexerLogic
 import kotlin.time.Duration.Companion.seconds
 
 @TeleOp
@@ -33,7 +33,7 @@ class SpindexerTestAndTune(): SigmaOpMode() {
                 spindexerLogic.fsm.sendEvent(SpindexerLogic.Event.BALL_DETECTED)
             }
 
-            spindexerLogic.update(io.spindexerPosition(), deltaT = 0.seconds)
+            spindexerLogic.update( 0.seconds)
             io.update()
 
         }

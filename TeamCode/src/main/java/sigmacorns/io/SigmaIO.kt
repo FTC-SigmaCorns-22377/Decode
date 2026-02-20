@@ -20,8 +20,8 @@ interface SigmaIO {
     var turret: Double // The motor that rotates the turrent to keep it lined up with the goal
     //turretservo value
     var turretAngle: Double // the value that controls the angle of the turret is shooting at
-    //spindexer power
-    var spindexer: Double //the tick value of how much we need the spindexer to move in order to get to cycle to the next ball in the spindexer
+    //spindexer target position (ticks) — motor uses RUN_TO_POSITION mode
+    var spindexer: Double
     //break servo
     var breakPower: Double //the value that contols the position of the servo to engage or disengage the servo
     var transfer: Double

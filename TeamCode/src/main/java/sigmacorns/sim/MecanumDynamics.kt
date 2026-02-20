@@ -82,6 +82,11 @@ class MecanumDynamics(val p: MecanumParameters) {
     fun mecanumInverseAccKinematics(acc: Pose2d): Vector4d =
         inverseAcc * Vector4d(acc.v.x, acc.v.y, acc.rot, 0.0)
 
+    fun mecanumInversePowerKinematics(robotPower: Pose2d): Vector4d {
+        val wheelVelocities = mecanumInverseVelKinematics(maxSpeed().componentMul(robotPower))
+        return wheelVelocities * (1.0 / p.motor.freeSpeed)
+    }
+
     /**
      * Gives the maximum speed for the drivetrain
      */

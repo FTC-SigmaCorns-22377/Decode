@@ -137,6 +137,8 @@ abstract class SigmaOpMode(
 
     fun rerunLocation() = if (SIM) File(System.getProperty("user.dir")!!,"rerun") else File("/sdcard/FIRST/rerun")
 
+    fun storageDir() = if (SIM) File(System.getProperty("user.dir")!!) else File("/sdcard/FIRST")
+
     fun ioLoop(f: (State, Duration) -> Boolean) {
         val state = State(io)
         while (opModeIsActive()) {

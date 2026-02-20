@@ -2,13 +2,9 @@ package sigmacorns.opmode.test
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.control.MotorRangeMapper
-import sigmacorns.control.Turret
+import sigmacorns.control.subsystem.Turret
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.math.PI
-import kotlin.math.absoluteValue
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.sign
 
 @TeleOp(name = "Turret Angle Test", group = "Test")
 class TurretTest : SigmaOpMode() {

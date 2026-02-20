@@ -1,6 +1,7 @@
-package sigmacorns.control
+package sigmacorns.control.subsystem
 
 import com.qualcomm.robotcore.hardware.Gamepad
+import org.joml.Vector4d
 import org.joml.times
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.io.SigmaIO
@@ -47,7 +48,12 @@ class DriveController {
         val maxSpeed = mecanumDynamics.maxSpeed()
         val robotVelocities = maxSpeed.componentMul(robotPower)
         val wheelVelocities = mecanumDynamics.mecanumInverseVelKinematics(robotVelocities)
-        var wheelPowers = wheelVelocities * (1.0 / mecanumDynamics.p.motor.freeSpeed)
+        var wheelPowers = Vector4d(
+            robotPower.v.x - robotPower.v.y - robotPower.rot,
+            robotPower.v.x + robotPower.v.y - robotPower.rot,
+            robotPower.v.x - robotPower.v.y + robotPower.rot,
+            robotPower.v.x + robotPower.v.y + robotPower.rot,
+        )
 
         val maxComponent = wheelPowers[wheelPowers.maxComponent()]
         if (maxComponent > 1.0) {
