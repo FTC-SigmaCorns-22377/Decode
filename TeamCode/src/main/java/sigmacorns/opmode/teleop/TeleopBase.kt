@@ -4,6 +4,8 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import com.qualcomm.robotcore.hardware.Gamepad
 import sigmacorns.control.Robot
 import sigmacorns.globalFieldState
+import sigmacorns.control.Robot.Companion.motifIdToBalls
+import sigmacorns.io.MotifPersistence
 import sigmacorns.io.PosePersistence
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
@@ -38,6 +40,10 @@ open class TeleopBase(
     private var wasRightBumper = false
     private var wasOperatorLeftBumper = false
 
+    // Brake lift hold timer
+    private var liftHoldStartTime: Long? = null
+    private val LIFT_HOLD_DURATION_MS = 1000L
+
     // Profiling
     private var profileVisionTime = 0L
     private var profileDrivetrainTime = 0L
@@ -59,6 +65,13 @@ open class TeleopBase(
             true
         )
         robot.startApriltag()
+
+        // Load motif detected during autonomous
+        MotifPersistence.loadMotif(storageDir())?.let { motifId ->
+            globalFieldState.motif = motifId
+            robot.logic.motif = motifIdToBalls(motifId)
+            println("TeleopBase: Loaded motif $motifId from auto")
+        }
 
         telemetry.update()
 
@@ -183,6 +196,20 @@ open class TeleopBase(
             robot.logic.spinupRequested = !robot.logic.spinupRequested
         }
         wasOperatorLeftBumper = gm2.left_bumper
+
+        // Brake lift control — hold both gm2 triggers for 1 second to activate
+        val liftTriggersHeld = gm2.left_trigger > 0.5 && gm2.right_trigger > 0.5
+        if (!robot.logic.requestLift) {
+            if (liftTriggersHeld) {
+                if (liftHoldStartTime == null) {
+                    liftHoldStartTime = System.currentTimeMillis()
+                } else if (System.currentTimeMillis() - liftHoldStartTime!! >= LIFT_HOLD_DURATION_MS) {
+                    robot.logic.requestLift = true
+                }
+            } else {
+                liftHoldStartTime = null
+            }
+        }
     }
 
 

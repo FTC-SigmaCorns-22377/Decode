@@ -57,7 +57,7 @@ class AimingSystem(
             estimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig()
         )
 
-        val limelight = (io as? HardwareIO)?.limelight
+        val limelight = (io as? HardwareIO).takeIf { apriltagTracking }?.limelight
         visionTracker = VisionTracker(
             limelight = limelight,
             allowedTagIds = FieldLandmarks.landmarkTagIds

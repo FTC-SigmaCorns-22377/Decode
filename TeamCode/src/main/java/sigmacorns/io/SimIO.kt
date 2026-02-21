@@ -28,6 +28,8 @@ class SimIO : SigmaIO {
     override var turretAngle: Double = 0.0
     override var breakPower: Double = 0.0
     override var transfer: Double = 0.0
+    override var tilt1: Double = 0.0
+    override var tilt2: Double = 0.0
 
 
     override fun position(): Pose2d = robot.drivetrainState.pos
@@ -49,6 +51,12 @@ class SimIO : SigmaIO {
     override fun distance(): Double {
         return 0.5 // Dummy value: 0.5 meters
     }
+
+    override fun setTurretPosition(Offset: Int) {
+        TODO("Not yet implemented")
+    }
+
+
 
     override fun update() {
         robot.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS),this)

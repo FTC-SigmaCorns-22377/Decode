@@ -80,6 +80,10 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     var autoSort: Boolean = true
 
+    // Brake tilt servos
+    var requestLift: Boolean = false
+    private val TILT_ACTIVE_POSITION = 0.5
+
     public enum class State {
         IDLE,
         INTAKING,
@@ -451,6 +455,12 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         // Update spindexer control
         spindexer.target = spindexerRotation
         spindexer.update(dt)
+
+        // Brake tilt servos
+        if (requestLift) {
+            io.tilt1 = TILT_ACTIVE_POSITION
+            io.tilt2 = TILT_ACTIVE_POSITION
+        }
 
         flywheel?.also {
             it.target = flywheelTargetVelocity

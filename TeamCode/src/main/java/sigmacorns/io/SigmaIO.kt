@@ -25,6 +25,9 @@ interface SigmaIO {
     //break servo
     var breakPower: Double //the value that contols the position of the servo to engage or disengage the servo
     var transfer: Double
+    //tilt servos for brake
+    var tilt1: Double
+    var tilt2: Double
     /* function to get robo position
     position( drive base)
     velocity(drive base)
@@ -39,6 +42,7 @@ interface SigmaIO {
     fun spindexerPosition(): Double
     fun distance(): Double
 
+    fun setTurretPosition(Offset: Int)
     fun update()
 
     fun setPosition(p: Pose2d)

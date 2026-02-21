@@ -5,6 +5,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainCenter
+import sigmacorns.constants.turretRange
 import sigmacorns.control.subsystem.AimingSystem
 import sigmacorns.control.Robot
 import sigmacorns.control.subsystem.ShotPowers
@@ -13,18 +14,21 @@ import sigmacorns.control.mpc.MPCRunner
 import sigmacorns.control.mpc.TrajoptEventMarker
 import sigmacorns.control.mpc.TrajoptLoader
 import sigmacorns.control.mpc.TrajoptTrajectory
+import sigmacorns.io.MotifPersistence
 import sigmacorns.io.PosePersistence
 import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.Balls
+import kotlin.math.PI
 
 data class TrajoptAutoData(
     val INTAKE_SEGMENTS: Map<String, List<Pair<Number, Number>>>,
     val SHOT_POWER: Double,
     val PROJECT_FILE_NAME: (Boolean) -> String, //blue -> name
     val ROOT: String,
-    val PRELOAD: Boolean
+    val PRELOAD: Boolean,
+    val initTurretAngle: Double = 0.0
 )
 val RedWallPreload = TrajoptAutoData (
     // Intake segments: trajectory name -> list of (startWaypointIndex, endWaypointIndex) pairs
@@ -45,7 +49,8 @@ val base = TrajoptAutoData(
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { if(it) "base-mirrored" else "base" },
     ROOT = "intake_1",
-    PRELOAD = true
+    PRELOAD = true,
+    initTurretAngle = -PI/2.0
 )
 
 val baseFar = TrajoptAutoData(
@@ -108,6 +113,8 @@ open class TrajoptAuto(
 
     override fun runOpMode() {
         val robot = Robot(io,blue)
+        val turretInitTicks = turretRange.posToTick(data.initTurretAngle).toInt()
+        io.setTurretPosition(turretInitTicks)
 
         val robotDir = TrajoptLoader.robotTrajoptDir()
         val projectFile = TrajoptLoader.findProjectFiles(robotDir).find {
@@ -124,7 +131,6 @@ open class TrajoptAuto(
         }
         robot.use {
             robot.init(initPos,false)
-            robot.startMPC()
 
             robot.logic.spindexerState = mutableListOf(
                 Balls.Green,
@@ -132,7 +138,22 @@ open class TrajoptAuto(
                 Balls.Purple
             )
 
-            waitForStart()
+            // Detect motif during init period
+            robot.startMotifDetection()
+            var detectedMotifId: Int? = null
+            while (opModeInInit()) {
+                val id = robot.pollMotif()
+                if (id != null) detectedMotifId = id
+                telemetry.addData("Motif", detectedMotifId?.toString() ?: "Scanning...")
+                telemetry.update()
+            }
+
+            // Init done — apply motif, switch to MPC, and go
+            if (detectedMotifId != null) {
+                robot.applyDetectedMotif(detectedMotifId)
+                MotifPersistence.saveMotif(detectedMotifId, storageDir())
+            }
+            robot.startMPC()
 
             val startTime = io.time()
             var zero = false
@@ -154,7 +175,11 @@ open class TrajoptAuto(
             }
 
             // Main loop
+            val motifDisplay = detectedMotifId?.let { "ID $it -> ${robot.logic.motif}" } ?: "NOT DETECTED"
             while (opModeIsActive() && !schedule.isCompleted) {
+                telemetry.addData("Motif", motifDisplay)
+                telemetry.addData("State", robot.logic.currentState.name)
+                telemetry.update()
                 robot.update()
                 io.update()
             }

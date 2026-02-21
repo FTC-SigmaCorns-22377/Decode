@@ -48,6 +48,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //breakServo
     private val breakServo: Servo? = hardwareMap.tryGet(Servo::class.java,"break")
     private val transferServo: Servo? = hardwareMap.tryGet(Servo::class.java,"transfer")
+    private val tilt1Servo: Servo? = hardwareMap.tryGet(Servo::class.java,"tilt1")
+    private val tilt2Servo: Servo? = hardwareMap.tryGet(Servo::class.java,"tilt2")
 
     //sensors
     val colorSensor: ColorRangeSensor? = hardwareMap.tryGet(ColorRangeSensor::class.java, "color")
@@ -73,8 +75,12 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var spindexer: Double = 0.0
     override var breakPower: Double = 0.0
     override var transfer: Double = 0.0
+    override var tilt1: Double = 0.0
+    override var tilt2: Double = 0.0
 
     private var savedVoltage: Double = 12.0
+
+    var turretOffset = 0
 
     // Cached motor values
     private var cachedFlywheelVelocity: Double = 0.0
@@ -92,6 +98,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private var lastSpindexer: Double = Double.NaN
     private var lastBreakPower: Double = Double.NaN
     private var lastTransfer: Double = Double.NaN
+    private var lastTilt1: Double = Double.NaN
+    private var lastTilt2: Double = Double.NaN
 
     companion object {
         const val UPDATE_THRESHOLD = 0.001
@@ -128,7 +136,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun turretPosition(): Double {
-        return cachedTurretPosition
+        return cachedTurretPosition  + turretOffset
     }
 
     override fun spindexerPosition(): Double {
@@ -137,6 +145,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     override fun distance(): Double {
         return distanceSensor?.getDistance(DistanceUnit.METER) ?: 0.0
+    }
+
+    override fun setTurretPosition(Offset: Int) {
+        turretOffset = -Offset //change
+
     }
 
     var posOffset = Pose2d()
@@ -192,6 +205,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         if (shouldUpdate(transfer, lastTransfer)) {
             transferServo?.position = transfer
             lastTransfer = transfer
+        }
+        if (shouldUpdate(tilt1, lastTilt1)) {
+            tilt1Servo?.position = tilt1
+            lastTilt1 = tilt1
+        }
+        if (shouldUpdate(tilt2, lastTilt2)) {
+            tilt2Servo?.position = tilt2
+            lastTilt2 = tilt2
         }
 
         allHubs.map { it.clearBulkCache() }
@@ -307,6 +328,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         spindexerMotor?.mode = DcMotor.RunMode.RUN_TO_POSITION
 
         transferServo?.direction = Servo.Direction.REVERSE
+        tilt1Servo?.direction = Servo.Direction.REVERSE
+        tilt2Servo?.direction = Servo.Direction.FORWARD
 
         // configuring pinpoint
         configurePinpoint()
