@@ -60,6 +60,10 @@ open class TeleopBase(
         gm2 = gamepad2
 
         robot = Robot(io,blue)
+
+        // Guarantee MPC solver is stopped for teleop
+        robot.stopMPCSolver()
+
         robot.init(
             PosePersistence.loadPose(storageDir()) ?: Pose2d(0.0,0.0,PI/2.0),
             true

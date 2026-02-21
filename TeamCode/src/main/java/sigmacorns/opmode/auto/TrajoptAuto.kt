@@ -143,7 +143,12 @@ open class TrajoptAuto(
                 Balls.Purple
             )
 
-            // Detect motif during init period
+            // Start MPC solver on limelight and pre-warm with first trajectory
+            robot.startMPCSolver()
+            robot.initMPC()
+            trajectories.firstOrNull()?.let { robot.prewarmMPC(it) }
+
+            // Switch to apriltag for motif detection during init
             robot.startMotifDetection()
             var detectedMotifId: Int? = null
             while (opModeInInit()) {
@@ -153,12 +158,15 @@ open class TrajoptAuto(
                 telemetry.update()
             }
 
-            // Init done — apply motif, switch to MPC, and go
+            // Init done — start MPC runner
+            robot.startMPCRunner()
+
+            // Apply motif if already detected during init
             if (detectedMotifId != null) {
                 robot.applyDetectedMotif(detectedMotifId)
                 MotifPersistence.saveMotif(detectedMotifId, storageDir())
+                robot.idleLimelight()
             }
-            robot.startMPC()
 
             val startTime = io.time()
             var zero = false
@@ -179,9 +187,20 @@ open class TrajoptAuto(
                 delay(3000)
             }
 
-            // Main loop
-            val motifDisplay = detectedMotifId?.let { "ID $it -> ${robot.logic.motif}" } ?: "NOT DETECTED"
+            // Main loop — continue polling for motif if not yet detected
+            var motifDetected = detectedMotifId != null
             while (opModeIsActive() && !schedule.isCompleted) {
+                if (!motifDetected) {
+                    val id = robot.pollMotif()
+                    if (id != null) {
+                        detectedMotifId = id
+                        robot.applyDetectedMotif(id)
+                        MotifPersistence.saveMotif(id, storageDir())
+                        robot.idleLimelight()
+                        motifDetected = true
+                    }
+                }
+                val motifDisplay = detectedMotifId?.let { "ID $it -> ${robot.logic.motif}" } ?: "Scanning..."
                 telemetry.addData("Motif", motifDisplay)
                 telemetry.addData("State", robot.logic.currentState.name)
                 telemetry.update()
