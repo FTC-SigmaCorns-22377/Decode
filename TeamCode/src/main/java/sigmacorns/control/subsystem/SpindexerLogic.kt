@@ -71,6 +71,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     var shotPower: Double = 0.0
     var spinupPower: Double = 0.6 * flywheelMotor.freeSpeed
     var shotVelocity: Double? = null
+    var preSpinActive: Boolean = false
 
     private var flywheelTargetVelocity: Double = 0.0
     var motif: List<Balls?> = listOf(Balls.Green, Balls.Purple, Balls.Purple)
@@ -462,7 +463,12 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         }
 
         flywheel?.also {
-            it.target = flywheelTargetVelocity
+            if (preSpinActive) {
+                it.target = shotVelocity ?: (shotPower * flywheelMotor.freeSpeed)
+                it.hold = false
+            } else {
+                it.target = flywheelTargetVelocity
+            }
             it.update(io.flywheelVelocity(),dt)
         } ?: run {
             // Use PID + feedforward

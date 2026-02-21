@@ -244,10 +244,7 @@ open class TrajoptAuto(
             if (!flywheelPreSpun && nextShootIdx < shootSampleIndices.size
                 && sampleI >= shootSampleIndices[nextShootIdx] - PRESPIN_LEAD_SAMPLES) {
                 spindexerLogic.shotPower = data.SHOT_POWER
-                spindexerLogic.flywheel?.let {
-                    it.target = spindexerLogic.shotVelocity ?: (data.SHOT_POWER * sigmacorns.constants.flywheelMotor.freeSpeed)
-                    it.hold = false
-                }
+                spindexerLogic.preSpinActive = true
                 flywheelPreSpun = true
                 println("TrajoptAuto: Pre-spinning flywheel at sample $sampleI")
             }
@@ -260,6 +257,7 @@ open class TrajoptAuto(
                     intaking = false
                 }
                 shootAllBalls(spindexerLogic)
+                spindexerLogic.preSpinActive = false
                 nextShootIdx++
                 flywheelPreSpun = false
             }
