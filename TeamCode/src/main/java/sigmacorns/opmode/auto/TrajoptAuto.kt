@@ -159,12 +159,14 @@ open class TrajoptAuto(
                 MotifPersistence.saveMotif(detectedMotifId, storageDir())
             }
             robot.startMPC()
+            robot.logic.spinupRequested = true
 
             val startTime = io.time()
             var zero = false
 
             val schedule = robot.scope.launch {
                 if(data.PRELOAD) shootAllBalls(robot.logic)
+                robot.logic.spinupRequested = true
                 println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {
                     if(traj.name == "intake_3") {
@@ -260,6 +262,7 @@ open class TrajoptAuto(
                     intaking = false
                 }
                 shootAllBalls(spindexerLogic)
+                spindexerLogic.spinupRequested = true
                 nextShootIdx++
                 flywheelPreSpun = false
             }
@@ -273,6 +276,7 @@ open class TrajoptAuto(
         while (nextShootIdx < shootSampleIndices.size) {
             println("TrajoptAuto: Shooting remaining marker at trajectory end")
             shootAllBalls(spindexerLogic)
+            spindexerLogic.spinupRequested = true
             nextShootIdx++
         }
 
