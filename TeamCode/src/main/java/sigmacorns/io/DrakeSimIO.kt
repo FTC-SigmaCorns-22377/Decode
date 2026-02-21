@@ -62,6 +62,42 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     @Volatile
     private var currentTransfer = 0.0
 
+    // Cached reflection methods (resolved once at init, not per-call)
+    private var cachedBroadcastMethod: java.lang.reflect.Method? = null
+    private var cachedGetGamepad1Method: java.lang.reflect.Method? = null
+    private var cachedGetGamepad2Method: java.lang.reflect.Method? = null
+    private var cachedSetChoreoPathMethod: java.lang.reflect.Method? = null
+    private var cachedStopMethod: java.lang.reflect.Method? = null
+
+    // Reusable SigmaIO snapshot to avoid per-step allocation
+    private val snapshotIO = object : SigmaIO {
+        override var driveFL: Double = 0.0
+        override var driveBL: Double = 0.0
+        override var driveFR: Double = 0.0
+        override var driveBR: Double = 0.0
+        override var shooter: Double = 0.0
+        override var intake: Double = 0.0
+        override var turret: Double = 0.0
+        override var spindexer: Double = 0.0
+        override var turretAngle: Double = 0.0
+        override var breakPower: Double = 0.0
+        override var transfer: Double = 0.0
+
+        override fun position(): Pose2d = Pose2d(0.0, 0.0, 0.0)
+        override fun velocity(): Pose2d = Pose2d(0.0, 0.0, 0.0)
+        override fun flywheelVelocity(): Double = 0.0
+        override fun turretPosition(): Double = 0.0
+        override fun spindexerPosition(): Double = 0.0
+        override fun distance(): Double = Double.MAX_VALUE
+        override fun update() {}
+        override fun setPosition(p: Pose2d) {}
+        override fun time(): Duration = 0.seconds
+        override fun configurePinpoint() {}
+        override fun voltage(): Double = 12.0
+        override fun colorSensorDetectsBall(): Boolean = false
+        override fun colorSensorGetBallColor(): Balls? = null
+    }
+
     init {
         // Try to use RealSimServer if available (test environment), otherwise use stub
         server = try {
@@ -77,6 +113,17 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
             val stubServer = SimServer(8080)
             stubServer.start()
             stubServer
+        }
+
+        // Cache reflection methods once at init (avoids per-call Method lookup)
+        try {
+            cachedBroadcastMethod = server.javaClass.getMethod("broadcast", SimState::class.java)
+            cachedGetGamepad1Method = server.javaClass.getMethod("getGamepad1")
+            cachedGetGamepad2Method = server.javaClass.getMethod("getGamepad2")
+            cachedSetChoreoPathMethod = server.javaClass.getMethod("setChoreoPath", List::class.java)
+            cachedStopMethod = server.javaClass.getMethod("stop")
+        } catch (e: Exception) {
+            // Stub server - methods not available, leave null
         }
 
         // Spawn initial field balls at artifact pickup locations
@@ -111,34 +158,16 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                     val snapshotSpindexer = currentSpindexer
                     val snapshotTransfer = currentTransfer
 
-                    // Step simulation with motor command snapshot
-                    val tmpIO = object : SigmaIO {
-                        override var driveFL: Double = snapshotFL
-                        override var driveBL: Double = snapshotBL
-                        override var driveFR: Double = snapshotFR
-                        override var driveBR: Double = snapshotBR
-                        override var shooter: Double = snapshotShooter
-                        override var intake: Double = snapshotIntake
-                        override var turret: Double = snapshotTurret
-                        override var spindexer: Double = snapshotSpindexer
-                        override var turretAngle: Double = 0.0
-                        override var breakPower: Double = 0.0
-                        override var transfer: Double = snapshotTransfer
-
-                        override fun position(): Pose2d = Pose2d(0.0, 0.0, 0.0)
-                        override fun velocity(): Pose2d = Pose2d(0.0, 0.0, 0.0)
-                        override fun flywheelVelocity(): Double = 0.0
-                        override fun turretPosition(): Double = 0.0
-                        override fun spindexerPosition(): Double = 0.0
-                        override fun distance(): Double = Double.MAX_VALUE
-                        override fun update() {}
-                        override fun setPosition(p: Pose2d) {}
-                        override fun time(): Duration = 0.seconds
-                        override fun configurePinpoint() {}
-                        override fun voltage(): Double = 12.0
-                        override fun colorSensorDetectsBall(): Boolean = false
-                        override fun colorSensorGetBallColor(): Balls? = null
-                    }
+                    // Update reusable snapshot IO (avoids per-step allocation)
+                    snapshotIO.driveFL = snapshotFL
+                    snapshotIO.driveBL = snapshotBL
+                    snapshotIO.driveFR = snapshotFR
+                    snapshotIO.driveBR = snapshotBR
+                    snapshotIO.shooter = snapshotShooter
+                    snapshotIO.intake = snapshotIntake
+                    snapshotIO.turret = snapshotTurret
+                    snapshotIO.spindexer = snapshotSpindexer
+                    snapshotIO.transfer = snapshotTransfer
 
                     try {
                         synchronized(simLock) {
@@ -148,7 +177,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                                 println("WARNING: Invalid motor commands detected, skipping step")
                                 println("  FL=$snapshotFL BL=$snapshotBL FR=$snapshotFR BR=$snapshotBR")
                             } else {
-                                model.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS), tmpIO)
+                                model.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS), snapshotIO)
                                 t += SIM_UPDATE_TIME
 
                                 // Update ball interaction simulation
@@ -305,12 +334,12 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
         set(value) { currentTurret = value.sanitize() }
     override var spindexer: Double
         get() = currentSpindexer
-        set(value) { currentSpindexer = value.sanitize() }
+        set(value) { currentSpindexer = if (value.isNaN() || value.isInfinite()) 0.0 else value }
     override var turretAngle: Double = 0.0
     override var breakPower: Double = 0.0
     override var transfer: Double
         get() = currentTransfer
-        set(value) { currentTransfer = value.sanitize() }
+        set(value) { currentTransfer = if (value.isNaN() || value.isInfinite()) 0.0 else value.coerceIn(0.0, 1.0) }
 
     private fun Double.sanitize(): Double {
         return when {
@@ -323,6 +352,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     override fun position(): Pose2d = synchronized(simLock) { model.drivetrainState.pos }
     override fun velocity(): Pose2d = synchronized(simLock) { model.drivetrainState.vel }
+    // Returns flywheel angular velocity in rad/s (raw output shaft velocity from Drake)
     override fun flywheelVelocity(): Double = synchronized(simLock) { model.flywheelState.omega }
 
     override fun turretPosition(): Double = synchronized(simLock) {
@@ -366,8 +396,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     private fun getGamepad1State(): GamepadState {
         return try {
-            val method = server.javaClass.getMethod("getGamepad1")
-            method.invoke(server) as GamepadState
+            cachedGetGamepad1Method?.invoke(server) as? GamepadState ?: GamepadState()
         } catch (e: Exception) {
             GamepadState()
         }
@@ -375,8 +404,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     private fun getGamepad2State(): GamepadState {
         return try {
-            val method = server.javaClass.getMethod("getGamepad2")
-            method.invoke(server) as GamepadState
+            cachedGetGamepad2Method?.invoke(server) as? GamepadState ?: GamepadState()
         } catch (e: Exception) {
             GamepadState()
         }
@@ -384,8 +412,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     private fun broadcastState(vizState: SimState) {
         try {
-            val method = server.javaClass.getMethod("broadcast", SimState::class.java)
-            method.invoke(server, vizState)
+            cachedBroadcastMethod?.invoke(server, vizState)
         } catch (e: Exception) {
             // Silently fail on stub server
         }
@@ -477,8 +504,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
         model.destroy()
         try {
-            val method = server.javaClass.getMethod("stop")
-            method.invoke(server)
+            cachedStopMethod?.invoke(server)
         } catch (e: Exception) {
             // Silently fail on stub server
         }
@@ -491,8 +517,7 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     fun setChoreoPath(path: List<PathPoint>) {
         try {
-            val method = server.javaClass.getMethod("setChoreoPath", List::class.java)
-            method.invoke(server, path)
+            cachedSetChoreoPathMethod?.invoke(server, path)
         } catch (e: Exception) {
             // Silently fail on stub server
         }

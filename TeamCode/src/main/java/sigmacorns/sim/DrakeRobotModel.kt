@@ -7,6 +7,7 @@ import org.joml.Vector3d
 import sigmacorns.io.SigmaIO
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.*
+import kotlin.math.PI
 
 class DrakeRobotModel(urdfPath: String) {
     private var simPtr: Long = 0
@@ -45,6 +46,14 @@ class DrakeRobotModel(urdfPath: String) {
     var wheelForces = MutableList(4) { Vector3d() }
 
     fun advanceSim(t: Double, io: SigmaIO) {
+        // Spindexer P-controller: io.spindexer is an encoder tick target (RUN_TO_POSITION mode),
+        // not a motor power. Convert to position error and compute motor power via P control.
+        val spindexerTickTarget = io.spindexer
+        val spindexerTargetRad = spindexerTickTarget / SPINDEXER_TICKS_PER_RAD
+        val spindexerCurrentRad = jointPositions["spindexer_joint"] ?: 0.0
+        val spindexerError = spindexerTargetRad - spindexerCurrentRad
+        val spindexerPower = (SPINDEXER_P_GAIN * spindexerError).coerceIn(-1.0, 1.0)
+
         // Map IO to input vector
         // Input order: fl, bl, br, fr, intake, spindexer, turret, flywheel, hood
         val inputs = doubleArrayOf(
@@ -53,7 +62,7 @@ class DrakeRobotModel(urdfPath: String) {
             io.driveBR, // br
             io.driveFR, // fr
             io.intake,  // intake
-            io.spindexer, // spindexer
+            spindexerPower, // spindexer (P-controlled, not raw tick target)
             io.turret, // turret power
             io.shooter, // flywheel
             io.turretAngle // hood (adjustable arc length)
@@ -169,5 +178,14 @@ class DrakeRobotModel(urdfPath: String) {
         DrakeNative.setPosition(simPtr, p.v.x, p.v.y, p.rot)
         drivetrainState.pos = p
         drivetrainState.vel = Pose2d()
+    }
+
+    companion object {
+        // Spindexer: (1+(46/17)) * (1+(46/11)) * 28 ticks per revolution
+        private val SPINDEXER_TICKS_PER_RAD =
+            ((1.0 + (46.0 / 17.0)) * (1.0 + (46.0 / 11.0)) * 28.0) / (2 * PI)
+
+        // P gain for simulated RUN_TO_POSITION control (radians -> power)
+        private const val SPINDEXER_P_GAIN = 8.0
     }
 }

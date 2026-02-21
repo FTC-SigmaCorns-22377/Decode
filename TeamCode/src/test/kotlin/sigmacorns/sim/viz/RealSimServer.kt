@@ -15,6 +15,7 @@ class RealSimServer(private val port: Int = 8000) {
     private val sockets = ConcurrentHashMap.newKeySet<WsContext>()
     private val mapper = ObjectMapper()
     private val history = java.util.Collections.synchronizedList(mutableListOf<SimState>())
+    private val MAX_HISTORY_SIZE = 10000
     @Volatile private var choreoPath: List<PathPoint> = emptyList()
     @Volatile private var gamepad1State: GamepadState = GamepadState()
     @Volatile private var gamepad2State: GamepadState = GamepadState()
@@ -153,11 +154,16 @@ class RealSimServer(private val port: Int = 8000) {
     private var lastBroadcastLog = 0L
     fun broadcast(state: SimState) {
         history.add(state)
+        // Cap history to prevent OOM in long runs
+        while (history.size > MAX_HISTORY_SIZE) {
+            history.removeAt(0)
+        }
         val now = System.currentTimeMillis()
         if (now - lastBroadcastLog > 5000) {
             println("Broadcasting state, t=${state.t}, connected clients: ${sockets.size}, history size: ${history.size}")
             lastBroadcastLog = now
         }
+        if (sockets.isEmpty()) return  // Skip serialization if no clients
         val json = mapper.writeValueAsString(state)
         sockets.forEach {
             if (it.session.isOpen) {

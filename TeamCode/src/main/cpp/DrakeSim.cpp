@@ -36,13 +36,11 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
   auto &context = simulator_->get_mutable_context();
   auto &plant_context = diagram_->GetMutableSubsystemContext(*plant_, &context);
 
-  // Sub-stepping
-  constexpr int kSubsteps = 5;
+  // Sub-stepping: 3 substeps balances accuracy vs performance
+  constexpr int kSubsteps = 3;
   const double sub_dt = dt / kSubsteps;
 
-  static const std::array<const char *, 4> wheel_names = {
-      "fl_wheel", "bl_wheel", "br_wheel", "fr_wheel"};
-  const double inv_sqrt2 = 1.0 / std::sqrt(2.0);
+  static const double inv_sqrt2 = 1.0 / std::sqrt(2.0);
   static const std::array<Eigen::Vector3d, 4> traction_dirs = {
       Eigen::Vector3d(inv_sqrt2, -inv_sqrt2, 0), // FL
       Eigen::Vector3d(inv_sqrt2, inv_sqrt2, 0),  // BL
@@ -50,13 +48,36 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
       Eigen::Vector3d(inv_sqrt2, inv_sqrt2, 0)   // FR
   };
 
+  // Pre-compute constants outside substep loop
+  const double l = mecanum_params_.lx + mecanum_params_.ly;
+  const double l2 = std::sqrt(mecanum_params_.lx * mecanum_params_.lx +
+                              mecanum_params_.ly * mecanum_params_.ly);
+  const double r = mecanum_params_.wheel_radius;
+  const double max_traction_force = mecanum_params_.mu * (mecanum_params_.mass * 9.81) / 4.0;
+  const double max_torque = max_traction_force * r;
+  const double force_scale = (1.0 / r) / std::sqrt(2.0);
+  const double inv_mass = 1.0 / mecanum_params_.mass;
+  const double inv_inertia = 1.0 / mecanum_params_.rot_inertia;
+
+  // Pre-allocate spatial forces vector (reused each substep)
+  std::vector<ExternallyAppliedSpatialForce<double>> spatial_forces;
+  spatial_forces.reserve(1);
+
+  // Pre-clamp motor powers once
+  std::array<double, 4> motor_powers = {0, 0, 0, 0};
+  for (size_t i = 0; i < 4; ++i) {
+    motor_powers[i] = (i < inputs.size()) ? std::clamp(inputs[i], -1.0, 1.0) : 0.0;
+  }
+
+  const int num_actuators = plant_->num_actuators();
+
   for (int step = 0; step < kSubsteps; ++step) {
     for (auto &force : last_wheel_forces_W_) {
       force = {0.0, 0.0, 0.0};
     }
 
     Eigen::VectorXd velocities = plant_->GetVelocities(plant_context);
-    Eigen::VectorXd torques = Eigen::VectorXd::Zero(plant_->num_actuators());
+    Eigen::VectorXd torques = Eigen::VectorXd::Zero(num_actuators);
 
     const auto &base_body = plant_->get_body(base_body_index_);
     RigidTransformd X_W_Base =
@@ -76,10 +97,7 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
     const double v_body_y = -v_world.x() * s + v_world.y() * c;
     const double omega_body = omega_world;
 
-    const double l = mecanum_params_.lx + mecanum_params_.ly;
-    const double l2 = std::sqrt(mecanum_params_.lx * mecanum_params_.lx +
-                                mecanum_params_.ly * mecanum_params_.ly);
-    const double r = mecanum_params_.wheel_radius;
+    // l, l2, r pre-computed outside loop
 
     // ACCURATE MECANUM DYNAMICS MODEL
     // Based on MecanumDynamics.kt - uses inverse kinematics to get wheel velocities
@@ -94,36 +112,25 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
         (v_body_x + v_body_y + l * omega_body) / r   // FR
     };
 
-    // Get motor power commands
-    std::array<double, 4> motor_powers = {0, 0, 0, 0};
-    for (size_t i = 0; i < 4; ++i) {
-      motor_powers[i] = (i < inputs.size()) ? std::clamp(inputs[i], -1.0, 1.0) : 0.0;
-    }
-
-    // Calculate motor torques using DC motor model
+    // Calculate motor torques using DC motor model (motor_powers pre-clamped)
     // τ = τ_stall * (power - ω/ω_free)
     std::array<double, 4> motor_torques;
     for (size_t i = 0; i < 4; ++i) {
       motor_torques[i] = MotorTorque(mecanum_params_.drive_motor, motor_powers[i], wheel_omegas[i]);
     }
 
-    // Traction limit: clamp wheel forces to friction circle
-    // F_max = μ * N_wheel = μ * (m * g / 4)
-    // max_torque = F_max * r
-    const double max_traction_force = mecanum_params_.mu * (mecanum_params_.mass * 9.81) / 4.0;
-    const double max_torque = max_traction_force * r;
+    // Traction limit (max_torque pre-computed)
     for (size_t i = 0; i < 4; ++i) {
       motor_torques[i] = std::clamp(motor_torques[i], -max_torque, max_torque);
     }
 
-    // Forward acceleration kinematics: wheel torques → robot acceleration
-    // This uses the forwardAcc matrix from MecanumDynamics.kt
-    // acc = forwardAcc * torques
-    // forwardAcc is scaled by (1/r)/sqrt(2) * [1/m, 1/m, 1/I]
-    const double force_scale = (1.0 / r) / std::sqrt(2.0);
-    const double acc_x = force_scale * (motor_torques[0] + motor_torques[1] + motor_torques[2] + motor_torques[3]) / mecanum_params_.mass;
-    const double acc_y = force_scale * (-motor_torques[0] + motor_torques[1] - motor_torques[2] + motor_torques[3]) / mecanum_params_.mass;
-    const double alpha = force_scale * (-l2 * motor_torques[0] - l2 * motor_torques[1] + l2 * motor_torques[2] + l2 * motor_torques[3]) / mecanum_params_.rot_inertia;
+    // Forward acceleration kinematics (constants pre-computed)
+    const double torque_sum = motor_torques[0] + motor_torques[1] + motor_torques[2] + motor_torques[3];
+    const double torque_lat = -motor_torques[0] + motor_torques[1] - motor_torques[2] + motor_torques[3];
+    const double torque_rot = -motor_torques[0] - motor_torques[1] + motor_torques[2] + motor_torques[3];
+    const double acc_x = force_scale * torque_sum * inv_mass;
+    const double acc_y = force_scale * torque_lat * inv_mass;
+    const double alpha = force_scale * l2 * torque_rot * inv_inertia;
 
     // Transform acceleration from body frame to world frame
     const double acc_world_x = acc_x * c - acc_y * s;
@@ -142,8 +149,8 @@ void DrakeSim::Step(double dt, const std::vector<double> &inputs) {
         alpha * mecanum_params_.rot_inertia
     );
 
-    // Apply spatial force to base
-    std::vector<ExternallyAppliedSpatialForce<double>> spatial_forces;
+    // Apply spatial force to base (vector pre-allocated, reuse)
+    spatial_forces.clear();
     spatial_forces.push_back({
         base_body_index_,
         Eigen::Vector3d::Zero(),  // Applied at COM

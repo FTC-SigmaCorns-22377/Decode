@@ -197,7 +197,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         allHubs.map { it.clearBulkCache() }
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
-        cachedFlywheelVelocity = (flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
+        // Flywheel velocity in rad/s (raw output shaft angular velocity)
+        cachedFlywheelVelocity = flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0
         cachedTurretPosition = turretMotor?.currentPosition?.toDouble() ?: 0.0
         cachedSpindexerPosition = spindexerMotor?.currentPosition?.toDouble() ?: 0.0
     }

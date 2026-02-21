@@ -187,7 +187,7 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
         private const val INTAKE_POWER_THRESHOLD = 0.1
         private const val SPINDEXER_SLOT_ANGLE = 2 * PI / 3
         private const val SLOT_ALIGNMENT_TOLERANCE = 0.15
-        private const val TRANSFER_POWER_THRESHOLD = 0.5
+        private const val TRANSFER_POWER_THRESHOLD = 0.05
         private const val FLYWHEEL_RADIUS = 0.048
         private const val SHOT_SPAWN_OFFSET = 0.15
         private const val FLYWHEEL_EFFICIENCY = 0.24

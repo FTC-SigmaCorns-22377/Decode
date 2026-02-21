@@ -30,7 +30,7 @@ DrakeSim::~DrakeSim() {}
 void DrakeSim::BuildSimulator(const RobotState *state) {
   DiagramBuilder<double> builder;
 
-  auto [plant, scene_graph] = AddMultibodyPlantSceneGraph(&builder, 0.005);
+  auto [plant, scene_graph] = AddMultibodyPlantSceneGraph(&builder, 0.008);
   plant_ = &plant;
   scene_graph_ = &scene_graph;
 
