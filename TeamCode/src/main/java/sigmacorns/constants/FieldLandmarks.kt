@@ -39,12 +39,18 @@ object FieldLandmarks {
     val landmarkTagIds: Set<Int> = landmarks.keys
 
     /** Goal position for the blue alliance. */
-    val blueGoalPosition = Vector2d(-1.480126, 1.598982)
+    val blueGoalPosition = Vector2d(-1.580126, 1.598982)
 
     /** Goal position for the red alliance. */
-    val redGoalPosition = Vector2d(1.480126, 1.598982)
+    val redGoalPosition = Vector2d(1.580126, 1.598982)
 
     /** Get goal position for an alliance. */
     fun goalPosition(blue: Boolean): Vector2d =
         if (blue) blueGoalPosition else redGoalPosition
+
+    /** Get 3D goal position for an alliance, using the specified goal height. */
+    fun goalPosition3d(blue: Boolean, goalHeight: Double): Vector3d {
+        val pos2d = goalPosition(blue)
+        return Vector3d(pos2d.x, pos2d.y, goalHeight)
+    }
 }

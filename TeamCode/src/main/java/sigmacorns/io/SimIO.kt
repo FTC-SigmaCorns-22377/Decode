@@ -52,7 +52,7 @@ class SimIO : SigmaIO {
         return 0.5 // Dummy value: 0.5 meters
     }
 
-    override fun setTurretPosition(Offset: Int) {
+    override fun setTurretPosition(Offset: Double) {
         TODO("Not yet implemented")
     }
 

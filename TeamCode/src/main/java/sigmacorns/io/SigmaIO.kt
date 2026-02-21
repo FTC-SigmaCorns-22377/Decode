@@ -42,7 +42,7 @@ interface SigmaIO {
     fun spindexerPosition(): Double
     fun distance(): Double
 
-    fun setTurretPosition(Offset: Int)
+    fun setTurretPosition(Offset: Double)
     fun update()
 
     fun setPosition(p: Pose2d)

@@ -1,5 +1,6 @@
 package sigmacorns.io
 
+import com.qualcomm.hardware.broadcom.BroadcomColorSensorImpl
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.hardware.lynx.LynxModule
@@ -81,7 +82,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     private var savedVoltage: Double = 12.0
 
-    var turretOffset = 0
+    var turretOffset = 0.0
 
     // Cached motor values
     private var cachedFlywheelVelocity: Double = 0.0
@@ -137,7 +138,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun turretPosition(): Double {
-        return cachedTurretPosition  + turretOffset
+        return cachedTurretPosition + turretOffset
     }
 
     override fun spindexerPosition(): Double {
@@ -148,8 +149,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         return distanceSensor?.getDistance(DistanceUnit.METER) ?: 0.0
     }
 
-    override fun setTurretPosition(Offset: Int) {
-        turretOffset = -Offset //change
+    override fun setTurretPosition(Offset: Double) {
+        turretOffset = Offset //change
 
     }
 
@@ -262,19 +263,19 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private var cachedB: Int = 0
     private var cachedA: Int = 0
 
-    private val rawRField = RevColorSensorV3::class.java.getDeclaredField("red").also {
+    private val rawRField = BroadcomColorSensorImpl::class.java.getDeclaredField("red").also {
         it.isAccessible = true
     }
 
-    private val rawBField = RevColorSensorV3::class.java.getDeclaredField("blue").also {
+    private val rawBField = BroadcomColorSensorImpl::class.java.getDeclaredField("blue").also {
         it.isAccessible = true
     }
 
-    private val rawGField = RevColorSensorV3::class.java.getDeclaredField("green").also {
+    private val rawGField = BroadcomColorSensorImpl::class.java.getDeclaredField("green").also {
         it.isAccessible = true
     }
 
-    private val rawAField = RevColorSensorV3::class.java.getDeclaredField("alpha").also {
+    private val rawAField = BroadcomColorSensorImpl::class.java.getDeclaredField("alpha").also {
         it.isAccessible = true
     }
 

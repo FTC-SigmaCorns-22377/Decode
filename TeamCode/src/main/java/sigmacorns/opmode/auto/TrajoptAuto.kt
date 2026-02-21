@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainCenter
 import sigmacorns.constants.turretRange
+import sigmacorns.constants.turretTicksPerRad
 import sigmacorns.control.subsystem.AimingSystem
 import sigmacorns.control.Robot
 import sigmacorns.control.subsystem.ShotPowers
@@ -61,7 +62,8 @@ val baseFar = TrajoptAutoData(
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { if(it) "basefar" else "basefarred" },
     ROOT = "intake_1",
-    PRELOAD = true
+    PRELOAD = true,
+    initTurretAngle = -PI/2.0
 )
 
 val intakeTestAuto = TrajoptAutoData(
@@ -114,7 +116,9 @@ open class TrajoptAuto(
 
     override fun runOpMode() {
         val robot = Robot(io,blue)
-        val turretInitTicks = turretRange.posToTick(data.initTurretAngle).toInt()
+        //val turretInitTicks = turretRange.posToTick(data.initTurretAngle).toInt()
+        val turretInitTicks = (data.initTurretAngle*turretTicksPerRad)
+        println("TURRET INIT TICKS=$turretInitTicks")
         io.setTurretPosition(turretInitTicks)
 
         val robotDir = TrajoptLoader.robotTrajoptDir()
