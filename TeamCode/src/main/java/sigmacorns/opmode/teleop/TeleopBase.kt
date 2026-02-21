@@ -39,6 +39,7 @@ open class TeleopBase(
     private var wasLeftBumper = false
     private var wasRightBumper = false
     private var wasOperatorLeftBumper = false
+    private var wasOperatorRightBumper = false
 
     // Brake lift hold timer
     private var liftHoldStartTime: Long? = null
@@ -196,6 +197,11 @@ open class TeleopBase(
             robot.logic.spinupRequested = !robot.logic.spinupRequested
         }
         wasOperatorLeftBumper = gm2.left_bumper
+
+        if (gm2.right_bumper && !wasOperatorRightBumper) {
+            robot.logic.spinup2Requested = !robot.logic.spinup2Requested
+        }
+        wasOperatorRightBumper = gm2.right_bumper
 
         // Brake lift control — hold both gm2 triggers for 1 second to activate
         val liftTriggersHeld = gm2.left_trigger > 0.5 && gm2.right_trigger > 0.5

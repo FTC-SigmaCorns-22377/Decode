@@ -70,6 +70,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     var shotPower: Double = 0.0
     var spinupPower: Double = 0.6 * flywheelMotor.freeSpeed
+    var spinupPower2: Double = 0.6 * flywheelMotor.freeSpeed
     var shotVelocity: Double? = null
 
     private var flywheelTargetVelocity: Double = 0.0
@@ -78,6 +79,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     /** Whether continuous shooting is requested */
     var shootingRequested: Boolean = false
     var spinupRequested: Boolean = false
+    var spinup2Requested: Boolean = false
 
     var autoSort: Boolean = true
 
@@ -179,6 +181,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     private suspend fun zeroBehavior(): State {
         if(offsetActive) spindexerRotation -= MODE_CHANGE_ANGLE
+        offsetActive = false
 
 
         delay(100)
@@ -201,6 +204,9 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
             if(!offsetActive) pollColor()
             if (spinupRequested) {
                 flywheelTargetVelocity = spinupPower
+                flywheel?.hold = true
+            } else if (spinup2Requested) {
+                flywheelTargetVelocity = spinupPower2
                 flywheel?.hold = true
             } else {
                 flywheelTargetVelocity = 0.0
@@ -257,8 +263,11 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         }
 
         //if flywheel spinup is requested, spin up flywheel
-        if (spinupRequested == true) {
+        if (spinupRequested) {
             flywheelTargetVelocity = spinupPower
+            flywheel?.hold = true
+        } else if (spinup2Requested) {
+            flywheelTargetVelocity = spinupPower2
             flywheel?.hold = true
         } else {
             flywheelTargetVelocity = 0.0
@@ -272,7 +281,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
         // Ball detected -> transition to MOVING
         nudgeDirection = 1.0
-        return State.MOVING
+        return if(spindexerState.all { it != null }) State.FULL else State.MOVING
     }
 
     private suspend fun movingBehavior(): State {
@@ -330,8 +339,11 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         io.intake = 0.0
 
         //if flywheel spinup is requested, spin up flywheel
-        if (spinupRequested == true) {
+        if (spinupRequested) {
             flywheelTargetVelocity = spinupPower
+            flywheel?.hold = true
+        } else if (spinup2Requested) {
+            flywheelTargetVelocity = spinupPower2
             flywheel?.hold = true
         } else {
             flywheelTargetVelocity = 0.0

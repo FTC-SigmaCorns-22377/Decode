@@ -54,6 +54,19 @@ val base = TrajoptAutoData(
     initTurretAngle = -PI/2.0
 )
 
+val baseBlue = TrajoptAutoData(
+    INTAKE_SEGMENTS= mapOf(
+        "intake_1" to listOf(1 to 2),
+        "intake_2" to listOf(1 to 2),
+        "intake_3" to listOf(1 to 2)
+    ),
+    SHOT_POWER = ShotPowers.longShotPower,
+    PROJECT_FILE_NAME = { if(it) "base-mirrored" else "baseRed" },
+    ROOT = "intake_1",
+    PRELOAD = true,
+    initTurretAngle = -PI/2.0
+)
+
 val baseFar = TrajoptAutoData(
     INTAKE_SEGMENTS= mapOf(
         "intake_1" to listOf(1 to 2),
@@ -100,6 +113,9 @@ class AutoBlueFarFull: TrajoptAuto(baseFar, true)
 
 @Autonomous(name = "RedWallAuto", group = "Auto", preselectTeleOp = "TeleopRed")
 class RedWallAuto: TrajoptAuto(RedWallPreload, false)
+
+@Autonomous(name = "BlueMixed", group = "Auto", preselectTeleOp = "TeleopBlue")
+class BlueMixed: TrajoptAuto(baseBlue, true)
 
 
 @Autonomous(name = "IntakeTestAuto", group = "Auto")
@@ -232,7 +248,7 @@ open class TrajoptAuto(
             when {
                 shouldIntake -> {
                     println("TrajoptAuto: intaking")
-                    spindexerLogic.startIntaking()
+                    if (spindexerLogic.currentState!= SpindexerLogic.State.FULL) spindexerLogic.startIntaking()
                     intaking = true
                 }
                 !shouldIntake && intaking -> {
