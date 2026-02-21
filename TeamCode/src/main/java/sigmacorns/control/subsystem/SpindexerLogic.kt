@@ -59,7 +59,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     // Transfer servo position constants db(discrete servo: 0.0 = retracted, 1.0 = extended)
     private val TRANSFER_UP_POSITION = 0.135       // Extended position (towards shooter)
     private val TRANSFER_DOWN_POSITION = 0.0     // Retracted position (reset)
-    private val TRANSFER_UP_TIME = 450.milliseconds
+    private val TRANSFER_UP_TIME = 325.milliseconds
     private val TRANSFER_RESET_TIME = 200.milliseconds
 
     //extra variables

@@ -44,8 +44,8 @@ val RedWallPreload = TrajoptAutoData (
 
 val base = TrajoptAutoData(
     INTAKE_SEGMENTS= mapOf(
-        "intake_1" to listOf(1 to 2),
-        "intake_2" to listOf(1 to 2),
+        "intake_1" to listOf(1 to 2.3),
+        "intake_2" to listOf(1 to 2.3),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { if(it) "base-mirrored" else "base" },
