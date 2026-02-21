@@ -61,7 +61,126 @@ robotHeading.visible = false;
 let gamepadConnected = false;
 const GAMEPAD_DEADZONE = 0.1;
 
-// Current gamepad state object (updated by gamecontroller.js events)
+// --- Controller Type Detection & Mapping ---
+// Supports Xbox (all variants), PlayStation (DS4, DualSense), and generic controllers.
+// When the browser reports mapping === "standard", all controllers use the same W3C layout.
+// For non-standard mappings (common with PS controllers on Linux/Firefox), we detect the
+// controller type and apply the correct axis/button layout.
+const CONTROLLER_TYPES = { XBOX: 'Xbox', PLAYSTATION: 'PlayStation', GENERIC: 'Generic' };
+
+function detectControllerType(gamepadId) {
+    const id = (gamepadId || '').toLowerCase();
+    if (id.includes('xbox') || id.includes('xinput') || id.includes('microsoft') || id.includes('045e')) {
+        return CONTROLLER_TYPES.XBOX;
+    }
+    if (id.includes('playstation') || id.includes('dualshock') || id.includes('dualsense') ||
+        id.includes('054c') || id.includes('sony') || id.includes('wireless controller')) {
+        return CONTROLLER_TYPES.PLAYSTATION;
+    }
+    return CONTROLLER_TYPES.GENERIC;
+}
+
+// W3C Standard Gamepad mapping — used when gp.mapping === "standard".
+// Both Xbox and PlayStation controllers use this layout in Chrome and most modern browsers.
+const MAPPING_STANDARD = {
+    name: 'Standard',
+    axes: { LX: 0, LY: 1, RX: 2, RY: 3 },
+    buttons: { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7,
+               BACK: 8, START: 9, LS: 10, RS: 11,
+               DPAD_UP: 12, DPAD_DOWN: 13, DPAD_LEFT: 14, DPAD_RIGHT: 15 },
+    triggers: 'buttons', // triggers read via buttons[].value (0..1)
+    dpad: 'buttons'      // dpad read via buttons[].pressed
+};
+
+// PlayStation non-standard with DPad on axes 6,7
+// Common on Linux (Firefox/Chrome without standard mapping support for DS4/DualSense).
+// Axes: 0=LX, 1=LY, 2=LT(-1..1), 3=RX, 4=RY, 5=RT(-1..1), 6=DpadX, 7=DpadY
+const MAPPING_PS_AXES_DPAD = {
+    name: 'PlayStation (non-standard, dpad-axes)',
+    axes: { LX: 0, LY: 1, RX: 3, RY: 4, LT: 2, RT: 5, DPAD_X: 6, DPAD_Y: 7 },
+    buttons: { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7,
+               BACK: 8, START: 9, LS: 10, RS: 11 },
+    triggers: 'axes', // triggers on axes, range -1..1, normalized to 0..1
+    dpad: 'axes'      // dpad on axes 6 (X) and 7 (Y)
+};
+
+// PlayStation non-standard with DPad on buttons 14-17
+// Some Linux HID drivers report DPad as buttons instead of axes.
+// Axes: 0=LX, 1=LY, 2=LT(-1..1), 3=RX, 4=RY, 5=RT(-1..1)
+const MAPPING_PS_BTN_DPAD = {
+    name: 'PlayStation (non-standard, dpad-buttons)',
+    axes: { LX: 0, LY: 1, RX: 3, RY: 4, LT: 2, RT: 5 },
+    buttons: { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7,
+               BACK: 8, START: 9, LS: 10, RS: 11,
+               DPAD_UP: 14, DPAD_DOWN: 15, DPAD_LEFT: 16, DPAD_RIGHT: 17 },
+    triggers: 'axes',
+    dpad: 'buttons'
+};
+
+let activeMapping = MAPPING_STANDARD;
+let detectedControllerType = CONTROLLER_TYPES.GENERIC;
+
+function resolveMapping(gamepad) {
+    if (gamepad.mapping === 'standard') return MAPPING_STANDARD;
+    const type = detectControllerType(gamepad.id);
+    if (type === CONTROLLER_TYPES.PLAYSTATION) {
+        // Heuristic: >=8 axes means DPad is on axes 6,7; otherwise DPad is on buttons
+        return gamepad.axes.length >= 8 ? MAPPING_PS_AXES_DPAD : MAPPING_PS_BTN_DPAD;
+    }
+    // Non-standard Xbox or generic: standard layout is the best guess
+    return MAPPING_STANDARD;
+}
+
+function readGamepadState(gp) {
+    const m = activeMapping;
+    const axis = (i) => gp.axes[i] || 0;
+    const btn = (i) => gp.buttons[i] ? gp.buttons[i].pressed : false;
+    const btnVal = (i) => gp.buttons[i] ? gp.buttons[i].value : 0;
+
+    // Triggers
+    let lt, rt;
+    if (m.triggers === 'axes') {
+        // PS non-standard: triggers on axes with range -1..1, normalize to 0..1
+        lt = (axis(m.axes.LT) + 1) / 2;
+        rt = (axis(m.axes.RT) + 1) / 2;
+    } else {
+        lt = btnVal(m.buttons.LT);
+        rt = btnVal(m.buttons.RT);
+    }
+
+    // D-pad
+    let dpadUp, dpadDown, dpadLeft, dpadRight;
+    if (m.dpad === 'axes') {
+        const dx = axis(m.axes.DPAD_X);
+        const dy = axis(m.axes.DPAD_Y);
+        dpadLeft = dx < -0.5;
+        dpadRight = dx > 0.5;
+        dpadUp = dy < -0.5;
+        dpadDown = dy > 0.5;
+    } else {
+        dpadUp = btn(m.buttons.DPAD_UP);
+        dpadDown = btn(m.buttons.DPAD_DOWN);
+        dpadLeft = btn(m.buttons.DPAD_LEFT);
+        dpadRight = btn(m.buttons.DPAD_RIGHT);
+    }
+
+    return {
+        left_stick_x: applyDeadzone(axis(m.axes.LX)),
+        left_stick_y: applyDeadzone(axis(m.axes.LY)),
+        right_stick_x: applyDeadzone(axis(m.axes.RX)),
+        right_stick_y: applyDeadzone(axis(m.axes.RY)),
+        left_trigger: lt, right_trigger: rt,
+        a: btn(m.buttons.A), b: btn(m.buttons.B),
+        x: btn(m.buttons.X), y: btn(m.buttons.Y),
+        left_bumper: btn(m.buttons.LB), right_bumper: btn(m.buttons.RB),
+        back: btn(m.buttons.BACK), start: btn(m.buttons.START),
+        left_stick_button: btn(m.buttons.LS), right_stick_button: btn(m.buttons.RS),
+        dpad_up: dpadUp, dpad_down: dpadDown,
+        dpad_left: dpadLeft, dpad_right: dpadRight
+    };
+}
+
+// Current gamepad state object
 let currentGamepadState = {
     left_stick_x: 0, left_stick_y: 0,
     right_stick_x: 0, right_stick_y: 0,
@@ -248,7 +367,7 @@ function setMpcTarget(points) {
 // --- Gamepad Functions (using gamecontroller.js) ---
 function updateGamepadStatusDisplay() {
     if (gamepadConnected) {
-        gamepadStatusDisplay.textContent = "🎮 Connected";
+        gamepadStatusDisplay.textContent = `🎮 ${detectedControllerType} (${activeMapping.name})`;
         gamepadStatusDisplay.style.color = "green";
     } else {
         gamepadStatusDisplay.textContent = "🎮 No Gamepad";
@@ -286,35 +405,14 @@ function setupGamepadEvents(gamepadIndex, ws) {
             return;
         }
 
-        // Standard gamepad mapping
-        // Axes: 0=LX, 1=LY, 2=RX, 3=RY
-        // Buttons: 0=A, 1=B, 2=X, 3=Y, 4=LB, 5=RB, 6=LT, 7=RT, 8=Back, 9=Start, 10=LS, 11=RS, 12-15=Dpad
-        currentGamepadState = {
-            left_stick_x: applyDeadzone(gp.axes[0] || 0),
-            left_stick_y: applyDeadzone(gp.axes[1] || 0),
-            right_stick_x: applyDeadzone(gp.axes[2] || 0),
-            right_stick_y: applyDeadzone(gp.axes[3] || 0),
-            left_trigger: gp.buttons[6] ? gp.buttons[6].value : 0,
-            right_trigger: gp.buttons[7] ? gp.buttons[7].value : 0,
-            a: gp.buttons[0] ? gp.buttons[0].pressed : false,
-            b: gp.buttons[1] ? gp.buttons[1].pressed : false,
-            x: gp.buttons[2] ? gp.buttons[2].pressed : false,
-            y: gp.buttons[3] ? gp.buttons[3].pressed : false,
-            left_bumper: gp.buttons[4] ? gp.buttons[4].pressed : false,
-            right_bumper: gp.buttons[5] ? gp.buttons[5].pressed : false,
-            back: gp.buttons[8] ? gp.buttons[8].pressed : false,
-            start: gp.buttons[9] ? gp.buttons[9].pressed : false,
-            left_stick_button: gp.buttons[10] ? gp.buttons[10].pressed : false,
-            right_stick_button: gp.buttons[11] ? gp.buttons[11].pressed : false,
-            dpad_up: gp.buttons[12] ? gp.buttons[12].pressed : false,
-            dpad_down: gp.buttons[13] ? gp.buttons[13].pressed : false,
-            dpad_left: gp.buttons[14] ? gp.buttons[14].pressed : false,
-            dpad_right: gp.buttons[15] ? gp.buttons[15].pressed : false
-        };
+        // Re-resolve mapping on each poll in case the browser updates the mapping property
+        // (e.g. when switching between wired/wireless on some controllers)
+        activeMapping = resolveMapping(gp);
+        currentGamepadState = readGamepadState(gp);
 
         // Log occasionally to verify polling works
         if (logCounter++ % 250 === 0) {
-            console.log(`Gamepad state: LX=${currentGamepadState.left_stick_x.toFixed(2)}, LY=${currentGamepadState.left_stick_y.toFixed(2)}, A=${currentGamepadState.a}`);
+            console.log(`Gamepad [${detectedControllerType}] state: LX=${currentGamepadState.left_stick_x.toFixed(2)}, LY=${currentGamepadState.left_stick_y.toFixed(2)}, A=${currentGamepadState.a}`);
         }
 
         sendGamepadState(ws, 1, currentGamepadState);
@@ -497,7 +595,11 @@ function initGamepad() {
     console.log("gamecontroller.js loaded, setting up gamepad events");
 
     gameControl.on('connect', (gamepad) => {
-        console.log(`Gamepad connected: index=${gamepad.id}, name=${navigator.getGamepads()[gamepad.id]?.id}`);
+        const rawGp = navigator.getGamepads()[gamepad.id];
+        const gpName = rawGp?.id || 'Unknown';
+        detectedControllerType = detectControllerType(gpName);
+        activeMapping = rawGp ? resolveMapping(rawGp) : MAPPING_STANDARD;
+        console.log(`Gamepad connected: index=${gamepad.id}, name=${gpName}, type=${detectedControllerType}, mapping=${activeMapping.name} (browser mapping="${rawGp?.mapping}"), axes=${rawGp?.axes?.length}, buttons=${rawGp?.buttons?.length}`);
         gamepadConnected = true;
         updateGamepadStatusDisplay();
 
