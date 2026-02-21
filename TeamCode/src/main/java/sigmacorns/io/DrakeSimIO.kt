@@ -9,9 +9,13 @@ import sigmacorns.sim.viz.SimServer
 import sigmacorns.sim.viz.SimState
 import sigmacorns.sim.viz.BaseState
 import sigmacorns.sim.viz.TelemetryState
+import sigmacorns.sim.viz.AimingVizState
 import sigmacorns.sim.viz.BallState
+import sigmacorns.sim.viz.ContourVizState
 import sigmacorns.sim.viz.ErrorState
 import sigmacorns.sim.viz.ForceState
+import sigmacorns.sim.viz.GTSAMVizState
+import sigmacorns.sim.viz.MPCHorizonState
 import sigmacorns.sim.viz.PathPoint
 import com.qualcomm.robotcore.hardware.Gamepad
 import sigmacorns.sim.viz.GamepadState
@@ -26,6 +30,13 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     private val ballSim = BallInteractionSimulator(model)
     private var trackingError: ErrorState? = null
     private var trackingTarget: List<PathPoint> = emptyList()
+
+    // Control visualization state (thread-safe via volatile)
+    @Volatile private var mpcPredicted: List<PathPoint> = emptyList()
+    @Volatile private var mpcContours: List<ContourVizState> = emptyList()
+    @Volatile private var mpcHorizon: MPCHorizonState? = null
+    @Volatile private var gtsamViz: GTSAMVizState? = null
+    @Volatile private var aimingViz: AimingVizState? = null
 
     private var gamepad1: Gamepad? = null
     private var gamepad2: Gamepad? = null
@@ -266,7 +277,12 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                             wheelForces = model.wheelForces.map { ForceState(it.x, it.y, it.z) },
                             error = trackingError,
                             balls = allBalls,
-                            mpcTarget = trackingTarget
+                            mpcTarget = trackingTarget,
+                            mpcPredicted = mpcPredicted,
+                            mpcContours = mpcContours,
+                            mpcHorizon = mpcHorizon,
+                            gtsam = gtsamViz,
+                            aiming = aimingViz
                         )
                     }
 
@@ -525,6 +541,26 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     fun setTrackingTarget(path: List<PathPoint>) {
         trackingTarget = path
+    }
+
+    fun setMPCPredicted(points: List<PathPoint>) {
+        mpcPredicted = points
+    }
+
+    fun setMPCContours(contours: List<ContourVizState>) {
+        mpcContours = contours
+    }
+
+    fun setMPCHorizon(horizon: MPCHorizonState?) {
+        mpcHorizon = horizon
+    }
+
+    fun setGTSAMViz(viz: GTSAMVizState?) {
+        gtsamViz = viz
+    }
+
+    fun setAimingViz(viz: AimingVizState?) {
+        aimingViz = viz
     }
 
     // Ball spawning API with color
