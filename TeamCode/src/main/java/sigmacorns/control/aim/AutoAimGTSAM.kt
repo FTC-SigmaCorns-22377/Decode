@@ -4,9 +4,9 @@ import org.joml.Vector2d
 import org.joml.Vector3d
 import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import org.firstinspires.ftc.robotcore.internal.system.AppUtil
+import java.io.File
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import java.util.Random
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.PI
 import kotlin.math.abs
@@ -46,8 +46,8 @@ class AutoAimGTSAM(
     )
 
     data class EstimatorConfig(
-        val priorSigmaXY: Double = 0.05,
-        val priorSigmaTheta: Double = 0.02,
+        var priorSigmaXY: Double = 0.05,
+        var priorSigmaTheta: Double = 0.02,
         val odomSigmaXY: Double = 0.02,
         val odomSigmaTheta: Double = 0.01,
         val defaultPixelSigma: Double = 1.0,
@@ -94,33 +94,47 @@ class AutoAimGTSAM(
         val multiHypothesisThetaThreshold: Double = 1.0,
         val enableHeadingFlipRecovery: Boolean = true,
         val headingFlipMinTags: Int = 1,
-        /** Simulated odometry noise as a fractional factor stddev (e.g. 0.02 = 2% error per unit moved). */
-        val simOdomNoiseXY: Double = 0.02,
-        /** Simulated odometry heading noise as a fractional factor stddev (e.g. 0.01 = 1% error per radian turned). */
-        val simOdomNoiseTheta: Double = 0.01
     )
 
     // ===== Native Library Loading =====
 
     init {
         try {
-            val appInfo = AppUtil.getDefContext().applicationInfo
-            logger.log(
-                LogLevel.INFO,
-                "JNI load: classLoader=${javaClass.classLoader} nativeLibraryDir=${appInfo.nativeLibraryDir} " +
-                    "sourceDir=${appInfo.sourceDir}"
-            )
-            val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("decode_estimator_jni")
-            if (resolvedPath != null) {
-                logger.log(LogLevel.INFO, "Loading native library from: $resolvedPath")
-                System.load(resolvedPath)
-                logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (resolved path)")
-                nativeLibraryLoaded = true
+            if (SigmaOpMode.SIM) {
+                val libName = "libdecode_estimator_jni.so"
+                val candidates = listOf(
+                    File("TeamCode/src/test/jniLibs/$libName"),
+                    File("src/test/jniLibs/$libName")
+                )
+                val lib = candidates.firstOrNull { it.exists() }
+                if (lib != null) {
+                    logger.log(LogLevel.INFO, "Drake sim: loading GTSAM library from ${lib.absolutePath}")
+                    System.load(lib.absolutePath)
+                    logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (Drake sim)")
+                    nativeLibraryLoaded = true
+                } else {
+                    logger.log(LogLevel.WARN, "Drake sim: GTSAM library not found in jniLibs candidates: $candidates")
+                    nativeLibraryLoaded = false
+                }
             } else {
-                logger.log(LogLevel.INFO, "No hashed library found, using System.loadLibrary")
-                System.loadLibrary("decode_estimator_jni")
-                logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (System.loadLibrary)")
-                nativeLibraryLoaded = true
+                val appInfo = AppUtil.getDefContext().applicationInfo
+                logger.log(
+                    LogLevel.INFO,
+                    "JNI load: classLoader=${javaClass.classLoader} nativeLibraryDir=${appInfo.nativeLibraryDir} " +
+                        "sourceDir=${appInfo.sourceDir}"
+                )
+                val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("decode_estimator_jni")
+                if (resolvedPath != null) {
+                    logger.log(LogLevel.INFO, "Loading native library from: $resolvedPath")
+                    System.load(resolvedPath)
+                    logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (resolved path)")
+                    nativeLibraryLoaded = true
+                } else {
+                    logger.log(LogLevel.INFO, "No hashed library found, using System.loadLibrary")
+                    System.loadLibrary("decode_estimator_jni")
+                    logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (System.loadLibrary)")
+                    nativeLibraryLoaded = true
+                }
             }
         } catch (e: UnsatisfiedLinkError) {
             logger.log(LogLevel.ERROR, "Failed to load decode_estimator library: ${e.message}")
@@ -148,24 +162,10 @@ class AutoAimGTSAM(
     private var lastUpdateTimeMs: Long = 0
     private var lastRobotPoseForUncertainty: Pose2d? = null
     private var lastDiagLogMs: Long = 0
+
     
     // ===== Debug Logging =====
     private var debugLogger: GTSAMDebugLogger? = null
-
-    // ===== Odometry-Only Dead Reckoning (for uncertainty comparison) =====
-    private val rng = Random(42)
-
-    /** Dead-reckoned pose from noisy odometry only (no fusion corrections). */
-    var odometryOnlyPose: Pose2d = initialPose
-        private set
-
-    /** Accumulated odometry covariance in X (sum of per-step variance). */
-    var odometryCovXX: Double = 0.0
-        private set
-
-    /** Accumulated odometry covariance in Y (sum of per-step variance). */
-    var odometryCovYY: Double = 0.0
-        private set
 
     // ===== Public Interface =====
 
@@ -248,11 +248,6 @@ class AutoAimGTSAM(
 
         // Check if we should use odometry fallback (sim mode + no native library)
         val useOdometryFallback = SigmaOpMode.SIM && !nativeLibraryLoaded
-
-        // Always accumulate odometry-only dead reckoning (for uncertainty comparison)
-        if (lastRobotPose != null) {
-            updateOdometryOnly(robotPose)
-        }
 
         if (useOdometryFallback) {
             // Fallback mode: use odometry directly instead of GTSAM fusion
@@ -356,44 +351,6 @@ class AutoAimGTSAM(
     }
 
     // ===== Odometry Processing =====
-
-    /** Accumulate odometry-only dead reckoning with simulated noise (for uncertainty comparison). */
-    private fun updateOdometryOnly(currentPose: Pose2d) {
-        val prevPose = lastRobotPose ?: return
-
-        val dxGlobal = currentPose.v.x - prevPose.v.x
-        val dyGlobal = currentPose.v.y - prevPose.v.y
-        val dtheta = normalizeAngle(currentPose.rot - prevPose.rot)
-
-        val cosPrev = cos(prevPose.rot)
-        val sinPrev = sin(prevPose.rot)
-        val dxLocal = cosPrev * dxGlobal + sinPrev * dyGlobal
-        val dyLocal = -sinPrev * dxGlobal + cosPrev * dyGlobal
-
-        // Multiplicative noise: error scales with how far/fast the robot moved.
-        // Factor is centered at 1 with stddev = simOdomNoise*, so faster motion = more error.
-        val xyFactor = estimatorConfig.simOdomNoiseXY
-        val thetaFactor = estimatorConfig.simOdomNoiseTheta
-        val noiseDxLocal = dxLocal * (1.0 + rng.nextGaussian() * xyFactor)
-        val noiseDyLocal = dyLocal * (1.0 + rng.nextGaussian() * xyFactor)
-        val noiseDtheta = dtheta * (1.0 + rng.nextGaussian() * thetaFactor)
-
-        val odoTheta = odometryOnlyPose.rot
-        val cosOdo = cos(odoTheta)
-        val sinOdo = sin(odoTheta)
-        val odoDxGlobal = cosOdo * noiseDxLocal - sinOdo * noiseDyLocal
-        val odoDyGlobal = sinOdo * noiseDxLocal + cosOdo * noiseDyLocal
-        odometryOnlyPose = Pose2d(
-            odometryOnlyPose.v.x + odoDxGlobal,
-            odometryOnlyPose.v.y + odoDyGlobal,
-            normalizeAngle(odoTheta + noiseDtheta)
-        )
-
-        val covDx = dxLocal * xyFactor
-        val covDy = dyLocal * xyFactor
-        odometryCovXX += covDx * covDx
-        odometryCovYY += covDy * covDy
-    }
 
     /** Compute local-frame odometry delta and send to GTSAM fusion worker. */
     private fun processOdometryDelta(currentPose: Pose2d) {

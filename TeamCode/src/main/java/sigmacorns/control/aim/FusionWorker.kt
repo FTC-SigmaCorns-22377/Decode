@@ -223,13 +223,24 @@ class FusionWorker(
                         val startNs = System.nanoTime()
                         PoseEstimatorBridge.nativeUpdate(localHandle)
                         lastSolveTimeMs = (System.nanoTime() - startNs) / 1_000_000.0
-                        val estimate = PoseEstimatorBridge.nativeGetCurrentEstimateWithCovariance(localHandle)
-                        if (estimate.size >= 13) {
-                            fusedPose = Pose2d(estimate[0], estimate[1], estimate[2])
-                            covariance = estimate.copyOfRange(4, 13)
-                        } else if (estimate.size >= 3) {
-                            fusedPose = Pose2d(estimate[0], estimate[1], estimate[2])
+
+                        // Use nativeGetCurrentEstimate for the pose — it returns the
+                        // dead-reckoned current_pose_ which stays up-to-date with
+                        // odometry even between vision solves.
+                        // nativeGetCurrentEstimateWithCovariance queries the iSAM2
+                        // graph which in compact-odom mode only updates pose nodes on
+                        // vision, so it would return a stale pose between vision fixes.
+                        val pose = PoseEstimatorBridge.nativeGetCurrentEstimate(localHandle)
+                        if (pose.size >= 3) {
+                            fusedPose = Pose2d(pose[0], pose[1], pose[2])
                         }
+
+                        // Read covariance separately (last-solved covariance is fine)
+                        val covEstimate = PoseEstimatorBridge.nativeGetCurrentEstimateWithCovariance(localHandle)
+                        if (covEstimate.size >= 13) {
+                            covariance = covEstimate.copyOfRange(4, 13)
+                        }
+
                         updateDiagnosticsIfNeeded(localHandle)
                     } catch (e: Exception) {
                         lastError.set("GTSAM update failed: ${e.message}")

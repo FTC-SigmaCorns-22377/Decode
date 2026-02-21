@@ -7,6 +7,7 @@ const toggleGtsamVision = document.getElementById('toggle-gtsam-vision');
 const toggleGtsamUncertainty = document.getElementById('toggle-gtsam-uncertainty');
 const toggleGtsamProjections = document.getElementById('toggle-gtsam-projections');
 const toggleGtsamOdo = document.getElementById('toggle-gtsam-odo');
+const toggleGtsamTrue = document.getElementById('toggle-gtsam-true');
 const toggleCameraView = document.getElementById('toggle-camera-view');
 const uncertaintyScaleSlider = document.getElementById('uncertainty-scale');
 
@@ -15,6 +16,8 @@ const hudGtsamUncertainty = document.getElementById('hud-gtsam-uncertainty');
 const hudGtsamVision = document.getElementById('hud-gtsam-vision');
 const hudGtsamTags = document.getElementById('hud-gtsam-tags');
 const hudGtsamMode = document.getElementById('hud-gtsam-mode');
+const hudGtsamFusedErr = document.getElementById('hud-gtsam-fused-err');
+const hudGtsamOdoErr = document.getElementById('hud-gtsam-odo-err');
 
 const cameraViewContainer = document.getElementById('camera-view-container');
 const cameraViewCanvas = document.getElementById('camera-view-canvas');
@@ -105,6 +108,49 @@ function updateOdoTrail(x, y) {
     geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     odoTrailLine = new THREE.Line(geom, new THREE.LineBasicMaterial({ vertexColors: true }));
     scene.add(odoTrailLine);
+}
+
+// True position marker
+const trueMarker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.025, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffff00 })
+);
+trueMarker.visible = false;
+scene.add(trueMarker);
+
+const trueHeading = new THREE.ArrowHelper(
+    new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.12, 0xffff00, 0.035, 0.018
+);
+trueHeading.visible = false;
+scene.add(trueHeading);
+
+const TRUE_TRAIL_MAX = 300;
+const trueTrail = [];
+let trueTrailLine = null;
+
+function updateTrueTrail(x, y) {
+    trueTrail.push({ x, y });
+    if (trueTrail.length > TRUE_TRAIL_MAX) trueTrail.shift();
+
+    if (trueTrailLine) {
+        scene.remove(trueTrailLine);
+        trueTrailLine.geometry.dispose();
+        trueTrailLine.material.dispose();
+    }
+    if (trueTrail.length < 2 || !toggleGtsamTrue.checked) return;
+
+    const verts = new Float32Array(trueTrail.length * 3);
+    const colors = new Float32Array(trueTrail.length * 3);
+    trueTrail.forEach((p, i) => {
+        verts[i * 3] = p.x; verts[i * 3 + 1] = p.y; verts[i * 3 + 2] = 0.003;
+        const t = i / (trueTrail.length - 1);
+        colors[i * 3] = t; colors[i * 3 + 1] = t; colors[i * 3 + 2] = 0;
+    });
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    trueTrailLine = new THREE.Line(geom, new THREE.LineBasicMaterial({ vertexColors: true }));
+    scene.add(trueTrailLine);
 }
 
 // Covariance ellipse constants
@@ -246,12 +292,11 @@ function createLandmarkMarkers(landmarks) {
             color: 0xff8800, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false
         }));
         tagMesh.position.set(lm.x, lm.y, lm.z);
-        // LandmarkVizState uses getEulerAnglesZYX convention:
-        // roll = Z-rotation, pitch = Y-rotation, yaw = X-rotation.
+        // Aerospace convention: roll = X-rotation, pitch = Y-rotation, yaw = Z-rotation.
         // THREE.js Euler with order 'ZYX' applies Rz(z) * Ry(y) * Rx(x),
-        // so set(x=yaw, y=pitch, z=roll).
+        // so set(x=roll, y=pitch, z=yaw).
         tagMesh.rotation.order = 'ZYX';
-        tagMesh.rotation.set(lm.yaw || 0, lm.pitch || 0, lm.roll || 0);
+        tagMesh.rotation.set(lm.roll || 0, lm.pitch || 0, lm.yaw || 0);
         tagMesh.userData = { tagId: lm.tagId };
         landmarkGroup.add(tagMesh);
 
@@ -296,7 +341,7 @@ function updateVisionRays(gtsam, base) {
         }));
         ring.position.set(lm.x, lm.y, lm.z);
         ring.rotation.order = 'ZYX';
-        ring.rotation.set(lm.yaw || 0, lm.pitch || 0, lm.roll || 0);
+        ring.rotation.set(lm.roll || 0, lm.pitch || 0, lm.yaw || 0);
         visionRayGroup.add(ring);
     });
 }
@@ -438,6 +483,8 @@ export function updateGtsamViz(gtsam, base) {
         odoHeading.visible = false;
         odoCovEllipse.visible = false;
         odoCovFill.visible = false;
+        trueMarker.visible = false;
+        trueHeading.visible = false;
         return;
     }
 
@@ -496,6 +543,21 @@ export function updateGtsamViz(gtsam, base) {
         landmarkGroup.visible = false;
     }
 
+    // True position marker
+    if (toggleGtsamTrue.checked) {
+        const tx = gtsam.trueX || 0, ty = gtsam.trueY || 0, tth = gtsam.trueTheta || 0;
+        trueMarker.position.set(tx, ty, 0.02);
+        trueMarker.visible = true;
+        trueHeading.position.set(tx, ty, 0.02);
+        trueHeading.setDirection(new THREE.Vector3(Math.cos(tth), Math.sin(tth), 0));
+        trueHeading.setLength(0.12, 0.035, 0.018);
+        trueHeading.visible = true;
+        updateTrueTrail(tx, ty);
+    } else {
+        trueMarker.visible = false;
+        trueHeading.visible = false;
+    }
+
     updateVisionRays(gtsam, base);
 
     hudGtsamPose.textContent = `(${gtsam.fusedX.toFixed(3)}, ${gtsam.fusedY.toFixed(3)}, ${(gtsam.fusedTheta * 180 / Math.PI).toFixed(1)}°)`;
@@ -507,4 +569,24 @@ export function updateGtsamViz(gtsam, base) {
     hudGtsamTags.textContent = (gtsam.detectedTags || []).join(', ') || 'none';
     hudGtsamMode.textContent = gtsam.usingPrediction ? 'PREDICTION' : (gtsam.initialized ? 'FUSED' : 'INIT...');
     hudGtsamMode.className = 'hud-value' + (gtsam.usingPrediction ? ' warning' : (gtsam.initialized ? ' active' : ''));
+
+    // Compute errors vs true position
+    const hasTruePos = (gtsam.trueX != null) && (gtsam.trueY != null);
+    if (hasTruePos) {
+        const fusedErrDist = Math.sqrt((gtsam.fusedX - gtsam.trueX) ** 2 + (gtsam.fusedY - gtsam.trueY) ** 2);
+        const fusedErrTheta = Math.abs(normalizeAngle(gtsam.fusedTheta - gtsam.trueTheta)) * 180 / Math.PI;
+        hudGtsamFusedErr.textContent = `${(fusedErrDist * 100).toFixed(1)}cm / ${fusedErrTheta.toFixed(1)}°`;
+        hudGtsamFusedErr.className = 'hud-value' + (fusedErrDist < 0.03 ? ' active' : fusedErrDist < 0.1 ? ' warning' : ' error');
+
+        const odoErrDist = Math.sqrt(((gtsam.odoX || 0) - gtsam.trueX) ** 2 + ((gtsam.odoY || 0) - gtsam.trueY) ** 2);
+        const odoErrTheta = Math.abs(normalizeAngle((gtsam.odoTheta || 0) - gtsam.trueTheta)) * 180 / Math.PI;
+        hudGtsamOdoErr.textContent = `${(odoErrDist * 100).toFixed(1)}cm / ${odoErrTheta.toFixed(1)}°`;
+        hudGtsamOdoErr.className = 'hud-value' + (odoErrDist < 0.03 ? ' active' : odoErrDist < 0.1 ? ' warning' : ' error');
+    }
+}
+
+function normalizeAngle(a) {
+    while (a > Math.PI) a -= 2 * Math.PI;
+    while (a < -Math.PI) a += 2 * Math.PI;
+    return a;
 }

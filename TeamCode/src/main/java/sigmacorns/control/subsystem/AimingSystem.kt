@@ -55,7 +55,10 @@ class AimingSystem(
             landmarkPositions = FieldLandmarks.landmarks,
             goalPosition = goalPosition,
             initialPose = initialPose,
-            estimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig()
+            estimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig().also {
+                it.priorSigmaXY = 0.0
+                it.priorSigmaTheta = 0.0
+            }
         )
 
         val limelight = (io as? HardwareIO)?.limelight

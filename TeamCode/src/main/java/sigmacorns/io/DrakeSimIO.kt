@@ -22,7 +22,12 @@ import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.aim.VisionResult
 import sigmacorns.constants.FieldLandmarks
 import com.qualcomm.robotcore.hardware.Gamepad
+import sigmacorns.opmode.test.AutoAimGTSAMTest
 import sigmacorns.sim.viz.GamepadState
+import java.util.Random
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.PI
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -30,7 +35,11 @@ import kotlin.time.DurationUnit
 
 class DrakeSimIO(
     urdfPath: String,
-    estimatorConfig: AutoAimGTSAM.EstimatorConfig = AutoAimGTSAM.EstimatorConfig()
+    estimatorConfig: AutoAimGTSAM.EstimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig(),
+    /** Simulated odometry noise as a fractional factor stddev (e.g. 0.08 = 8% error per unit moved). */
+    val simOdomNoiseXY: Double = 0.08,
+    /** Simulated odometry heading noise as a fractional factor stddev (e.g. 0.04 = 4% error per radian turned). */
+    val simOdomNoiseTheta: Double = 0.04
 ) : SigmaIO {
     val model = DrakeRobotModel(urdfPath)
     val server: Any
@@ -38,6 +47,15 @@ class DrakeSimIO(
     private val aprilTagSim = AprilTagSimulator(FieldLandmarks.landmarks, estimatorConfig)
     private var trackingError: ErrorState? = null
     private var trackingTarget: List<PathPoint> = emptyList()
+
+    // Odometry noise injection: accumulates noisy pose that drifts from true Drake pose
+    private val odomRng = Random(42)
+    private var lastTruePose: Pose2d? = null
+    @Volatile private var noisyOdomPose: Pose2d = Pose2d(0.0, 0.0, 0.0)
+    @Volatile var odometryCovXX: Double = 0.0
+        private set
+    @Volatile var odometryCovYY: Double = 0.0
+        private set
 
     // Control visualization state (thread-safe via volatile)
     @Volatile private var mpcPredicted: List<PathPoint> = emptyList()
@@ -198,6 +216,9 @@ class DrakeSimIO(
                             } else {
                                 model.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS), snapshotIO)
                                 t += SIM_UPDATE_TIME
+
+                                // Accumulate noisy odometry
+                                updateNoisyOdometry(model.drivetrainState.pos)
 
                                 // Update ball interaction simulation
                                 ballSim.update(
@@ -375,7 +396,10 @@ class DrakeSimIO(
         }
     }
 
-    override fun position(): Pose2d = synchronized(simLock) { model.drivetrainState.pos }
+    /** Returns the noisy odometry pose (simulates real hardware drift). */
+    override fun position(): Pose2d = noisyOdomPose
+    /** Returns the true Drake pose (no noise). */
+    fun truePosition(): Pose2d = synchronized(simLock) { model.drivetrainState.pos }
     override fun velocity(): Pose2d = synchronized(simLock) { model.drivetrainState.vel }
     // Returns flywheel angular velocity in rad/s (raw output shaft velocity from Drake)
     override fun flywheelVelocity(): Double = synchronized(simLock) { model.flywheelState.omega }
@@ -505,6 +529,10 @@ class DrakeSimIO(
 
     override fun setPosition(p: Pose2d) = synchronized(simLock) {
         model.setPosition(p)
+        noisyOdomPose = p
+        lastTruePose = p
+        odometryCovXX = 0.0
+        odometryCovYY = 0.0
     }
 
     override fun time(): Duration = synchronized(simLock) { t }
@@ -518,6 +546,58 @@ class DrakeSimIO(
 
     override fun colorSensorGetBallColor(): Balls? = synchronized(simLock) {
         ballSim.colorSensorGetBallColor()
+    }
+
+    /** Accumulate noisy odometry from true Drake pose delta. Called under simLock. */
+    private fun updateNoisyOdometry(truePose: Pose2d) {
+        val prev = lastTruePose
+        if (prev == null) {
+            lastTruePose = truePose
+            noisyOdomPose = truePose
+            return
+        }
+
+        val dxGlobal = truePose.v.x - prev.v.x
+        val dyGlobal = truePose.v.y - prev.v.y
+        val dtheta = normalizeAngle(truePose.rot - prev.rot)
+
+        // Convert to local frame
+        val cosPrev = cos(prev.rot)
+        val sinPrev = sin(prev.rot)
+        val dxLocal = cosPrev * dxGlobal + sinPrev * dyGlobal
+        val dyLocal = -sinPrev * dxGlobal + cosPrev * dyGlobal
+
+        // Multiplicative noise: error scales with distance moved
+        val noiseDxLocal = dxLocal * (1.0 + odomRng.nextGaussian() * simOdomNoiseXY)
+        val noiseDyLocal = dyLocal * (1.0 + odomRng.nextGaussian() * simOdomNoiseXY)
+        val noiseDtheta = dtheta * (1.0 + odomRng.nextGaussian() * simOdomNoiseTheta)
+
+        // Accumulate into noisy pose
+        val odoTheta = noisyOdomPose.rot
+        val cosOdo = cos(odoTheta)
+        val sinOdo = sin(odoTheta)
+        val odoDxGlobal = cosOdo * noiseDxLocal - sinOdo * noiseDyLocal
+        val odoDyGlobal = sinOdo * noiseDxLocal + cosOdo * noiseDyLocal
+        noisyOdomPose = Pose2d(
+            noisyOdomPose.v.x + odoDxGlobal,
+            noisyOdomPose.v.y + odoDyGlobal,
+            normalizeAngle(odoTheta + noiseDtheta)
+        )
+
+        // Accumulate covariance
+        val covDx = dxLocal * simOdomNoiseXY
+        val covDy = dyLocal * simOdomNoiseXY
+        odometryCovXX += covDx * covDx
+        odometryCovYY += covDy * covDy
+
+        lastTruePose = truePose
+    }
+
+    private fun normalizeAngle(angle: Double): Double {
+        var normalized = angle
+        while (normalized > PI) normalized -= 2 * PI
+        while (normalized < -PI) normalized += 2 * PI
+        return normalized
     }
 
     fun close() {

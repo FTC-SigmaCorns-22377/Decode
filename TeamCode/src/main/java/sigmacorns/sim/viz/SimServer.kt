@@ -143,12 +143,16 @@ data class GTSAMVizState(
     val odoTheta: Double = 0.0,
     /** Accumulated odometry-only covariance (diagonal, XX and YY). */
     val odoCovXX: Double = 0.0,
-    val odoCovYY: Double = 0.0
+    val odoCovYY: Double = 0.0,
+    /** True (ground-truth) robot position from Drake simulator. */
+    val trueX: Double = 0.0,
+    val trueY: Double = 0.0,
+    val trueTheta: Double = 0.0
 )
 
 /** Landmark data for visualization.
- *  roll/pitch/yaw match the getEulerAnglesZYX convention used by LandmarkSpec:
- *  roll = Z-rotation, pitch = Y-rotation, yaw = X-rotation.
+ *  roll/pitch/yaw use aerospace convention matching LandmarkSpec:
+ *  roll = X-rotation, pitch = Y-rotation, yaw = Z-rotation.
  */
 data class LandmarkVizState(
     val tagId: Int,

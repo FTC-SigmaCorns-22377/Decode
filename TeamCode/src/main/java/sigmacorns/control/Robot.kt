@@ -176,11 +176,14 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
             detectedTags = if (autoAim.trackedTagId >= 0) listOf(autoAim.trackedTagId) else emptyList(),
             hasVision = autoAim.hasVisionTarget,
             usingPrediction = autoAim.usingPrediction,
-            odoX = autoAim.odometryOnlyPose.v.x,
-            odoY = autoAim.odometryOnlyPose.v.y,
-            odoTheta = autoAim.odometryOnlyPose.rot,
-            odoCovXX = autoAim.odometryCovXX,
-            odoCovYY = autoAim.odometryCovYY
+            odoX = drakeIO.position().v.x,
+            odoY = drakeIO.position().v.y,
+            odoTheta = drakeIO.position().rot,
+            odoCovXX = drakeIO.odometryCovXX,
+            odoCovYY = drakeIO.odometryCovYY,
+            trueX = drakeIO.truePosition().v.x,
+            trueY = drakeIO.truePosition().v.y,
+            trueTheta = drakeIO.truePosition().rot
         ))
 
         // --- Aiming / Move-While-Shoot Visualization ---

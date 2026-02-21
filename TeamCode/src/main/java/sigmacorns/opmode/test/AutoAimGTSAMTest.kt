@@ -33,8 +33,8 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         @JvmField var turretRotationUncertaintyGain = 1.5
         @JvmField var uncertaintyDecayRate = 0.01
 
-        @JvmField var priorSigmaXY = 5.0
-        @JvmField var priorSigmaTheta = 5.0
+        @JvmField var priorSigmaXY = 2.0
+        @JvmField var priorSigmaTheta = 2.0
         @JvmField var odomSigmaXY = 0.0002
         @JvmField var odomSigmaTheta = 0.0002
         @JvmField var defaultPixelSigma = 2.0

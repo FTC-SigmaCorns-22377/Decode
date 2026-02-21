@@ -107,6 +107,7 @@
                     <label><input type="checkbox" id="toggle-gtsam-projections" checked>Tag projections</label>
                     <label><input type="checkbox" id="toggle-camera-view">Camera view</label>
                     <label><input type="checkbox" id="toggle-gtsam-odo" checked>Odo position</label>
+                    <label><input type="checkbox" id="toggle-gtsam-true" checked>True position</label>
                     <label style="gap:6px;">Scale <input type="range" id="uncertainty-scale" min="1" max="100" value="10" style="width:70px;vertical-align:middle;"><span id="uncertainty-scale-val">10</span></label>
                 </div>
                 <div class="toggle-group">
@@ -138,6 +139,8 @@
                 <div class="hud-row"><span class="hud-label">Vision</span><span class="hud-value" id="hud-gtsam-vision">--</span></div>
                 <div class="hud-row"><span class="hud-label">Tags Detected</span><span class="hud-value" id="hud-gtsam-tags">--</span></div>
                 <div class="hud-row"><span class="hud-label">Mode</span><span class="hud-value" id="hud-gtsam-mode">--</span></div>
+                <div class="hud-row"><span class="hud-label">Fused Error</span><span class="hud-value" id="hud-gtsam-fused-err">--</span></div>
+                <div class="hud-row"><span class="hud-label">Odo Error</span><span class="hud-value" id="hud-gtsam-odo-err">--</span></div>
             </div>
 
             <!-- Aiming Status HUD -->
@@ -160,6 +163,8 @@
             <div class="chart-container" id="error-chart-container"><canvas id="chart-error"></canvas></div>
             <h3>Uncertainty Comparison</h3>
             <div class="chart-container"><canvas id="chart-uncertainty"></canvas></div>
+            <h3>Localization Error vs Truth</h3>
+            <div class="chart-container"><canvas id="chart-loc-error"></canvas></div>
         </div>
     </div>
 

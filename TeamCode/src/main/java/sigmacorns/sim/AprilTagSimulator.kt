@@ -117,14 +117,13 @@ class AprilTagSimulator(
         )
 
         // Tag pose in world frame
-        // LandmarkSpec stores getEulerAnglesZYX output: .roll = Z rotation,
-        // .pitch = Y rotation, .yaw = X rotation. Applying rotateZ(roll).rotateY(pitch)
-        // .rotateX(yaw) reconstructs the original ZYX intrinsic rotation.
+        // LandmarkSpec uses aerospace convention: roll = X rotation,
+        // pitch = Y rotation, yaw = Z rotation. Reconstruct as Rz(yaw) * Ry(pitch) * Rx(roll).
         val tagPoseM = Matrix4d()
             .translate(landmark.position.x, landmark.position.y, landmark.position.z)
-            .rotateZ(landmark.roll)
+            .rotateZ(landmark.yaw)
             .rotateY(landmark.pitch)
-            .rotateX(landmark.yaw)
+            .rotateX(landmark.roll)
 
         val corners = DoubleArray(8)
         val worldCorners = mutableListOf<Point3D>()

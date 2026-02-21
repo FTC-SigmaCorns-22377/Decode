@@ -37,6 +37,12 @@ export const chartUncertainty = createChart('chart-uncertainty', [
     { label: 'Odo RMS σ (cm)', color: '#ff6600' },
     { label: 'Fusion RMS σ (cm)', color: '#00ff88' }
 ]);
+export const chartLocError = createChart('chart-loc-error', [
+    { label: 'Fused err (cm)', color: '#00ff88' },
+    { label: 'Odo err (cm)', color: '#ff6600' },
+    { label: 'Fused θ err (°)', color: '#00aa66' },
+    { label: 'Odo θ err (°)', color: '#cc4400' }
+]);
 
 export function syncCharts(history, currentIndex) {
     if (history.length === 0) return;
@@ -65,5 +71,12 @@ export function syncCharts(history, currentIndex) {
     update(chartUncertainty, [
         s => s.gtsam ? Math.sqrt((s.gtsam.odoCovXX || 0) + (s.gtsam.odoCovYY || 0)) * 100 : null,
         s => s.gtsam ? Math.sqrt((s.gtsam.covXX || 0) + (s.gtsam.covYY || 0)) * 100 : null
+    ]);
+    const norm = a => { while (a > Math.PI) a -= 2*Math.PI; while (a < -Math.PI) a += 2*Math.PI; return a; };
+    update(chartLocError, [
+        s => s.gtsam && s.gtsam.trueX != null ? Math.sqrt((s.gtsam.fusedX - s.gtsam.trueX)**2 + (s.gtsam.fusedY - s.gtsam.trueY)**2) * 100 : null,
+        s => s.gtsam && s.gtsam.trueX != null ? Math.sqrt(((s.gtsam.odoX||0) - s.gtsam.trueX)**2 + ((s.gtsam.odoY||0) - s.gtsam.trueY)**2) * 100 : null,
+        s => s.gtsam && s.gtsam.trueTheta != null ? Math.abs(norm(s.gtsam.fusedTheta - s.gtsam.trueTheta)) * 180/Math.PI : null,
+        s => s.gtsam && s.gtsam.trueTheta != null ? Math.abs(norm((s.gtsam.odoTheta||0) - s.gtsam.trueTheta)) * 180/Math.PI : null
     ]);
 }
