@@ -66,6 +66,10 @@ class FusionWorker(
     @Volatile var fusedPose: Pose2d = initialPose
         private set
 
+    /** 3x3 marginal covariance [xx,xy,xθ, yx,yy,yθ, θx,θy,θθ] row-major from the solver. */
+    @Volatile var covariance: DoubleArray = DoubleArray(9)
+        private set
+
     @Volatile var isInitialized: Boolean = false
         private set
 
@@ -219,8 +223,11 @@ class FusionWorker(
                         val startNs = System.nanoTime()
                         PoseEstimatorBridge.nativeUpdate(localHandle)
                         lastSolveTimeMs = (System.nanoTime() - startNs) / 1_000_000.0
-                        val estimate = PoseEstimatorBridge.nativeGetCurrentEstimate(localHandle)
-                        if (estimate.size >= 3) {
+                        val estimate = PoseEstimatorBridge.nativeGetCurrentEstimateWithCovariance(localHandle)
+                        if (estimate.size >= 13) {
+                            fusedPose = Pose2d(estimate[0], estimate[1], estimate[2])
+                            covariance = estimate.copyOfRange(4, 13)
+                        } else if (estimate.size >= 3) {
                             fusedPose = Pose2d(estimate[0], estimate[1], estimate[2])
                         }
                         updateDiagnosticsIfNeeded(localHandle)

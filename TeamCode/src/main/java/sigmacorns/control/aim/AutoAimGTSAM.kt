@@ -6,6 +6,7 @@ import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import org.firstinspires.ftc.robotcore.internal.system.AppUtil
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
+import java.util.Random
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.PI
 import kotlin.math.abs
@@ -92,7 +93,11 @@ class AutoAimGTSAM(
         val enableMultiHypothesisInit: Boolean = true,
         val multiHypothesisThetaThreshold: Double = 1.0,
         val enableHeadingFlipRecovery: Boolean = true,
-        val headingFlipMinTags: Int = 1
+        val headingFlipMinTags: Int = 1,
+        /** Simulated odometry noise as a fractional factor stddev (e.g. 0.02 = 2% error per unit moved). */
+        val simOdomNoiseXY: Double = 0.02,
+        /** Simulated odometry heading noise as a fractional factor stddev (e.g. 0.01 = 1% error per radian turned). */
+        val simOdomNoiseTheta: Double = 0.01
     )
 
     // ===== Native Library Loading =====
@@ -147,6 +152,21 @@ class AutoAimGTSAM(
     // ===== Debug Logging =====
     private var debugLogger: GTSAMDebugLogger? = null
 
+    // ===== Odometry-Only Dead Reckoning (for uncertainty comparison) =====
+    private val rng = Random(42)
+
+    /** Dead-reckoned pose from noisy odometry only (no fusion corrections). */
+    var odometryOnlyPose: Pose2d = initialPose
+        private set
+
+    /** Accumulated odometry covariance in X (sum of per-step variance). */
+    var odometryCovXX: Double = 0.0
+        private set
+
+    /** Accumulated odometry covariance in Y (sum of per-step variance). */
+    var odometryCovYY: Double = 0.0
+        private set
+
     // ===== Public Interface =====
 
     var enabled: Boolean = false
@@ -183,6 +203,10 @@ class AutoAimGTSAM(
 
     var fusedPose: Pose2d = initialPose
         private set
+
+    /** 3x3 marginal covariance from the GTSAM solver, row-major [xx,xy,xθ, yx,yy,yθ, θx,θy,θθ]. */
+    val solverCovariance: DoubleArray
+        get() = fusionWorker.covariance
 
     val hasTarget: Boolean
         get() {
@@ -224,6 +248,11 @@ class AutoAimGTSAM(
 
         // Check if we should use odometry fallback (sim mode + no native library)
         val useOdometryFallback = SigmaOpMode.SIM && !nativeLibraryLoaded
+
+        // Always accumulate odometry-only dead reckoning (for uncertainty comparison)
+        if (lastRobotPose != null) {
+            updateOdometryOnly(robotPose)
+        }
 
         if (useOdometryFallback) {
             // Fallback mode: use odometry directly instead of GTSAM fusion
@@ -328,6 +357,45 @@ class AutoAimGTSAM(
 
     // ===== Odometry Processing =====
 
+    /** Accumulate odometry-only dead reckoning with simulated noise (for uncertainty comparison). */
+    private fun updateOdometryOnly(currentPose: Pose2d) {
+        val prevPose = lastRobotPose ?: return
+
+        val dxGlobal = currentPose.v.x - prevPose.v.x
+        val dyGlobal = currentPose.v.y - prevPose.v.y
+        val dtheta = normalizeAngle(currentPose.rot - prevPose.rot)
+
+        val cosPrev = cos(prevPose.rot)
+        val sinPrev = sin(prevPose.rot)
+        val dxLocal = cosPrev * dxGlobal + sinPrev * dyGlobal
+        val dyLocal = -sinPrev * dxGlobal + cosPrev * dyGlobal
+
+        // Multiplicative noise: error scales with how far/fast the robot moved.
+        // Factor is centered at 1 with stddev = simOdomNoise*, so faster motion = more error.
+        val xyFactor = estimatorConfig.simOdomNoiseXY
+        val thetaFactor = estimatorConfig.simOdomNoiseTheta
+        val noiseDxLocal = dxLocal * (1.0 + rng.nextGaussian() * xyFactor)
+        val noiseDyLocal = dyLocal * (1.0 + rng.nextGaussian() * xyFactor)
+        val noiseDtheta = dtheta * (1.0 + rng.nextGaussian() * thetaFactor)
+
+        val odoTheta = odometryOnlyPose.rot
+        val cosOdo = cos(odoTheta)
+        val sinOdo = sin(odoTheta)
+        val odoDxGlobal = cosOdo * noiseDxLocal - sinOdo * noiseDyLocal
+        val odoDyGlobal = sinOdo * noiseDxLocal + cosOdo * noiseDyLocal
+        odometryOnlyPose = Pose2d(
+            odometryOnlyPose.v.x + odoDxGlobal,
+            odometryOnlyPose.v.y + odoDyGlobal,
+            normalizeAngle(odoTheta + noiseDtheta)
+        )
+
+        val covDx = dxLocal * xyFactor
+        val covDy = dyLocal * xyFactor
+        odometryCovXX += covDx * covDx
+        odometryCovYY += covDy * covDy
+    }
+
+    /** Compute local-frame odometry delta and send to GTSAM fusion worker. */
     private fun processOdometryDelta(currentPose: Pose2d) {
         val prevPose = lastRobotPose ?: return
         val timestampSeconds = System.currentTimeMillis() / 1000.0
@@ -343,7 +411,7 @@ class AutoAimGTSAM(
 
         fusionWorker.enqueueOdometry(dxLocal, dyLocal, dtheta, timestampSeconds)
         enqueuedOdomCount.incrementAndGet()
-        
+
         debugLogger?.logOdometryDelta(dxLocal, dyLocal, dtheta, dxGlobal, dyGlobal, prevPose.rot)
     }
 

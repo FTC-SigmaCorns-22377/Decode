@@ -6,6 +6,7 @@ import sigmacorns.constants.Limelight
 import sigmacorns.constants.turretRange
 import sigmacorns.control.aim.AutoAimGTSAM
 import sigmacorns.control.aim.VisionTracker
+import sigmacorns.io.DrakeSimIO
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
@@ -79,7 +80,11 @@ class AimingSystem(
      */
     fun updateVision() {
         applyRuntimeConfig(autoAim)
-        val visionResult = visionTracker?.read()
+        val visionResult = if (io is DrakeSimIO) {
+            io.readVision(turret.pos)
+        } else {
+            visionTracker?.read()
+        }
         autoAim.update(io.position(), turret.pos, visionResult)
 
         val fusedPose = autoAim.fusedPose

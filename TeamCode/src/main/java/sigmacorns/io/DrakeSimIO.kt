@@ -2,6 +2,7 @@ package sigmacorns.io
 
 import org.joml.Vector2d
 import sigmacorns.math.Pose2d
+import sigmacorns.sim.AprilTagSimulator
 import sigmacorns.sim.Balls
 import sigmacorns.sim.BallInteractionSimulator
 import sigmacorns.sim.DrakeRobotModel
@@ -17,6 +18,9 @@ import sigmacorns.sim.viz.ForceState
 import sigmacorns.sim.viz.GTSAMVizState
 import sigmacorns.sim.viz.MPCHorizonState
 import sigmacorns.sim.viz.PathPoint
+import sigmacorns.control.aim.AutoAimGTSAM
+import sigmacorns.control.aim.VisionResult
+import sigmacorns.constants.FieldLandmarks
 import com.qualcomm.robotcore.hardware.Gamepad
 import sigmacorns.sim.viz.GamepadState
 import kotlin.time.Duration
@@ -24,10 +28,14 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
-class DrakeSimIO(urdfPath: String) : SigmaIO {
+class DrakeSimIO(
+    urdfPath: String,
+    estimatorConfig: AutoAimGTSAM.EstimatorConfig = AutoAimGTSAM.EstimatorConfig()
+) : SigmaIO {
     val model = DrakeRobotModel(urdfPath)
     val server: Any
     private val ballSim = BallInteractionSimulator(model)
+    private val aprilTagSim = AprilTagSimulator(FieldLandmarks.landmarks, estimatorConfig)
     private var trackingError: ErrorState? = null
     private var trackingTarget: List<PathPoint> = emptyList()
 
@@ -282,7 +290,8 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                             mpcContours = mpcContours,
                             mpcHorizon = mpcHorizon,
                             gtsam = gtsamViz,
-                            aiming = aimingViz
+                            aiming = aimingViz,
+                            simVision = aprilTagSim.lastVizState
                         )
                     }
 
@@ -386,6 +395,8 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
     }
 
     override fun update() {
+        val wallStart = System.nanoTime()
+
         // Request a sim step and wait for completion.
         // This synchronizes the control loop with the Drake simulation:
         // both run in separate threads but advance together one timestep at a time.
@@ -402,6 +413,14 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
                     return
                 }
             }
+        }
+
+        // Enforce real-time pacing: sleep for the remainder of SIM_UPDATE_TIME
+        val elapsedNanos = System.nanoTime() - wallStart
+        val targetNanos = SIM_UPDATE_TIME.toLong(DurationUnit.NANOSECONDS)
+        val sleepNanos = targetNanos - elapsedNanos
+        if (sleepNanos > 0) {
+            Thread.sleep(sleepNanos / 1_000_000, (sleepNanos % 1_000_000).toInt())
         }
     }
 
@@ -561,6 +580,21 @@ class DrakeSimIO(urdfPath: String) : SigmaIO {
 
     fun setAimingViz(viz: AimingVizState?) {
         aimingViz = viz
+    }
+
+    /**
+     * Simulate AprilTag vision readings by projecting known field landmarks
+     * through a pinhole camera model with Gaussian noise.
+     *
+     * @param turretYawRad Turret yaw angle relative to robot body (radians)
+     * @return VisionResult matching the real VisionTracker interface
+     */
+    fun readVision(turretYawRad: Double): VisionResult = synchronized(simLock) {
+        aprilTagSim.simulate(
+            robotPose = model.drivetrainState.pos,
+            turretYawRad = turretYawRad,
+            timestampSeconds = t.toDouble(DurationUnit.SECONDS)
+        )
     }
 
     // Ball spawning API with color

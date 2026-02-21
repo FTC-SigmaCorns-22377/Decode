@@ -29,6 +29,18 @@
         .hud-value.active { color: #00ff88; }
         .hud-value.warning { color: #ffa500; }
         .hud-value.error { color: #ff4444; }
+        #camera-view-container {
+            position: absolute; bottom: 10px; left: 10px; z-index: 10;
+            border: 2px solid #00ddff; border-radius: 6px;
+            background: #000; overflow: hidden; display: none;
+            box-shadow: 0 0 12px rgba(0,221,255,0.3);
+        }
+        #camera-view-container .cam-header {
+            background: #0d1b2a; color: #00ddff; font-size: 0.75em;
+            padding: 2px 8px; font-family: monospace; text-align: center;
+            border-bottom: 1px solid #1b2838;
+        }
+        #camera-view-canvas { display: block; }
     </style>
 
     <!-- Import Maps Polyfill -->
@@ -62,7 +74,12 @@
         <span id="error-msg" style="color: red; font-weight: bold; margin-left: 20px;"></span>
     </div>
     <div id="container">
-        <div id="canvas-container"></div>
+        <div id="canvas-container">
+            <div id="camera-view-container">
+                <div class="cam-header">CAMERA VIEW</div>
+                <canvas id="camera-view-canvas" width="320" height="240"></canvas>
+            </div>
+        </div>
         <div id="sidebar">
             <h3>Scene</h3>
             <div id="display-toggles">
@@ -87,6 +104,10 @@
                     <label><input type="checkbox" id="toggle-gtsam-landmarks" checked>Landmarks</label>
                     <label><input type="checkbox" id="toggle-gtsam-vision" checked>Vision rays</label>
                     <label><input type="checkbox" id="toggle-gtsam-uncertainty" checked>Uncertainty</label>
+                    <label><input type="checkbox" id="toggle-gtsam-projections" checked>Tag projections</label>
+                    <label><input type="checkbox" id="toggle-camera-view">Camera view</label>
+                    <label><input type="checkbox" id="toggle-gtsam-odo" checked>Odo position</label>
+                    <label style="gap:6px;">Scale <input type="range" id="uncertainty-scale" min="1" max="100" value="10" style="width:70px;vertical-align:middle;"><span id="uncertainty-scale-val">10</span></label>
                 </div>
                 <div class="toggle-group">
                     <div class="toggle-group-label">Aiming System</div>
@@ -137,6 +158,8 @@
             <div class="chart-container"><canvas id="chart-pos"></canvas></div>
             <h3 id="error-chart-title">Tracking Error</h3>
             <div class="chart-container" id="error-chart-container"><canvas id="chart-error"></canvas></div>
+            <h3>Uncertainty Comparison</h3>
+            <div class="chart-container"><canvas id="chart-uncertainty"></canvas></div>
         </div>
     </div>
 

@@ -156,20 +156,31 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
                 x = spec.position.x,
                 y = spec.position.y,
                 z = spec.position.z,
-                yaw = spec.yaw
+                yaw = spec.yaw,
+                roll = spec.roll,
+                pitch = spec.pitch
             )
         }
 
+        val cov = autoAim.solverCovariance
         drakeIO.setGTSAMViz(GTSAMVizState(
             fusedX = fusedPose.v.x,
             fusedY = fusedPose.v.y,
             fusedTheta = fusedPose.rot,
-            uncertainty = autoAim.uncertainty,
+            covXX = cov[0],
+            covXY = cov[1],
+            covYX = cov[3],
+            covYY = cov[4],
             initialized = autoAim.hasTarget,
             landmarks = landmarkViz,
             detectedTags = if (autoAim.trackedTagId >= 0) listOf(autoAim.trackedTagId) else emptyList(),
             hasVision = autoAim.hasVisionTarget,
-            usingPrediction = autoAim.usingPrediction
+            usingPrediction = autoAim.usingPrediction,
+            odoX = autoAim.odometryOnlyPose.v.x,
+            odoY = autoAim.odometryOnlyPose.v.y,
+            odoTheta = autoAim.odometryOnlyPose.rot,
+            odoCovXX = autoAim.odometryCovXX,
+            odoCovYY = autoAim.odometryCovYY
         ))
 
         // --- Aiming / Move-While-Shoot Visualization ---

@@ -45,7 +45,9 @@ data class SimState(
     /** GTSAM factor graph visualization state. */
     val gtsam: GTSAMVizState? = null,
     /** Aiming / move-while-shoot visualization state. */
-    val aiming: AimingVizState? = null
+    val aiming: AimingVizState? = null,
+    /** Simulated AprilTag vision state (camera + detected tag corners in world frame). */
+    val simVision: SimVisionState? = null
 )
 
 data class BallState(
@@ -114,8 +116,11 @@ data class GTSAMVizState(
     val fusedX: Double,
     val fusedY: Double,
     val fusedTheta: Double,
-    /** Localization uncertainty (0..1). */
-    val uncertainty: Double = 0.0,
+    /** Position covariance from the GTSAM solver (2x2 submatrix, row-major [xx, xy, yx, yy]). */
+    val covXX: Double = 0.0,
+    val covXY: Double = 0.0,
+    val covYX: Double = 0.0,
+    val covYY: Double = 0.0,
     /** Whether GTSAM has been initialized. */
     val initialized: Boolean = false,
     /** Number of factors in the graph. */
@@ -131,16 +136,28 @@ data class GTSAMVizState(
     /** Whether we have a current vision target. */
     val hasVision: Boolean = false,
     /** Whether we're using dead-reckoning prediction. */
-    val usingPrediction: Boolean = false
+    val usingPrediction: Boolean = false,
+    /** Odometry-only dead-reckoned position (for uncertainty comparison). */
+    val odoX: Double = 0.0,
+    val odoY: Double = 0.0,
+    val odoTheta: Double = 0.0,
+    /** Accumulated odometry-only covariance (diagonal, XX and YY). */
+    val odoCovXX: Double = 0.0,
+    val odoCovYY: Double = 0.0
 )
 
-/** Landmark data for visualization. */
+/** Landmark data for visualization.
+ *  roll/pitch/yaw match the getEulerAnglesZYX convention used by LandmarkSpec:
+ *  roll = Z-rotation, pitch = Y-rotation, yaw = X-rotation.
+ */
 data class LandmarkVizState(
     val tagId: Int,
     val x: Double,
     val y: Double,
     val z: Double,
-    val yaw: Double = 0.0
+    val yaw: Double = 0.0,
+    val roll: Double = 0.0,
+    val pitch: Double = 0.0
 )
 
 /** Aiming / move-while-shoot visualization data. */
@@ -176,4 +193,29 @@ data class AimingVizState(
 )
 
 data class Point3D(val x: Double, val y: Double, val z: Double)
+
+/** Simulated vision state for AprilTag projection visualization. */
+data class SimVisionState(
+    /** Camera position in world frame. */
+    val cameraX: Double,
+    val cameraY: Double,
+    val cameraZ: Double,
+    /** Per-tag detection data with world-frame corner positions. */
+    val detections: List<SimTagDetection> = emptyList(),
+    /** Image width in pixels. */
+    val imageWidth: Int = 640,
+    /** Image height in pixels. */
+    val imageHeight: Int = 480
+)
+
+/** A single simulated tag detection with its 4 world-frame corner positions. */
+data class SimTagDetection(
+    val tagId: Int,
+    /** 4 corner positions in world frame (TL, TR, BR, BL). */
+    val corners: List<Point3D>,
+    /** 4 corner positions in pixel coordinates (u, v pairs: TL, TR, BR, BL). */
+    val pixelCorners: List<Point2D> = emptyList()
+)
+
+data class Point2D(val u: Double, val v: Double)
 
