@@ -191,10 +191,6 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         io.intake = 0.0
         io.transfer = TRANSFER_DOWN_POSITION
 
-        if(!offsetActive) {
-            pollColor()
-        }
-
         // Reset transfer on first idle if needed
         if (transferNeedsReset) {
             resetTransfer()
@@ -202,6 +198,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
         // Poll so spinup changes are picked up
         while (true) {
+            if(!offsetActive) pollColor()
             if (spinupRequested) {
                 flywheelTargetVelocity = spinupPower
                 flywheel?.hold = true
@@ -279,6 +276,11 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     }
 
     private suspend fun movingBehavior(): State {
+        // with manual nudging, moving behavior could be triggered during transfer
+        // under normal operation the transfer will already be reset at this point
+        // and it will exit immediately
+        resetTransfer()
+
         // slow intake while moving
         io.intake = if (fsm.curState == State.MOVING) -1.0 else 0.0
 
@@ -353,6 +355,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
             p.value.takeIf {spindexerState[p.key] != null}
         } ?: 1.0
 
+        println("SPINDEXER: motif=${motif.joinToString(",")} state=${spindexerState.joinToString(",")}")
         println("SPINDEXER: sort found=$foundAnyBall required=$requiredColor nudgeDirection=$nudgeDirection")
         movingBehavior()
     }
