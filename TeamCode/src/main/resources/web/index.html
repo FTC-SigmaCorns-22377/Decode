@@ -8,18 +8,32 @@
         body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
         #container { display: flex; flex: 1; overflow: hidden; }
         #canvas-container { flex: 2; position: relative; background: #222; }
-        #sidebar { flex: 1; display: flex; flex-direction: column; background: #eee; border-left: 1px solid #ccc; padding: 10px; overflow-y: auto; max-width: 400px; }
+        #sidebar { flex: 1; display: flex; flex-direction: column; background: #1a1a2e; border-left: 1px solid #333; padding: 10px; overflow-y: auto; max-width: 420px; color: #ccc; }
         .chart-container { height: 200px; width: 100%; margin-bottom: 20px; }
-        #controls { padding: 10px; background: #ddd; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-        #display-toggles { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.9em; }
-        #display-toggles label { display: inline-flex; gap: 6px; align-items: center; }
-        button { padding: 5px 10px; cursor: pointer; }
+        #controls { padding: 10px; background: #16213e; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: #eee; }
+        #display-toggles { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.85em; }
+        #display-toggles label { display: inline-flex; gap: 4px; align-items: center; padding: 2px 6px; border-radius: 4px; transition: background 0.15s; }
+        #display-toggles label:hover { background: rgba(255,255,255,0.1); }
+        button { padding: 5px 10px; cursor: pointer; background: #0f3460; color: #eee; border: 1px solid #555; border-radius: 4px; }
+        button:hover { background: #1a4a7a; }
+        button:disabled { opacity: 0.5; }
         #status { margin-left: auto; font-size: 0.9em; }
+        h3 { color: #e0e0e0; margin: 12px 0 6px 0; font-size: 0.95em; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+        .section-divider { border-top: 2px solid #0f3460; margin: 8px 0; }
+        .toggle-group { margin-bottom: 4px; }
+        .toggle-group-label { font-size: 0.75em; text-transform: uppercase; letter-spacing: 1.5px; color: #888; margin-bottom: 2px; }
+        .control-hud { background: #0d1b2a; border: 1px solid #1b2838; border-radius: 6px; padding: 8px; margin-bottom: 10px; font-family: monospace; font-size: 0.8em; }
+        .hud-row { display: flex; justify-content: space-between; padding: 2px 0; }
+        .hud-label { color: #778da9; }
+        .hud-value { color: #e0e1dd; }
+        .hud-value.active { color: #00ff88; }
+        .hud-value.warning { color: #ffa500; }
+        .hud-value.error { color: #ff4444; }
     </style>
-    
+
     <!-- Import Maps Polyfill -->
     <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
-    
+
     <script type="importmap">
         {
             "imports": {
@@ -43,23 +57,79 @@
         <input type="range" id="scrubber" min="0" max="100" value="0" style="flex: 1;">
         <span id="time-display">T: 0.00s</span>
         <span id="status">Disconnected</span>
-        <span id="gamepad-status" style="margin-left: 10px;">🎮 No Gamepad</span>
+        <span id="gamepad-status" style="margin-left: 10px;">No Gamepad</span>
         <span id="spindexer-debug" style="margin-left: 10px; color: #0f0; font-family: monospace; font-size: 0.85em;"></span>
         <span id="error-msg" style="color: red; font-weight: bold; margin-left: 20px;"></span>
     </div>
     <div id="container">
         <div id="canvas-container"></div>
         <div id="sidebar">
-            <h3>Display</h3>
+            <h3>Scene</h3>
             <div id="display-toggles">
-                <label><input type="checkbox" id="toggle-robot-mesh" checked>Robot mesh</label>
-                <label><input type="checkbox" id="toggle-robot-point">Robot point</label>
-                <label><input type="checkbox" id="toggle-path" checked>Choreo path</label>
-                <label><input type="checkbox" id="toggle-mpc-target" checked>MPC target</label>
-                <label><input type="checkbox" id="toggle-forces" checked>Wheel forces</label>
-                <label><input type="checkbox" id="toggle-balls" checked>Balls</label>
-                <label><input type="checkbox" id="toggle-error-chart" checked>Error chart</label>
+                <div class="toggle-group">
+                    <div class="toggle-group-label">Robot</div>
+                    <label><input type="checkbox" id="toggle-robot-mesh" checked>Mesh</label>
+                    <label><input type="checkbox" id="toggle-robot-point">Point</label>
+                    <label><input type="checkbox" id="toggle-forces" checked>Wheel forces</label>
+                    <label><input type="checkbox" id="toggle-balls" checked>Balls</label>
+                </div>
+                <div class="toggle-group">
+                    <div class="toggle-group-label">MPC Controller</div>
+                    <label><input type="checkbox" id="toggle-path" checked>Choreo path</label>
+                    <label><input type="checkbox" id="toggle-mpc-target" checked>MPC target</label>
+                    <label><input type="checkbox" id="toggle-mpc-predicted" checked>MPC predicted</label>
+                    <label><input type="checkbox" id="toggle-mpc-contours" checked>MPC contours</label>
+                    <label><input type="checkbox" id="toggle-mpc-horizon">MPC horizon</label>
+                </div>
+                <div class="toggle-group">
+                    <div class="toggle-group-label">GTSAM Localization</div>
+                    <label><input type="checkbox" id="toggle-gtsam-fused" checked>Fused pose</label>
+                    <label><input type="checkbox" id="toggle-gtsam-landmarks" checked>Landmarks</label>
+                    <label><input type="checkbox" id="toggle-gtsam-vision" checked>Vision rays</label>
+                    <label><input type="checkbox" id="toggle-gtsam-uncertainty" checked>Uncertainty</label>
+                </div>
+                <div class="toggle-group">
+                    <div class="toggle-group-label">Aiming System</div>
+                    <label><input type="checkbox" id="toggle-aim-turret" checked>Turret ray</label>
+                    <label><input type="checkbox" id="toggle-aim-goal" checked>Goal marker</label>
+                    <label><input type="checkbox" id="toggle-aim-arc" checked>Projectile arc</label>
+                    <label><input type="checkbox" id="toggle-aim-lead">Lead vector</label>
+                </div>
+                <div class="toggle-group">
+                    <div class="toggle-group-label">Charts</div>
+                    <label><input type="checkbox" id="toggle-error-chart" checked>Error chart</label>
+                </div>
             </div>
+
+            <!-- MPC Status HUD -->
+            <h3>MPC Controller</h3>
+            <div class="control-hud" id="mpc-hud">
+                <div class="hud-row"><span class="hud-label">Horizon</span><span class="hud-value" id="hud-mpc-horizon">--</span></div>
+                <div class="hud-row"><span class="hud-label">Sample Idx</span><span class="hud-value" id="hud-mpc-sample">--</span></div>
+                <div class="hud-row"><span class="hud-label">Traj Complete</span><span class="hud-value" id="hud-mpc-complete">--</span></div>
+            </div>
+
+            <!-- GTSAM Status HUD -->
+            <h3>GTSAM Factor Graph</h3>
+            <div class="control-hud" id="gtsam-hud">
+                <div class="hud-row"><span class="hud-label">Fused Pose</span><span class="hud-value" id="hud-gtsam-pose">--</span></div>
+                <div class="hud-row"><span class="hud-label">Uncertainty</span><span class="hud-value" id="hud-gtsam-uncertainty">--</span></div>
+                <div class="hud-row"><span class="hud-label">Vision</span><span class="hud-value" id="hud-gtsam-vision">--</span></div>
+                <div class="hud-row"><span class="hud-label">Tags Detected</span><span class="hud-value" id="hud-gtsam-tags">--</span></div>
+                <div class="hud-row"><span class="hud-label">Mode</span><span class="hud-value" id="hud-gtsam-mode">--</span></div>
+            </div>
+
+            <!-- Aiming Status HUD -->
+            <h3>Move-While-Shoot</h3>
+            <div class="control-hud" id="aim-hud">
+                <div class="hud-row"><span class="hud-label">Target Lock</span><span class="hud-value" id="hud-aim-lock">--</span></div>
+                <div class="hud-row"><span class="hud-label">Distance</span><span class="hud-value" id="hud-aim-dist">--</span></div>
+                <div class="hud-row"><span class="hud-label">Turret</span><span class="hud-value" id="hud-aim-turret">--</span></div>
+                <div class="hud-row"><span class="hud-label">Flywheel</span><span class="hud-value" id="hud-aim-flywheel">--</span></div>
+                <div class="hud-row"><span class="hud-label">Robot Vel</span><span class="hud-value" id="hud-aim-vel">--</span></div>
+            </div>
+
+            <div class="section-divider"></div>
             <h3>Joints</h3>
             <div class="chart-container"><canvas id="chart-wheels"></canvas></div>
             <div class="chart-container"><canvas id="chart-mechanisms"></canvas></div>
