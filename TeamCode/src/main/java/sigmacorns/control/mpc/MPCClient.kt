@@ -159,6 +159,9 @@ class MPCClient(
     @Volatile
     private var awaitingFirstResponse = true
 
+    @Volatile
+    private var firstRequestSentTime: Long? = null
+
     // Convenience accessors for the snapshot
     private val trajectory: TrajoptTrajectory? get() = trajSnapshot.trajectory
     val path: List<LinearContour> get() = trajSnapshot.path
@@ -218,6 +221,8 @@ class MPCClient(
         // waiting for the first MPC solution.
         val elapsed = if (trajectoryStartTime == null) {
             if (!awaitingFirstResponse) {
+                val waitMs = firstRequestSentTime?.let { (System.nanoTime() - it) / 1_000_000L } ?: -1L
+                println("MPCClient: trajectoryStartTime set, total wait after first request = ${waitMs}ms")
                 trajectoryStartTime = time
             }
             0.0
@@ -394,7 +399,13 @@ class MPCClient(
         sentTargetContours += time to targetContour
 
         try {
-            if (channel.isOpen) channel.send(buf, solverAddr)
+            if (channel.isOpen) {
+                if (firstRequestSentTime == null) {
+                    firstRequestSentTime = System.nanoTime()
+                    println("MPCClient: sending FIRST request at nanoTime=${firstRequestSentTime} seq=$seq referencePositions.size=${referencePositions.size}")
+                }
+                channel.send(buf, solverAddr)
+            }
         } catch (e: ClosedByInterruptException) {
             channel.close()
         }
@@ -429,6 +440,11 @@ class MPCClient(
                         if (t0 >= latestUTime) {
                             println("UPDATED LATEST U")
                             latestUTime = t0
+                            if (awaitingFirstResponse) {
+                                val sentAt = firstRequestSentTime
+                                val rttMs = if (sentAt != null) (System.nanoTime() - sentAt) / 1_000_000L else -1L
+                                println("MPCClient: FIRST RESPONSE received! RTT from first request = ${rttMs}ms")
+                            }
                             awaitingFirstResponse = false
                             getArray(buf, latestU)
                             println("MPC: UPDATED U = ${latestU.toList().chunked(3).map { "(${it[0]},${it[1]},${it[2]}), " }.reduce(String::plus)}")
@@ -458,6 +474,7 @@ class MPCClient(
      */
     fun setTarget(traj: TrajoptTrajectory) {
         val contours = load(traj)
+        println("MPCClient: setTarget '${traj.name}' samples=${traj.samples.size} contours=${contours.size} duration=${traj.samples.lastOrNull()?.timestamp?.let { "${it}s" } ?: "n/a"}")
         // Atomically swap the entire trajectory state
         trajSnapshot = TrajectorySnapshot(
             trajectory = traj,
@@ -468,6 +485,7 @@ class MPCClient(
         // Reset other state
         trajectoryStartTime = null
         awaitingFirstResponse = true
+        firstRequestSentTime = null
         latestSampleI = 0
         lastTargetContour = null
         lastSentContours = emptyList()

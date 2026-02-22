@@ -106,8 +106,8 @@ val traj3test = TrajoptAutoData(
 
 val near = TrajoptAutoData(
     INTAKE_SEGMENTS= mapOf(
-        "Trajectory 2" to listOf(1 to 2),
-        "Trajectory 3" to listOf(1 to 2),
+        "Trajectory 2" to listOf(2 to 3.3),
+        "Trajectory 3" to listOf(1 to 2.3),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { if(it) "near" else "near_mirrored" },
@@ -188,11 +188,15 @@ open class TrajoptAuto(
             )
 
             // Start MPC solver on limelight and pre-warm with first trajectory
+            println("TrajoptAuto: sleeping 2000ms before startMPCSolver")
             Thread.sleep(2000)
+            println("TrajoptAuto: calling startMPCSolver at t=${io.time()}")
             robot.startMPCSolver()
+            println("TrajoptAuto: startMPCSolver done, sleeping 1000ms")
             Thread.sleep(1000)
-
+            println("TrajoptAuto: calling initMPC at t=${io.time()}")
             robot.initMPC()
+            println("TrajoptAuto: initMPC done at t=${io.time()}")
 
             // Switch to apriltag for motif detection during init
             robot.startApriltag()
@@ -207,7 +211,9 @@ open class TrajoptAuto(
             }
 
             // Init done — start MPC runner
+            println("TrajoptAuto: calling startMPCRunner at t=${io.time()}")
             robot.startMPCRunner()
+            println("TrajoptAuto: startMPCRunner done at t=${io.time()}")
 
             // Apply motif if already detected during init
             if (detectedMotifId != null) {
@@ -242,7 +248,11 @@ open class TrajoptAuto(
             val startTime = io.time()
             val goal = robot.aim.autoAim.turretTargeting.goalPosition
 
-            trajectories.firstOrNull()?.let { robot.prewarmMPC(it) }
+            trajectories.firstOrNull()?.let {
+                println("TrajoptAuto: calling prewarmMPC for '${it.name}' at t=${io.time()}")
+                robot.prewarmMPC(it)
+                println("TrajoptAuto: prewarmMPC done at t=${io.time()}")
+            }
 
             while (opModeIsActive() && !schedule.isCompleted) {
                 val newRunMotif = data.RUN_MOTIF && !motifDetected && (io.time() - startTime)<5.seconds
