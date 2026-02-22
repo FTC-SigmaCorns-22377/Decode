@@ -217,6 +217,7 @@ open class TrajoptAuto(
 
             val schedule = robot.scope.launch {
                 if(data.PRELOAD) shootAllBalls(robot.logic)
+                robot.prewarm = false
                 robot.logic.spinupRequested = true
                 println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {

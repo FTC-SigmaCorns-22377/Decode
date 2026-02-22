@@ -134,16 +134,17 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         dispatcher.update()
 
         if(prewarm) {
-            prewarm = false
             startTime = t
         }
 
-        runner?.updateState(
-            MecanumState(
-                io.velocity(),
-                io.position()
-            ), 12.0, t-startTime)
-        runner?.driveWithMPC(io, io.voltage())
+        if(!prewarm) {
+            runner?.updateState(
+                MecanumState(
+                    io.velocity(),
+                    io.position()
+                ), 12.0, t-startTime)
+            runner?.driveWithMPC(io, io.voltage())
+        }
 
         if(zero) {
             aimTurret = false
