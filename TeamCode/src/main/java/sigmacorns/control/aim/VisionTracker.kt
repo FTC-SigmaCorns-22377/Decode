@@ -37,15 +37,6 @@ class VisionTracker(
     private val logger: Logger? = null,
     var enableDebugLogging: Boolean = false
 ) {
-    fun configure(pipeline: Int = 0) {
-        limelight?.pipelineSwitch(pipeline)
-        limelight?.start()
-    }
-
-    fun stop() {
-        limelight?.stop()
-    }
-
     fun read(): VisionResult {
         if (limelight == null) {
             return VisionResult(emptyStatus(), null)

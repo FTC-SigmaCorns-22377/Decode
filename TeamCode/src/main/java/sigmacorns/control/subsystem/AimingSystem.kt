@@ -69,7 +69,6 @@ class AimingSystem(
         adaptiveTuner = AdaptiveTuner(dataStore)
 
         applyRuntimeConfig(autoAim)
-        if(apriltagTracking) visionTracker?.configure(pipeline = Limelight.APRILTAG_PIPELINE)
         autoAim.enabled = true
     }
 
@@ -137,6 +136,5 @@ class AimingSystem(
 
     fun close() {
         autoAim.close()
-        visionTracker?.stop()
     }
 }

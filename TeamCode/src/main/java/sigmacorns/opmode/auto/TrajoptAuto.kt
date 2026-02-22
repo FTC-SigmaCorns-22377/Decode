@@ -180,7 +180,7 @@ open class TrajoptAuto(
             robot.init(initPos,false)
             Thread.sleep(500)
             robot.stopMPCSolver()
-            Thread.sleep(500)
+            Thread.sleep(2000)
 
             robot.logic.spindexerState = mutableListOf(
                 Balls.Green,
@@ -191,7 +191,7 @@ open class TrajoptAuto(
             // Start MPC solver on limelight and pre-warm with first trajectory
             robot.startMPCSolver()
 
-            Thread.sleep(500)
+            Thread.sleep(2000)
 
             robot.initMPC()
 
@@ -244,6 +244,11 @@ open class TrajoptAuto(
             while (opModeIsActive() && !schedule.isCompleted) {
                 val newRunMotif = data.RUN_MOTIF && !motifDetected && (io.time() - startTime)<5.seconds
 
+                if(io.time()-startTime < 1.seconds) {
+                    zero = true
+                    robot.logic.fsm.curState = SpindexerLogic.State.ZERO
+                }
+
                 if(!newRunMotif && runMotif) robot.idleLimelight()
 
                 runMotif = newRunMotif
@@ -255,7 +260,6 @@ open class TrajoptAuto(
                         detectedMotifId = id
                         robot.applyDetectedMotif(id)
                         MotifPersistence.saveMotif(id, storageDir())
-                        robot.idleLimelight()
                         motifDetected = true
                     }
                 } else {
