@@ -124,5 +124,13 @@ object TrajoptLoader {
     /**
      * Default trajopt directory on the robot.
      */
-    fun robotTrajoptDir(): File = File("/sdcard/FIRST/trajopt")
+    fun robotTrajoptDir(sim: Boolean = false): File = if(sim)  {
+        val wd = System.getProperty("user.dir")
+        println("USER DIR = $wd")
+        val res = File("$wd/trajopt")
+
+        println("RES = ${res.absolutePath}")
+        res
+    }
+    else File("/sdcard/FIRST/trajopt")
 }

@@ -688,6 +688,10 @@ class DrakeSimIO(
         }
     }
 
+    fun preloadSpindexer(balls: List<Balls?>) {
+        balls.forEachIndexed { i, color -> ballSim.preloadSlot(i, color) }
+    }
+
     companion object {
         private const val BALL_RADIUS = 0.0635
 

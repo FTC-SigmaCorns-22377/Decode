@@ -2,6 +2,7 @@ package sigmacorns.opmode
 
 import org.junit.jupiter.api.Test
 import sigmacorns.State
+import sigmacorns.opmode.auto.AutoBlueFarFull
 import sigmacorns.opmode.teleop.TeleopBlue
 import sigmacorns.opmode.test.MPCForward
 import sigmacorns.opmode.test.MPCTest
@@ -29,7 +30,7 @@ class SigmaOpModeTest {
     fun testDrakeSimIntegration() {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
-        val opMode = TeleopBlue()
+        val opMode = AutoBlueFarFull()
         try {
             opMode.runOpMode()
         } finally {

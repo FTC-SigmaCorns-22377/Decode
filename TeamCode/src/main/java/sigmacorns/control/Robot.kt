@@ -67,11 +67,13 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
 
         mpc = MPCClient(
             drivetrainParameters,
-            Network.LIMELIGHT,
+            if(io is DrakeSimIO) Network.SIM_MPC else Network.LIMELIGHT,
             contourSelectionMode = ContourSelectionMode.POSITION,
             preIntegrate = 30.milliseconds,
             sampleLookahead = 0
         )
+
+        println("IP = ${mpc!!.SOLVER_IP}")
         runner = MPCRunner(mpc!!,drive)
         runner!!.start()
     }

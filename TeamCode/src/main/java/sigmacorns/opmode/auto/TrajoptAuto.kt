@@ -13,6 +13,7 @@ import sigmacorns.control.mpc.MPCRunner
 import sigmacorns.control.mpc.TrajoptEventMarker
 import sigmacorns.control.mpc.TrajoptLoader
 import sigmacorns.control.mpc.TrajoptTrajectory
+import sigmacorns.io.DrakeSimIO
 import sigmacorns.io.PosePersistence
 import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
@@ -109,7 +110,7 @@ open class TrajoptAuto(
     override fun runOpMode() {
         val robot = Robot(io,blue)
 
-        val robotDir = TrajoptLoader.robotTrajoptDir()
+        val robotDir = TrajoptLoader.robotTrajoptDir(io is DrakeSimIO)
         val projectFile = TrajoptLoader.findProjectFiles(robotDir).find {
             it.nameWithoutExtension == data.PROJECT_FILE_NAME(blue)
         }!!
@@ -131,6 +132,7 @@ open class TrajoptAuto(
                 Balls.Purple,
                 Balls.Purple
             )
+            (io as? DrakeSimIO)?.preloadSpindexer(robot.logic.spindexerState)
 
             waitForStart()
 

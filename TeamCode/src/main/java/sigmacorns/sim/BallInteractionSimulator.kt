@@ -183,6 +183,11 @@ class BallInteractionSimulator(private val model: DrakeRobotModel) {
     // Get slot contents for debugging/visualization
     fun getSlots(): Array<SpindexerBall?> = slots.copyOf()
 
+    // Preload balls into spindexer slots (for sim initialization)
+    fun preloadSlot(index: Int, color: Balls?) {
+        slots[index] = color?.let { SpindexerBall(it) }
+    }
+
     companion object {
         private const val INTAKE_POWER_THRESHOLD = 0.1
         private const val SPINDEXER_SLOT_ANGLE = 2 * PI / 3

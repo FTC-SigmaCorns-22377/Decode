@@ -44,7 +44,7 @@ data class TrajectorySnapshot(
 
 class MPCClient(
     val parameters: MecanumParameters,
-    SOLVER_IP: String = "172.29.0.1",
+    val SOLVER_IP: String = "172.29.0.1",
     SOLVER_PORT: Int = 5000,
     ROBOT_PORT: Int = 22377,
     val sampleLookahead: Int = 0,
@@ -326,9 +326,11 @@ class MPCClient(
 
     private fun sendRequest(time: Long) {
         if (x0 == null) {
+            println("MPC sendRequest: SKIPPED (x0 is null)")
             return
         }
         if (referencePositions.isEmpty()) {
+            println("MPC sendRequest: SKIPPED (referencePositions is empty, no trajectory set)")
             return
         }
 
@@ -380,7 +382,10 @@ class MPCClient(
         sentTargetContours += time to targetContour
 
         try {
-            if (channel.isOpen) channel.send(buf, solverAddr)
+            if (channel.isOpen) {
+                val bytesSent = channel.send(buf, solverAddr)
+                println("MPC sendRequest: SENT $bytesSent bytes to $solverAddr (seq=$seq)")
+            }
         } catch (e: ClosedByInterruptException) {
             channel.close()
         }
