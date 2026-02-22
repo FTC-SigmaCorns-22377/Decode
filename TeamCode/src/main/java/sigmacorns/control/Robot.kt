@@ -130,7 +130,10 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         runner?.driveWithMPC(io, io.voltage())
 
         aim.update(dt, aimTurret)
-        if(aimFlywheel) aim.getRecommendedFlywheelVelocity()?.let { logic.shotVelocity = it }
+        if(aimFlywheel) aim.getRecommendedFlywheelVelocity()?.let {
+            logic.shotVelocity = it
+            logic.spinupPower = it}
+
 
         logic.update( dt)
     }

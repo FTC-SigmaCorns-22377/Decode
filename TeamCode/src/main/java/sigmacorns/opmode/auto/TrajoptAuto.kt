@@ -44,11 +44,24 @@ val RedWallPreload = TrajoptAutoData (
 
 val base = TrajoptAutoData(
     INTAKE_SEGMENTS= mapOf(
-        "intake_1" to listOf(1 to 2),
-        "intake_2" to listOf(1 to 2),
+        "intake_1" to listOf(1 to 2.3),
+        "intake_2" to listOf(1 to 2.3),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { if(it) "base-mirrored" else "base" },
+    ROOT = "intake_1",
+    PRELOAD = true,
+    initTurretAngle = -PI/2.0
+)
+
+val baseBlue = TrajoptAutoData(
+    INTAKE_SEGMENTS= mapOf(
+        "intake_1" to listOf(1 to 2),
+        "intake_2" to listOf(1 to 2),
+        "intake_3" to listOf(1 to 2)
+    ),
+    SHOT_POWER = ShotPowers.longShotPower,
+    PROJECT_FILE_NAME = { if(it) "base-mirrored" else "baseRed" },
     ROOT = "intake_1",
     PRELOAD = true,
     initTurretAngle = -PI/2.0
@@ -100,6 +113,9 @@ class AutoBlueFarFull: TrajoptAuto(baseFar, true)
 
 @Autonomous(name = "RedWallAuto", group = "Auto", preselectTeleOp = "TeleopRed")
 class RedWallAuto: TrajoptAuto(RedWallPreload, false)
+
+@Autonomous(name = "BlueMixed", group = "Auto", preselectTeleOp = "TeleopBlue")
+class BlueMixed: TrajoptAuto(baseBlue, true)
 
 
 @Autonomous(name = "IntakeTestAuto", group = "Auto")
@@ -167,12 +183,15 @@ open class TrajoptAuto(
                 MotifPersistence.saveMotif(detectedMotifId, storageDir())
                 robot.idleLimelight()
             }
+            robot.startMPC()
+            robot.logic.spinupRequested = true
 
             val startTime = io.time()
             var zero = false
 
             val schedule = robot.scope.launch {
                 if(data.PRELOAD) shootAllBalls(robot.logic)
+                robot.logic.spinupRequested = true
                 println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {
                     if(traj.name == "intake_3") {
@@ -249,7 +268,7 @@ open class TrajoptAuto(
             when {
                 shouldIntake -> {
                     println("TrajoptAuto: intaking")
-                    spindexerLogic.startIntaking()
+                    if (spindexerLogic.currentState!= SpindexerLogic.State.FULL) spindexerLogic.startIntaking()
                     intaking = true
                 }
                 !shouldIntake && intaking -> {
@@ -279,6 +298,7 @@ open class TrajoptAuto(
                     intaking = false
                 }
                 shootAllBalls(spindexerLogic)
+                spindexerLogic.spinupRequested = true
                 nextShootIdx++
                 flywheelPreSpun = false
             }
@@ -292,6 +312,7 @@ open class TrajoptAuto(
         while (nextShootIdx < shootSampleIndices.size) {
             println("TrajoptAuto: Shooting remaining marker at trajectory end")
             shootAllBalls(spindexerLogic)
+            spindexerLogic.spinupRequested = true
             nextShootIdx++
         }
 

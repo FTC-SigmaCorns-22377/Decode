@@ -59,7 +59,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     // Transfer servo position constants db(discrete servo: 0.0 = retracted, 1.0 = extended)
     private val TRANSFER_UP_POSITION = 0.135       // Extended position (towards shooter)
     private val TRANSFER_DOWN_POSITION = 0.0     // Retracted position (reset)
-    private val TRANSFER_UP_TIME = 450.milliseconds
+    private val TRANSFER_UP_TIME = 325.milliseconds
     private val TRANSFER_RESET_TIME = 200.milliseconds
 
     //extra variables
@@ -70,6 +70,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     var shotPower: Double = 0.0
     var spinupPower: Double = 0.6 * flywheelMotor.freeSpeed
+    var spinupPower2: Double = 0.6 * flywheelMotor.freeSpeed
     var shotVelocity: Double? = null
 
     private var flywheelTargetVelocity: Double = 0.0
@@ -78,6 +79,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     /** Whether continuous shooting is requested */
     var shootingRequested: Boolean = false
     var spinupRequested: Boolean = false
+    var spinup2Requested: Boolean = false
 
     var autoSort: Boolean = true
 
@@ -179,6 +181,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     private suspend fun zeroBehavior(): State {
         if(offsetActive) spindexerRotation -= MODE_CHANGE_ANGLE
+        offsetActive = false
 
 
         delay(100)
@@ -191,10 +194,6 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         io.intake = 0.0
         io.transfer = TRANSFER_DOWN_POSITION
 
-        if(!offsetActive) {
-            pollColor()
-        }
-
         // Reset transfer on first idle if needed
         if (transferNeedsReset) {
             resetTransfer()
@@ -202,8 +201,12 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
         // Poll so spinup changes are picked up
         while (true) {
+            if(!offsetActive) pollColor()
             if (spinupRequested) {
                 flywheelTargetVelocity = spinupPower
+                flywheel?.hold = true
+            } else if (spinup2Requested) {
+                flywheelTargetVelocity = spinupPower2
                 flywheel?.hold = true
             } else {
                 flywheelTargetVelocity = 0.0
@@ -260,8 +263,11 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         }
 
         //if flywheel spinup is requested, spin up flywheel
-        if (spinupRequested == true) {
+        if (spinupRequested) {
             flywheelTargetVelocity = spinupPower
+            flywheel?.hold = true
+        } else if (spinup2Requested) {
+            flywheelTargetVelocity = spinupPower2
             flywheel?.hold = true
         } else {
             flywheelTargetVelocity = 0.0
@@ -275,10 +281,15 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
         // Ball detected -> transition to MOVING
         nudgeDirection = 1.0
-        return State.MOVING
+        return if(spindexerState.all { it != null }) State.FULL else State.MOVING
     }
 
     private suspend fun movingBehavior(): State {
+        // with manual nudging, moving behavior could be triggered during transfer
+        // under normal operation the transfer will already be reset at this point
+        // and it will exit immediately
+        resetTransfer()
+
         // slow intake while moving
         io.intake = if (fsm.curState == State.MOVING) -1.0 else 0.0
 
@@ -328,8 +339,11 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         io.intake = 0.0
 
         //if flywheel spinup is requested, spin up flywheel
-        if (spinupRequested == true) {
+        if (spinupRequested) {
             flywheelTargetVelocity = spinupPower
+            flywheel?.hold = true
+        } else if (spinup2Requested) {
+            flywheelTargetVelocity = spinupPower2
             flywheel?.hold = true
         } else {
             flywheelTargetVelocity = 0.0
@@ -353,6 +367,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
             p.value.takeIf {spindexerState[p.key] != null}
         } ?: 1.0
 
+        println("SPINDEXER: motif=${motif.joinToString(",")} state=${spindexerState.joinToString(",")}")
         println("SPINDEXER: sort found=$foundAnyBall required=$requiredColor nudgeDirection=$nudgeDirection")
         movingBehavior()
     }
