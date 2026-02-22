@@ -23,6 +23,7 @@ import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.Balls
 import kotlin.math.PI
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 data class TrajoptAutoData(
@@ -155,6 +156,7 @@ open class TrajoptAuto(
     var runMotif = data.RUN_MOTIF
 
     var zero = false
+    var zeroTime: Duration? = null
 
     override fun runOpMode() {
         val robot = Robot(io,blue)
@@ -223,6 +225,7 @@ open class TrajoptAuto(
                 for (traj in trajectories) {
                     if(traj.name == "zero") {
                         robot.logic.fsm.curState = SpindexerLogic.State.ZERO
+                        if(!zero) zeroTime = io.time()
                         zero = true
                     }
                     println("TrajoptAuto: following traj ${traj.name}")
@@ -231,6 +234,7 @@ open class TrajoptAuto(
                 }
                 println("TrajoptAuto: All trajectories complete")
                 delay(3000)
+                if(zeroTime!=null) while (io.time() < zeroTime!! + 2.seconds) yield()
             }
 
             // Main loop — continue polling for motif if not yet detected
@@ -244,6 +248,7 @@ open class TrajoptAuto(
                 val newRunMotif = data.RUN_MOTIF && !motifDetected && (io.time() - startTime)<5.seconds
 
                 if(io.time()-startTime > 28.seconds) {
+                    if(!zero) zeroTime = io.time()
                     zero = true
                     robot.logic.fsm.curState = SpindexerLogic.State.ZERO
                 }

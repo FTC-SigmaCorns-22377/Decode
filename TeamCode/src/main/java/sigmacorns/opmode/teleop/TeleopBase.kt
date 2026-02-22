@@ -127,6 +127,9 @@ open class TeleopBase(
                     io.setPosition(Pose2d(0.0,0.0, PI/2.0))
                 }
 
+                if(gm2.dpadDownWasReleased()) robot.logic.sortCycle -= 1
+                if(gm2.dpadUpWasReleased()) robot.logic.sortCycle += 1
+
                 robot.update()
 
                 loopStartTime = System.nanoTime()
@@ -146,7 +149,7 @@ open class TeleopBase(
         val autoAimToggle = gm2.back
         val autoAim = robot.aim.autoAim
         if (autoAimToggle && !wasAutoAimToggle) {
-            autoAim.enabled = !autoAim.enabled
+            robot.aim.autoAim.enabled = !autoAim.enabled
             if(!autoAim.enabled) {
                 robot.aim.turret.fieldRelativeMode = true
             }
@@ -227,7 +230,21 @@ open class TeleopBase(
 
 
     private var lastTimestep = 0.milliseconds
-    private fun updateTelemetry(state: sigmacorns.State) {
+
+    private fun updateAutoSortTelemetry() {
+        val lines = SpindexerDisplay.buildDisplay(
+            robot.logic.motif,
+            robot.logic.spindexerState,
+            robot.logic.nextMotifIndex,
+            robot.logic.currentState.name
+        )
+        for (line in lines) {
+            telemetry.addLine(line)
+        }
+        telemetry.update()
+    }
+
+    private fun updateDefaultTelemetry(state: sigmacorns.State) {
         val turret = robot.aim.turret
         val autoAim = robot.aim.autoAim
         val targetDistance = robot.aim.targetDistance
@@ -324,9 +341,16 @@ open class TeleopBase(
         // Practice game ramp
         telemetry.addData("Ramp", globalFieldState.ramp.contentToString())
 
-        //testing for autosorting
         telemetry.addData("if nay balls were found:", robot.logic.foundAnyBall)
         telemetry.addData("current ball being detected:", io.colorSensorGetBallColor())
         telemetry.update()
+    }
+
+    private fun updateTelemetry(state: sigmacorns.State) {
+        if (robot.logic.autoSort) {
+            updateAutoSortTelemetry()
+        } else {
+            updateDefaultTelemetry(state)
+        }
     }
 }

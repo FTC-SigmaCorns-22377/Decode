@@ -66,7 +66,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     internal var offsetActive: Boolean = false
     private var transferNeedsReset: Boolean = true  // Track if transfer needs to be reset
     private var nudgeDirection: Double = 1.0  // Track the direction of the last nudge (1.0 for forward/CW, -1.0 for backward/CCW)
-    private var sortCycle: Int = 0 //Tracks the number of iterations the sorting has been through
+    var sortCycle: Int = 0 //Tracks the number of iterations the sorting has been through
 
     var shotPower: Double = 0.0
     var spinupPower: Double = 0.6 * flywheelMotor.freeSpeed
@@ -375,6 +375,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private suspend fun shootingBehavior(): State {
         // Wait for flywheel to spin up
         spinupRequested = false
+        spinup2Requested = false
         val startTime = io.time()
         while (true) {
             flywheelTargetVelocity = shotVelocity ?: (shotPower* flywheelMotor.freeSpeed)
@@ -449,6 +450,9 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
 
     // Current state accessor
     val currentState: State get() = fsm.curState
+
+    // Index into motif for the next ball to be shot
+    val nextMotifIndex: Int get() = sortCycle % 3
 
     private suspend fun sortedShootingBehavior(): State {
         sortedShoot()
