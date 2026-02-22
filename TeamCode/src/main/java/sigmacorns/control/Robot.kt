@@ -17,6 +17,7 @@ import sigmacorns.control.subsystem.DriveController
 import sigmacorns.control.subsystem.Flywheel
 import sigmacorns.control.subsystem.SpindexerLogic
 import sigmacorns.globalFieldState
+import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
@@ -50,10 +51,24 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         aim.init(io.position(),apriltagTracking)
     }
 
-    fun startMPC() {
-        if(mpc != null) mpc?.close()
-        limelight?.pipelineSwitch(Limelight.MPC_PIPELINE)
+    /** Switch limelight to the pipeline that starts the MPC solver process. */
+    fun startMPCSolver() {
+        limelight?.pipelineSwitch(Limelight.START_MPC_PIPELINE)
+    }
 
+    /** Switch limelight to the pipeline that stops the MPC solver process. */
+    fun stopMPCSolver() {
+        limelight?.pipelineSwitch(Limelight.STOP_MPC_PIPELINE)
+    }
+
+    /** Switch limelight to the idle pipeline (frees CPU for MPC). */
+    fun idleLimelight() {
+        limelight?.pipelineSwitch(Limelight.IDLE_PIPELINE)
+    }
+
+    /** Create the MPC client without starting the runner thread. */
+    fun initMPC() {
+        if (mpc != null) mpc?.close()
         mpc = MPCClient(
             drivetrainParameters,
             Network.LIMELIGHT,
@@ -61,8 +76,31 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
             preIntegrate = 30.milliseconds,
             sampleLookahead = 0
         )
-        runner = MPCRunner(mpc!!,drive)
+    }
+
+    /** Start the MPC runner thread (creates client if needed). */
+    fun startMPCRunner() {
+        if (mpc == null) initMPC()
+        runner = MPCRunner(mpc!!, drive)
         runner!!.start()
+    }
+
+    /** Start MPC solver, create client, and start runner. */
+    fun startMPC() {
+        startMPCSolver()
+        initMPC()
+        startMPCRunner()
+    }
+
+    /**
+     * Send a single MPC request to pre-warm the solver with the first horizon.
+     * Call after [initMPC] and setting a target trajectory.
+     */
+    fun prewarmMPC(traj: TrajoptTrajectory) {
+        val m = mpc ?: return
+        m.setTarget(traj)
+        val state = MecanumState(Pose2d(), io.position())
+        m.update(state, 12.0, io.time())
     }
 
     fun stopMPC() {

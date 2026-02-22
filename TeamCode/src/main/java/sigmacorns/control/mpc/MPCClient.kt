@@ -50,6 +50,8 @@ class MPCClient(
     val sampleLookahead: Int = 0,
     val preIntegrate: Duration = 0.milliseconds,
     var contourSelectionMode: ContourSelectionMode = ContourSelectionMode.TIME,
+    /** Maximum time (seconds) the selected target can jump ahead of elapsed time. */
+    var maxTimeJump: Double = Double.MAX_VALUE,
     var tuning: MPCTuning = MPCTuning(),
     /**
      * Optional client-side slew rate limiting as a safety fallback.
@@ -223,18 +225,30 @@ class MPCClient(
             (time - trajectoryStartTime!!).toDouble(DurationUnit.SECONDS)
         }
 
+        val maxTime = elapsed + maxTimeJump
+
         val closestIndex = when {
             contourSelectionMode == ContourSelectionMode.TIME && timestamps.isNotEmpty() -> {
-                timestamps.withIndex().minBy { (_, t) ->
-                    kotlin.math.abs(t - elapsed)
-                }.index
+                val candidates = timestamps.withIndex().filter { (_, t) -> t <= maxTime }
+                (candidates.ifEmpty { timestamps.withIndex().toList() })
+                    .minBy { (_, t) -> kotlin.math.abs(t - elapsed) }.index
             }
-            else -> referencePositions.withIndex().minBy { (i, ref) ->
-                val dx = ref.x() - state[3]
-                val dy = ref.y() - state[4]
-                val dt = kotlin.math.abs((timestamps.getOrNull(i) ?: elapsed) - elapsed)
-                dx * dx + dy * dy + dt*0.5
-            }.index
+            else -> {
+                val candidates = if (timestamps.isNotEmpty()) {
+                    referencePositions.withIndex().filter { (i, _) ->
+                        (timestamps.getOrNull(i) ?: elapsed) <= maxTime
+                    }
+                } else {
+                    referencePositions.withIndex().toList()
+                }
+                (candidates.ifEmpty { referencePositions.withIndex().toList() })
+                    .minBy { (i, ref) ->
+                        val dx = ref.x() - state[3]
+                        val dy = ref.y() - state[4]
+                        val dt = kotlin.math.abs((timestamps.getOrNull(i) ?: elapsed) - elapsed)
+                        dx * dx + dy * dy + dt*0.5
+                    }.index
+            }
         }
 
         latestSampleI = closestIndex
