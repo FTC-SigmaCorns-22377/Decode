@@ -73,11 +73,22 @@ val baseBlue = TrajoptAutoData(
 
 val baseFar = TrajoptAutoData(
     INTAKE_SEGMENTS= mapOf(
-        "intake_1" to listOf(1 to 2),
-        "intake_2" to listOf(1 to 2),
+        "intake_1" to listOf(1 to 2.2),
+        "intake_2" to listOf(1 to 2.2),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
     PROJECT_FILE_NAME = { if(it) "basefar" else "basefar_mirrored" },
+    ROOT = "intake_1",
+    PRELOAD = true,
+    initTurretAngle = -PI/2.0
+)
+
+val baseFarShort = TrajoptAutoData(
+    INTAKE_SEGMENTS= mapOf(
+        "intake_1" to listOf(1 to 2.2),
+    ),
+    SHOT_POWER = ShotPowers.longShotPower,
+    PROJECT_FILE_NAME = { if(it) "basefarShort" else "basefarShort_mirrored" },
     ROOT = "intake_1",
     PRELOAD = true,
     initTurretAngle = -PI/2.0
@@ -103,7 +114,6 @@ val traj3test = TrajoptAutoData(
     PRELOAD = false
 )
 
-
 val near = TrajoptAutoData(
     INTAKE_SEGMENTS= mapOf(
         "Trajectory 2" to listOf(2 to 3.3),
@@ -128,18 +138,24 @@ class AutoRedFarFull: TrajoptAuto(baseFar,false)
 @Autonomous(name = "Auto Blue Far Full", group = "Auto", preselectTeleOp = "TeleopBlue")
 class AutoBlueFarFull: TrajoptAuto(baseFar, true)
 
-@Autonomous(name = "RedWallAuto", group = "Auto", preselectTeleOp = "TeleopRed")
-class RedWallAuto: TrajoptAuto(RedWallPreload, false)
+@Autonomous(name = "Auto Red Far Short", group = "Auto", preselectTeleOp = "TeleopRed")
+class AutoRedFarShort: TrajoptAuto(baseFarShort,false)
+
+@Autonomous(name = "Auto Blue Far Short", group = "Auto", preselectTeleOp = "TeleopBlue")
+class AutoBlueFarShort: TrajoptAuto(baseFarShort, true)
+
+//@Autonomous(name = "RedWallAuto", group = "Auto", preselectTeleOp = "TeleopRed")
+//class RedWallAuto: TrajoptAuto(RedWallPreload, false)
 
 @Autonomous(name = "BlueMixed", group = "Auto", preselectTeleOp = "TeleopBlue")
 class BlueMixed: TrajoptAuto(baseBlue, true)
 
 
-@Autonomous(name = "IntakeTestAuto", group = "Auto")
-class IntakeTestAuto: TrajoptAuto(intakeTestAuto, false)
-
-@Autonomous(name = "FAST", group = "Auto")
-class FAST: TrajoptAuto(traj3test, false)
+//@Autonomous(name = "IntakeTestAuto", group = "Auto")
+//class IntakeTestAuto: TrajoptAuto(intakeTestAuto, false)
+//
+//@Autonomous(name = "FAST", group = "Auto")
+//class FAST: TrajoptAuto(traj3test, false)
 
 @Autonomous(name = "BlueNear", group = "Auto")
 class BlueNear: TrajoptAuto(near, true)
@@ -254,7 +270,9 @@ open class TrajoptAuto(
                 println("TrajoptAuto: prewarmMPC done at t=${io.time()}")
             }
 
-            while (opModeIsActive() && !schedule.isCompleted) {
+            while (opModeIsActive() && !schedule.isCompleted && zeroTime?.let {
+                io.time() - it > 2.seconds
+                } ?: false) {
                 val newRunMotif = data.RUN_MOTIF && !motifDetected && (io.time() - startTime)<5.seconds
 
                 if(io.time()-startTime > 28.seconds) {
@@ -326,8 +344,6 @@ open class TrajoptAuto(
         while (!mpc.isTrajectoryComplete(traj)) {
             if(zero) {
                 spindexerLogic.fsm.curState = SpindexerLogic.State.ZERO
-                yield()
-                continue
             }
             val sampleI = mpc.latestSampleI
             // Toggle intake based on sample index
@@ -375,7 +391,7 @@ open class TrajoptAuto(
 
         if(zero) {
             spindexerLogic.fsm.curState = SpindexerLogic.State.ZERO
-            delay(Long.MAX_VALUE)
+            return
         }
 
         if (intaking) spindexerLogic.stopIntaking()
