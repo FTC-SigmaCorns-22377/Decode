@@ -270,9 +270,7 @@ open class TrajoptAuto(
                 println("TrajoptAuto: prewarmMPC done at t=${io.time()}")
             }
 
-            while (opModeIsActive() && !schedule.isCompleted && zeroTime?.let {
-                io.time() - it > 2.seconds
-                } ?: false) {
+            while (opModeIsActive() && !schedule.isCompleted) {
                 val newRunMotif = data.RUN_MOTIF && !motifDetected && (io.time() - startTime)<5.seconds
 
                 if(io.time()-startTime > 28.seconds) {

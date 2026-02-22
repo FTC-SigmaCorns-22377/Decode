@@ -60,7 +60,7 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private val TRANSFER_UP_POSITION = 0.135       // Extended position (towards shooter)
     private val TRANSFER_DOWN_POSITION = 0.0     // Retracted position (reset)
     private val TRANSFER_UP_TIME = 325.milliseconds
-    private val TRANSFER_RESET_TIME = 200.milliseconds
+    private val TRANSFER_RESET_TIME = 300.milliseconds
 
     //extra variables
     internal var offsetActive: Boolean = false
