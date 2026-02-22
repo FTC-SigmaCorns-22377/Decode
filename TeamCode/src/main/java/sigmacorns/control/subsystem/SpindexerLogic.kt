@@ -234,7 +234,8 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     private fun pollColor(): Boolean {
         val ballDetected = io.colorSensorDetectsBall()
         if (ballDetected) {
-            spindexerState[0] = io.colorSensorGetBallColor() ?: Balls.Green
+            // dont update if color isint clear, if null change to purple bc it is more likely
+            spindexerState[0] = io.colorSensorGetBallColor() ?: spindexerState[0] ?: Balls.Purple
         }
         return ballDetected
     }
