@@ -154,6 +154,10 @@ tasks.register("cmakeConfigureDrakeDesktop", Exec) {
 
     def drakeDir = drakeDirProp ?: System.getenv("DRAKE_DIR")
     def drakePrefix = drakePrefixProp ?: System.getenv("DRAKE_PREFIX")
+
+    environment 'LD_LIBRARY_PATH', "$drakePrefix/lib"
+    environment 'PYTHONPATH', "$drakePrefix/lib/python3.13/site-packages"
+
     if (drakeDir != null && !drakeDir.isEmpty()) {
         args "-Ddrake_DIR=${drakeDir}"
     } else if (drakePrefix != null && !drakePrefix.isEmpty()) {
