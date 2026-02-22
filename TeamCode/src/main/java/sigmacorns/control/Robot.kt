@@ -27,6 +27,7 @@ import java.lang.AutoCloseable
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.use
 
 class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
@@ -38,7 +39,7 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
 
-    val limelight = (io as? HardwareIO)?.limelight
+    private val limelight = (io as? HardwareIO)?.limelight
     var mpc: MPCClient? = null
     var runner: MPCRunner? = null
 
@@ -51,12 +52,15 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         io.setPosition(pos)
         aim.init(io.position(),apriltagTracking)
         limelight?.start()
+        stopMPCSolver()
     }
 
     /** Switch limelight to the pipeline that starts the MPC solver process. */
     fun startMPCSolver() {
         limelight?.pipelineSwitch(Limelight.START_MPC_PIPELINE)
     }
+
+    fun pipeline(): Int? = limelight?.status?.pipelineIndex
 
     /** Switch limelight to the pipeline that stops the MPC solver process. */
     fun stopMPCSolver() {
@@ -95,6 +99,7 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     }
 
     var prewarm: Boolean = false
+    var startTime = 0.seconds
     var zero: Boolean = false
 
     /**
@@ -106,7 +111,7 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         val m = mpc ?: return
         m.setTarget(traj)
         val state = MecanumState(Pose2d(), io.position())
-        m.update(state, 12.0, io.time())
+        m.update(state, 12.0, 0.seconds)
     }
 
     fun stopMPC() {
@@ -128,12 +133,17 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
 
         dispatcher.update()
 
+        if(prewarm) {
+            prewarm = false
+            startTime = t
+        }
+
         runner?.updateState(
             MecanumState(
                 io.velocity(),
                 io.position()
-            ), 12.0, t)
-        if(!prewarm) runner?.driveWithMPC(io, io.voltage())
+            ), 12.0, t-startTime)
+        runner?.driveWithMPC(io, io.voltage())
 
         if(zero) {
             aimTurret = false
@@ -151,18 +161,12 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         logic.update( dt)
     }
 
-    /** Start limelight on AprilTag pipeline for motif detection during init. */
-    fun startMotifDetection() {
-        limelight?.pipelineSwitch(Limelight.APRILTAG_PIPELINE)
-    }
-
     /**
      * Non-blocking poll for motif fiducials (IDs 21/22/23).
      * Call repeatedly during init loop. Returns detected ID or null.
      */
     fun pollMotif(): Int? {
-        val result = limelight!!.latestResult ?: return null
-
+        val result = limelight?.latestResult ?: return null
 
         // if (!result.isValid) return null
 

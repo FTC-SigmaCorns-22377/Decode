@@ -3,6 +3,7 @@ package sigmacorns.control.aim
 import com.qualcomm.hardware.limelightvision.LLResult
 import com.qualcomm.hardware.limelightvision.LLResultTypes.FiducialResult
 import com.qualcomm.hardware.limelightvision.Limelight3A
+import sigmacorns.constants.Limelight
 
 data class VisionObservation(
     val tagId: Int,
@@ -38,7 +39,7 @@ class VisionTracker(
     var enableDebugLogging: Boolean = false
 ) {
     fun read(): VisionResult {
-        if (limelight == null) {
+        if (limelight == null || limelight.status.pipelineIndex != Limelight.APRILTAG_PIPELINE) {
             return VisionResult(emptyStatus(), null)
         }
 

@@ -324,11 +324,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         return null
     }
 
-    fun configureLimelight() {
-        limelight?.pipelineSwitch(0);
-        limelight?.start();
-    }
-
     init {
         //drive motor direction declarations
         driveFLMotor.direction = DcMotorSimple.Direction.REVERSE

@@ -178,9 +178,6 @@ open class TrajoptAuto(
         }
         robot.use {
             robot.init(initPos,false)
-            Thread.sleep(500)
-            robot.stopMPCSolver()
-            Thread.sleep(2000)
 
             robot.logic.spindexerState = mutableListOf(
                 Balls.Green,
@@ -189,19 +186,21 @@ open class TrajoptAuto(
             )
 
             // Start MPC solver on limelight and pre-warm with first trajectory
-            robot.startMPCSolver()
-
             Thread.sleep(2000)
+            robot.startMPCSolver()
+            Thread.sleep(1000)
 
             robot.initMPC()
 
             // Switch to apriltag for motif detection during init
-            robot.startMotifDetection()
+            robot.startApriltag()
             var detectedMotifId: Int? = null
             while (opModeInInit()) {
                 val id = robot.pollMotif()
                 if (id != null) detectedMotifId = id
                 telemetry.addData("Motif", detectedMotifId?.toString() ?: "Scanning...")
+                telemetry.addData("Pipeline", robot.pipeline())
+                telemetry.addData("Position", io.position())
                 telemetry.update()
             }
 
@@ -218,7 +217,6 @@ open class TrajoptAuto(
 
             val schedule = robot.scope.launch {
                 if(data.PRELOAD) shootAllBalls(robot.logic)
-                robot.prewarm = false
                 robot.logic.spinupRequested = true
                 println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {
@@ -244,7 +242,7 @@ open class TrajoptAuto(
             while (opModeIsActive() && !schedule.isCompleted) {
                 val newRunMotif = data.RUN_MOTIF && !motifDetected && (io.time() - startTime)<5.seconds
 
-                if(io.time()-startTime < 1.seconds) {
+                if(io.time()-startTime > 28.seconds) {
                     zero = true
                     robot.logic.fsm.curState = SpindexerLogic.State.ZERO
                 }
@@ -307,7 +305,7 @@ open class TrajoptAuto(
         var flywheelPreSpun = false
 
         // Pre-spin flywheel a few samples before the shoot marker so it's at speed when we arrive
-        val PRESPIN_LEAD_SAMPLES = 30
+        val PRESPIN_LEAD_SAMPLES = 20
 
         while (!mpc.isTrajectoryComplete(traj)) {
             if(zero) {

@@ -144,7 +144,6 @@ open class TestSortedShooter(val blue: Boolean) : SigmaOpMode() {
         )
 
         applyRuntimeConfig(autoAim)
-        visionTracker.configure(pipeline = AutoAimGTSAMTest.AutoAimGTSAMTestConfig.pipeline)
         autoAim.enabled = true
 
         try {
@@ -200,7 +199,7 @@ open class TestSortedShooter(val blue: Boolean) : SigmaOpMode() {
             }
         } finally {
             autoAim.close()
-            visionTracker.stop()
+            ll?.stop()
         }
     }
 

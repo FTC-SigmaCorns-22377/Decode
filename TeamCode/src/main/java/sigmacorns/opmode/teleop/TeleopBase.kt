@@ -147,6 +147,9 @@ open class TeleopBase(
         val autoAim = robot.aim.autoAim
         if (autoAimToggle && !wasAutoAimToggle) {
             autoAim.enabled = !autoAim.enabled
+            if(!autoAim.enabled) {
+                robot.aim.turret.fieldRelativeMode = true
+            }
         }
         wasAutoAimToggle = autoAimToggle
 

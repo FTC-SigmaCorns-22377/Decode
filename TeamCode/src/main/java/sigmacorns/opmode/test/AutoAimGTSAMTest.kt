@@ -227,7 +227,6 @@ class AutoAimGTSAMTest : SigmaOpMode() {
             )
 
             applyRuntimeConfig(autoAim)
-            visionTracker.configure(pipeline = AutoAimGTSAMTestConfig.pipeline)
             autoAim.enabled = true
             autoAim.enableDebugLogging()
 
@@ -280,7 +279,7 @@ class AutoAimGTSAMTest : SigmaOpMode() {
             }
         } finally {
             autoAim?.close()
-            visionTracker?.stop()
+            ll.stop()
         }
     }
 }
