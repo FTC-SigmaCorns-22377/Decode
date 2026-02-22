@@ -95,7 +95,9 @@ class MPCRunner(
                     println("MPC thread update took ${n.toDouble() / 1_000_000} ms")
                 }
 
-                Thread.sleep(1)
+                try { Thread.sleep(1) } catch (e: InterruptedException) {
+                    break
+                }
             }
         }
     }

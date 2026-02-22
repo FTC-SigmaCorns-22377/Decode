@@ -44,7 +44,7 @@ data class TrajectorySnapshot(
 
 class MPCClient(
     val parameters: MecanumParameters,
-    SOLVER_IP: String = "172.29.0.1",
+    val SOLVER_IP: String = "172.29.0.1",
     SOLVER_PORT: Int = 5000,
     ROBOT_PORT: Int = 22377,
     val sampleLookahead: Int = 0,

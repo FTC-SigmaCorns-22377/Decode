@@ -21,7 +21,7 @@ import kotlin.math.sin
  */
 class AutoAimGTSAM(
     private val landmarkPositions: Map<Int, LandmarkSpec>,
-    private val goalPosition: Vector2d,
+    private var goalPosition: Vector2d,
     private val initialPose: Pose2d = Pose2d(0.0, 0.0, 0.0),
     private val estimatorConfig: EstimatorConfig = EstimatorConfig(),
     var aimConfig: AimConfig = AimConfig(),
@@ -120,7 +120,7 @@ class AutoAimGTSAM(
     // ===== Thread Management =====
 
     private val fusionWorker = FusionWorker(estimatorConfig, initialPose)
-    private val turretTargeting = TurretTargeting(goalPosition)
+    val turretTargeting = TurretTargeting(goalPosition)
 
     // ===== Thread-Safe State =====
 

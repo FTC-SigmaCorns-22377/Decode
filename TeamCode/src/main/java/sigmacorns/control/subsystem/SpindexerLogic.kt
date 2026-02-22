@@ -183,7 +183,6 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
         if(offsetActive) spindexerRotation -= MODE_CHANGE_ANGLE
         offsetActive = false
 
-
         delay(100)
 
         return State.ZERO

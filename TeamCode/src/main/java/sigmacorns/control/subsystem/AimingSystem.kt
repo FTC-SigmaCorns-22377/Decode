@@ -36,7 +36,7 @@ class AimingSystem(
     lateinit var adaptiveTuner: AdaptiveTuner
         private set
 
-    val goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
+    var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
 
     var positionOverride: Double? = null
 

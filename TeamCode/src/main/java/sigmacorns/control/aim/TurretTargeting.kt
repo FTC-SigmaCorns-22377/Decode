@@ -7,7 +7,7 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.PI
 
-class TurretTargeting(private val goalPosition: Vector2d) {
+class TurretTargeting(var goalPosition: Vector2d) {
     data class TargetAngles(
         val distance: Double,
         val fieldAngle: Double,

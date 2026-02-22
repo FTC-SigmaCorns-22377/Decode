@@ -46,9 +46,11 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     var aimFlywheel = true
 
     fun init(pos: Pose2d, apriltagTracking: Boolean) {
+        limelight?.stop()
         io.configurePinpoint()
         io.setPosition(pos)
         aim.init(io.position(),apriltagTracking)
+        limelight?.start()
     }
 
     /** Switch limelight to the pipeline that starts the MPC solver process. */
@@ -92,11 +94,15 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         startMPCRunner()
     }
 
+    var prewarm: Boolean = false
+    var zero: Boolean = false
+
     /**
      * Send a single MPC request to pre-warm the solver with the first horizon.
      * Call after [initMPC] and setting a target trajectory.
      */
     fun prewarmMPC(traj: TrajoptTrajectory) {
+        prewarm = true
         val m = mpc ?: return
         m.setTarget(traj)
         val state = MecanumState(Pose2d(), io.position())
@@ -127,7 +133,14 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
                 io.velocity(),
                 io.position()
             ), 12.0, t)
-        runner?.driveWithMPC(io, io.voltage())
+        if(!prewarm) runner?.driveWithMPC(io, io.voltage())
+
+        if(zero) {
+            aimTurret = false
+            aim.turret.fieldRelativeMode = false
+            aim.turret.targetAngle = 0.0
+        }
+
 
         aim.update(dt, aimTurret)
         if(aimFlywheel) aim.getRecommendedFlywheelVelocity()?.let {
@@ -141,7 +154,6 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     /** Start limelight on AprilTag pipeline for motif detection during init. */
     fun startMotifDetection() {
         limelight?.pipelineSwitch(Limelight.APRILTAG_PIPELINE)
-        limelight?.start()
     }
 
     /**
@@ -194,5 +206,6 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     override fun close() {
         aim.close()
         stopMPC()
+        limelight?.stop()
     }
 }

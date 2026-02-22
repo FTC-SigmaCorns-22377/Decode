@@ -3,6 +3,7 @@ package sigmacorns.opmode.auto
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainCenter
 import sigmacorns.constants.turretRange
@@ -22,6 +23,7 @@ import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.Balls
 import kotlin.math.PI
+import kotlin.time.Duration.Companion.seconds
 
 data class TrajoptAutoData(
     val INTAKE_SEGMENTS: Map<String, List<Pair<Number, Number>>>,
@@ -29,7 +31,8 @@ data class TrajoptAutoData(
     val PROJECT_FILE_NAME: (Boolean) -> String, //blue -> name
     val ROOT: String,
     val PRELOAD: Boolean,
-    val initTurretAngle: Double = 0.0
+    val initTurretAngle: Double = 0.0,
+    val RUN_MOTIF: Boolean = false
 )
 val RedWallPreload = TrajoptAutoData (
     // Intake segments: trajectory name -> list of (startWaypointIndex, endWaypointIndex) pairs
@@ -73,7 +76,7 @@ val baseFar = TrajoptAutoData(
         "intake_2" to listOf(1 to 2),
     ),
     SHOT_POWER = ShotPowers.longShotPower,
-    PROJECT_FILE_NAME = { if(it) "basefar" else "basefarred" },
+    PROJECT_FILE_NAME = { if(it) "basefar" else "basefar_mirrored" },
     ROOT = "intake_1",
     PRELOAD = true,
     initTurretAngle = -PI/2.0
@@ -97,6 +100,19 @@ val traj3test = TrajoptAutoData(
     PROJECT_FILE_NAME = { "intake" },
     ROOT = "Trajectory 3",
     PRELOAD = false
+)
+
+
+val near = TrajoptAutoData(
+    INTAKE_SEGMENTS= mapOf(
+        "Trajectory 2" to listOf(1 to 2),
+        "Trajectory 3" to listOf(1 to 2),
+    ),
+    SHOT_POWER = ShotPowers.longShotPower,
+    PROJECT_FILE_NAME = { if(it) "near" else "near_mirrored" },
+    ROOT = "Trajectory 1",
+    PRELOAD = false,
+    RUN_MOTIF = true
 )
 
 @Autonomous(name = "Auto Red Far", group = "Auto", preselectTeleOp = "TeleopRed")
@@ -124,16 +140,26 @@ class IntakeTestAuto: TrajoptAuto(intakeTestAuto, false)
 @Autonomous(name = "FAST", group = "Auto")
 class FAST: TrajoptAuto(traj3test, false)
 
+@Autonomous(name = "BlueNear", group = "Auto")
+class BlueNear: TrajoptAuto(near, true)
+
+@Autonomous(name = "RedNear", group = "Auto")
+class RedNear: TrajoptAuto(near, false)
+
 open class TrajoptAuto(
     val data: TrajoptAutoData,
     val blue: Boolean
 ) : SigmaOpMode() {
     lateinit var aiming: AimingSystem
 
+    var runMotif = data.RUN_MOTIF
+
+    var zero = false
+
     override fun runOpMode() {
         val robot = Robot(io,blue)
         //val turretInitTicks = turretRange.posToTick(data.initTurretAngle).toInt()
-        val turretInitTicks = (data.initTurretAngle*turretTicksPerRad)
+        val turretInitTicks = (data.initTurretAngle*turretTicksPerRad*if(blue)1.0 else -1.0)
         println("TURRET INIT TICKS=$turretInitTicks")
         io.setTurretPosition(turretInitTicks)
 
@@ -152,6 +178,9 @@ open class TrajoptAuto(
         }
         robot.use {
             robot.init(initPos,false)
+            Thread.sleep(500)
+            robot.stopMPCSolver()
+            Thread.sleep(500)
 
             robot.logic.spindexerState = mutableListOf(
                 Balls.Green,
@@ -161,8 +190,10 @@ open class TrajoptAuto(
 
             // Start MPC solver on limelight and pre-warm with first trajectory
             robot.startMPCSolver()
+
+            Thread.sleep(500)
+
             robot.initMPC()
-            trajectories.firstOrNull()?.let { robot.prewarmMPC(it) }
 
             // Switch to apriltag for motif detection during init
             robot.startMotifDetection()
@@ -183,18 +214,15 @@ open class TrajoptAuto(
                 MotifPersistence.saveMotif(detectedMotifId, storageDir())
                 robot.idleLimelight()
             }
-            robot.startMPC()
             robot.logic.spinupRequested = true
-
-            val startTime = io.time()
-            var zero = false
 
             val schedule = robot.scope.launch {
                 if(data.PRELOAD) shootAllBalls(robot.logic)
+                robot.prewarm = false
                 robot.logic.spinupRequested = true
                 println("TrajoptAuto: shooting complete")
                 for (traj in trajectories) {
-                    if(traj.name == "intake_3") {
+                    if(traj.name == "zero") {
                         robot.logic.fsm.curState = SpindexerLogic.State.ZERO
                         zero = true
                     }
@@ -208,8 +236,20 @@ open class TrajoptAuto(
 
             // Main loop — continue polling for motif if not yet detected
             var motifDetected = detectedMotifId != null
+            val startTime = io.time()
+            val goal = robot.aim.autoAim.turretTargeting.goalPosition
+
+            trajectories.firstOrNull()?.let { robot.prewarmMPC(it) }
+
             while (opModeIsActive() && !schedule.isCompleted) {
-                if (!motifDetected) {
+                val newRunMotif = data.RUN_MOTIF && !motifDetected && (io.time() - startTime)<5.seconds
+
+                if(!newRunMotif && runMotif) robot.idleLimelight()
+
+                runMotif = newRunMotif
+
+                if (runMotif) {
+                    robot.aim.autoAim.turretTargeting.goalPosition = Vector2d(0.0, 2.3)
                     val id = robot.pollMotif()
                     if (id != null) {
                         detectedMotifId = id
@@ -218,11 +258,15 @@ open class TrajoptAuto(
                         robot.idleLimelight()
                         motifDetected = true
                     }
+                } else {
+                    robot.aim.autoAim.turretTargeting.goalPosition = goal
                 }
+
                 val motifDisplay = detectedMotifId?.let { "ID $it -> ${robot.logic.motif}" } ?: "Scanning..."
                 telemetry.addData("Motif", motifDisplay)
                 telemetry.addData("State", robot.logic.currentState.name)
                 telemetry.update()
+                robot.zero = zero
                 robot.update()
                 io.update()
             }
@@ -259,9 +303,14 @@ open class TrajoptAuto(
         var flywheelPreSpun = false
 
         // Pre-spin flywheel a few samples before the shoot marker so it's at speed when we arrive
-        val PRESPIN_LEAD_SAMPLES = 15
+        val PRESPIN_LEAD_SAMPLES = 30
 
         while (!mpc.isTrajectoryComplete(traj)) {
+            if(zero) {
+                spindexerLogic.fsm.curState = SpindexerLogic.State.ZERO
+                yield()
+                continue
+            }
             val sampleI = mpc.latestSampleI
             // Toggle intake based on sample index
             val shouldIntake = intakeRanges.any { sampleI in it }
@@ -304,6 +353,11 @@ open class TrajoptAuto(
             }
 
             delay(1)
+        }
+
+        if(zero) {
+            spindexerLogic.fsm.curState = SpindexerLogic.State.ZERO
+            delay(Long.MAX_VALUE)
         }
 
         if (intaking) spindexerLogic.stopIntaking()

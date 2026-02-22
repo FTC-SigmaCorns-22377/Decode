@@ -251,7 +251,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         //resetting the positions for the IMU
         pinpoint?.resetPosAndIMU()
-        Thread.sleep(300)
+        Thread.sleep(400)
         pinpoint?.update()
     }
 
