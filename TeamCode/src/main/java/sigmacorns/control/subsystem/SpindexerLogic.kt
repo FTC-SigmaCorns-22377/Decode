@@ -87,6 +87,9 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     var requestLift: Boolean = false
     private val TILT_ACTIVE_POSITION = 0.5
 
+    // Break servo position
+    private val BREAK_ENGAGED_POSITION = 0.4
+
     public enum class State {
         IDLE,
         INTAKING,
@@ -373,6 +376,9 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     }
 
     private suspend fun shootingBehavior(): State {
+        // Engage brake
+        io.breakPower = BREAK_ENGAGED_POSITION
+
         // Wait for flywheel to spin up
         spinupRequested = false
         spinup2Requested = false
@@ -408,6 +414,9 @@ class SpindexerLogic(val io: SigmaIO, var flywheel: Flywheel? = null) {
     }
 
     private suspend fun movingShootBehavior(): State {
+        // Engage brake
+        io.breakPower = BREAK_ENGAGED_POSITION
+
         if (shootingRequested) {
             flywheelTargetVelocity = shotVelocity ?: (shotPower* flywheelMotor.freeSpeed)
             flywheel?.hold = false

@@ -360,6 +360,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         spindexerMotor?.setVelocityPIDFCoefficients(13.0,0.0,2.0,0.025)
         spindexerMotor?.mode = DcMotor.RunMode.RUN_TO_POSITION
 
+        breakServo?.direction = Servo.Direction.REVERSE
         transferServo?.direction = Servo.Direction.REVERSE
         tilt1Servo?.direction = Servo.Direction.REVERSE
         tilt2Servo?.direction = Servo.Direction.FORWARD
