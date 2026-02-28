@@ -1,4 +1,4 @@
-package sigmacorns.tuning
+package sigmacorns.control.aim.tune
 
 /**
  * Simple interpolation-based shot tuner.

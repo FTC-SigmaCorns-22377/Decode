@@ -1,8 +1,8 @@
 package sigmacorns.opmode.tune
 
 import com.bylazar.telemetry.PanelsTelemetry
-import sigmacorns.control.PIDController
-import sigmacorns.control.SlewRateLimiter
+import sigmacorns.control.common.PIDController
+import sigmacorns.control.common.SlewRateLimiter
 import sigmacorns.opmode.SigmaOpMode
 
 /**

@@ -68,7 +68,7 @@ class Flywheel(
             calculate(v0, dt)
         }
 
-        io.shooter = (V/io.voltage()).coerceIn(-1.0..1.0)
+        io.flywheel = (V/io.voltage()).coerceIn(-1.0..1.0)
         lastU = V.coerceIn(-io.voltage()..io.voltage())
     }
 

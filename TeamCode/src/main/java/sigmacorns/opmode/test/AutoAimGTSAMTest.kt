@@ -9,7 +9,7 @@ import org.joml.Vector3d
 import sigmacorns.control.subsystem.DriveController
 import sigmacorns.control.aim.AimConfig
 import sigmacorns.control.aim.AutoAimGTSAM
-import sigmacorns.control.MotorRangeMapper
+import sigmacorns.control.common.MotorRangeMapper
 import sigmacorns.control.subsystem.Turret
 import sigmacorns.control.aim.VisionTracker
 import sigmacorns.io.HardwareIO

@@ -1,4 +1,4 @@
-package sigmacorns.tuning.model
+package sigmacorns.control.aim.tune.model
 
 /**
  * Represents a single shot trial at a specific distance.

@@ -1,4 +1,4 @@
-package sigmacorns.tuning
+package sigmacorns.control.aim.tune
 
 /**
  * A single data point mapping distance to flywheel speed.

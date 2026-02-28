@@ -1,4 +1,4 @@
-package sigmacorns.control
+package sigmacorns.control.common
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
 

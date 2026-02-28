@@ -1,8 +1,8 @@
 package sigmacorns.control.subsystem
 
-import sigmacorns.control.MotorRangeMapper
-import sigmacorns.control.PIDController
-import sigmacorns.control.SlewRateLimiter
+import sigmacorns.control.common.MotorRangeMapper
+import sigmacorns.control.common.PIDController
+import sigmacorns.control.common.SlewRateLimiter
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.normalizeAngle
 import sigmacorns.opmode.tune.TurretPIDConfig

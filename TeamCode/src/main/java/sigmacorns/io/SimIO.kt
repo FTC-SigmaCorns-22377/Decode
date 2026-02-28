@@ -1,11 +1,7 @@
 package sigmacorns.io
 
-import org.joml.Vector3d
 import sigmacorns.math.Pose2d
-import sigmacorns.sim.Balls
-//import sigmacorns.sim.ProjectileSnapshot
 import sigmacorns.sim.RobotModel
-import sigmacorns.sim.SpindexerState
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
@@ -21,16 +17,9 @@ class SimIO : SigmaIO {
     override var driveBL: Double = 0.0
     override var driveFR: Double = 0.0
     override var driveBR: Double = 0.0
-    override var shooter: Double = 0.0
+    override var flywheel: Double = 0.0
     override var intake: Double = 0.0
     override var turret: Double = 0.0
-    override var spindexer: Double = 0.0
-    override var turretAngle: Double = 0.0
-    override var breakPower: Double = 0.0
-    override var transfer: Double = 0.0
-    override var tilt1: Double = 0.0
-    override var tilt2: Double = 0.0
-
 
     override fun position(): Pose2d = robot.drivetrainState.pos
 
@@ -44,19 +33,9 @@ class SimIO : SigmaIO {
         return 0.0 // Todo: Implement turret simulation
     }
 
-    override fun spindexerPosition(): Double {
-        return robot.spindexerState.spindexerRotation
-    }
-
-    override fun distance(): Double {
-        return 0.5 // Dummy value: 0.5 meters
-    }
-
     override fun setTurretPosition(Offset: Double) {
         TODO("Not yet implemented")
     }
-
-
 
     override fun update() {
         robot.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS),this)
@@ -76,63 +55,4 @@ class SimIO : SigmaIO {
     override fun voltage(): Double {
         return 12.0
     }
-
-    override fun colorSensorDetectsBall(): Boolean {
-        TODO("Not yet implemented")
-    }
-
-    override fun colorSensorGetBallColor(): Balls? {
-        TODO("Not yet implemented")
-    }
-
-
-    fun transfer(): Double {
-        //return transferPower
-        return 0.0
-    }
-
-    fun intake(): Double {
-        return intake
-    }
-
-    fun turretRotation(): Double {
-        //create function in the sim
-        return 0.0
-    }
-
-    fun turretAngle(): Double {
-        return turretAngle
-    }
-
-    fun breakActive(): Double {
-        return breakPower
-    }
-
-    //function for rotation of the spindexer
-    //function for shooting of the ball out of the spindexer(servo)
-    //function for ramping up the flywheel( may already exist, ask thomas)
-    //function for intaking
-    //function for rotation of the turret
-    //function for turret angle
-    //function for break
-
-//    fun launchBall() {
-//        robot.launchBall()
-//    }
-//
-//    fun projectiles(): List<ProjectileSnapshot> = robot.projectileSnapshots()
-//
-//    fun logProjectiles(rr: RerunLogging, prefix: String = "balls") {
-//        projectiles().forEach { projectile ->
-//            if (projectile.path.isNotEmpty()) {
-//                val path = if (projectile.path.size == 1) {
-//                    val point = projectile.path.first()
-//                    listOf(point, Vector3d(point))
-//                } else {
-//                    projectile.path
-//                }
-//                rr.logLineStrip("$prefix/ball-${projectile.id}", path)
-//            }
-//        }
-//    }
 }

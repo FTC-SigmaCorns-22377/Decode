@@ -1,7 +1,6 @@
-package sigmacorns.control
+package sigmacorns.control.common
 
 import kotlin.math.absoluteValue
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sign
 

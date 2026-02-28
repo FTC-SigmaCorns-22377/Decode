@@ -462,61 +462,6 @@ class AutoAimGTSAM(
             )
     }
 
-    // ===== Landmark Corner Logging =====
-
-    /**
-     * Logs all landmark corner positions after initialization.
-     * Corner positions are retrieved from the native pose estimator and logged in world frame.
-     */
-    fun logLandmarkCorners() {
-        try {
-            val handle = fusionWorker.getEstimatorHandle()
-            if (handle == 0L) {
-                logger.log(LogLevel.WARN, "Estimator handle is invalid, skipping landmark corner logging")
-                return
-            }
-
-            logger.log(LogLevel.INFO, "=== Landmark Corner Positions (World Frame) ===")
-
-            try {
-                val allCorners = PoseEstimatorBridge.nativeGetAllLandmarkCorners(handle)
-                if (allCorners.isEmpty()) {
-                    logger.log(LogLevel.INFO, "No landmark corners available")
-                    return
-                }
-
-                // Each landmark has 13 values: [tagId, corner1(x,y,z), corner2(x,y,z), corner3(x,y,z), corner4(x,y,z)]
-                val landmarkCount = allCorners.size / 13
-                for (i in 0 until landmarkCount) {
-                    val baseIdx = i * 13
-                    val tagId = allCorners[baseIdx].toInt()
-
-                    val corner1 = Triple(allCorners[baseIdx + 1], allCorners[baseIdx + 2], allCorners[baseIdx + 3])
-                    val corner2 = Triple(allCorners[baseIdx + 4], allCorners[baseIdx + 5], allCorners[baseIdx + 6])
-                    val corner3 = Triple(allCorners[baseIdx + 7], allCorners[baseIdx + 8], allCorners[baseIdx + 9])
-                    val corner4 = Triple(allCorners[baseIdx + 10], allCorners[baseIdx + 11], allCorners[baseIdx + 12])
-
-                    logger.log(
-                        LogLevel.INFO,
-                        "Tag %d: TL=(%.3f, %.3f, %.3f) TR=(%.3f, %.3f, %.3f) BR=(%.3f, %.3f, %.3f) BL=(%.3f, %.3f, %.3f)".format(
-                            tagId,
-                            corner1.first, corner1.second, corner1.third,
-                            corner2.first, corner2.second, corner2.third,
-                            corner3.first, corner3.second, corner3.third,
-                            corner4.first, corner4.second, corner4.third
-                        )
-                    )
-                }
-            } catch (e: Exception) {
-                logger.log(LogLevel.ERROR, "Failed to log all landmark corners: ${e.message}")
-            }
-
-            logger.log(LogLevel.INFO, "=== End Landmark Corner Positions ===")
-        } catch (e: Exception) {
-            logger.log(LogLevel.ERROR, "Error during landmark corner logging: ${e.message}")
-        }
-    }
-
     /**
      * Logs corner positions for a specific landmark by tag ID.
      * @param tagId The AprilTag ID of the landmark to log

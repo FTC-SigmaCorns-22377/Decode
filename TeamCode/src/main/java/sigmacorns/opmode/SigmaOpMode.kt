@@ -13,6 +13,7 @@ import sigmacorns.io.RerunLogging
 import sigmacorns.io.SigmaIO
 import sigmacorns.io.SimIO
 import java.io.File
+import java.lang.reflect.Field
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -87,7 +88,7 @@ abstract class SigmaOpMode(
         private val opModeInternalClass = Class.forName("com.qualcomm.robotcore.eventloop.opmode.OpModeInternal")
         private val linearOpModeClass = Class.forName("com.qualcomm.robotcore.eventloop.opmode.LinearOpMode")
         private val isStartedField = opModeInternalClass.getDeclaredField("isStarted").apply { isAccessible = true }
-        val internalOpModeServicesField = opModeInternalClass.getDeclaredField("internalOpModeServices").apply { isAccessible = true }
+        val internalOpModeServicesField: Field = opModeInternalClass.getDeclaredField("internalOpModeServices").apply { isAccessible = true }
         private val userMonitoredForStartField = linearOpModeClass.getDeclaredField("userMonitoredForStart").apply { isAccessible = true }
 
         fun isStarted(): Boolean = isStartedField.getBoolean(target)

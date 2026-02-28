@@ -136,7 +136,7 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
             tel.addData("Target (rad/s)", target)
             tel.addData("Velocity (rad/s)", currentVelocity)
             tel.addData("Error (rad/s)", error)
-            tel.addData("Motor Power", io.shooter)
+            tel.addData("Motor Power", io.flywheel)
             tel.addLine("")
 
             tel.addLine("--- Config (adjust in Panels) ---")

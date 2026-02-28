@@ -1,7 +1,6 @@
-package sigmacorns.tuning
+package sigmacorns.control.aim.tune
 
 import com.google.gson.Gson
-import fi.iki.elonen.NanoHTTPD
 
 /**
  * Web server for shot tuning interface.
@@ -15,7 +14,7 @@ class TuningWebServer(
     private val onInertiaChange: (Double) -> Unit,
     private val dataStore: ShotDataStore,
     private val tuner: AdaptiveTuner
-) : NanoHTTPD(port) {
+) : fi.iki.elonen.NanoHTTPD(port) {
 
     private val gson = Gson()
 

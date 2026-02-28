@@ -36,6 +36,6 @@ class ShooterFlywheelPIDTuner : BasePIDTuner() {
     override fun applyMotorPower(power: Double) {
         val voltage = io.voltage()
         val dVoltage = 12.0 / voltage
-        io.shooter = power * dVoltage
+        io.flywheel = power * dVoltage
     }
 }

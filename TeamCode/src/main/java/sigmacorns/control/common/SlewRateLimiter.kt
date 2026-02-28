@@ -1,4 +1,4 @@
-package sigmacorns.control
+package sigmacorns.control.common
 
 import kotlin.math.absoluteValue
 import kotlin.math.sign

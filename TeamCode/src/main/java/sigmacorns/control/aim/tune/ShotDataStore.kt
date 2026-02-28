@@ -1,8 +1,7 @@
-package sigmacorns.tuning
+package sigmacorns.control.aim.tune
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.google.gson.reflect.TypeToken
 import java.io.File
 
 /**
@@ -64,7 +63,7 @@ class ShotDataStore {
             if (!file.exists()) return
 
             val json = file.readText()
-            val type = object : TypeToken<List<SpeedPoint>>() {}.type
+            val type = object : com.google.gson.reflect.TypeToken<List<SpeedPoint>>() {}.type
             val loaded: List<SpeedPoint> = gson.fromJson(json, type) ?: return
 
             points.clear()

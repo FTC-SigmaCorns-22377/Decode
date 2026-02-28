@@ -2,7 +2,7 @@ package sigmacorns.control.mpc
 
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainCenter
-import sigmacorns.control.SlewRateLimiter
+import sigmacorns.control.common.SlewRateLimiter
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
 import sigmacorns.sim.MecanumDynamics
@@ -26,7 +26,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
-import kotlin.time.times
 
 /**
  * Immutable snapshot of trajectory state for thread-safe access.

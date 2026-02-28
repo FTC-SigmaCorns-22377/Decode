@@ -1,4 +1,4 @@
-package sigmacorns.tuning.model
+package sigmacorns.control.aim.tune.model
 
 /**
  * A confirmed optimal speed for a distance bucket.
