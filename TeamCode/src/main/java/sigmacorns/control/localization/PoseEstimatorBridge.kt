@@ -1,4 +1,4 @@
-package sigmacorns.control.aim
+package sigmacorns.control.localization
 
 object PoseEstimatorBridge {
     @JvmStatic external fun nativeCreate(): Long

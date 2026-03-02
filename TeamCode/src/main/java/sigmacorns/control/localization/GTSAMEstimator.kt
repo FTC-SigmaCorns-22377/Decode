@@ -1,30 +1,29 @@
-package sigmacorns.control.aim
+package sigmacorns.control.localization
 
 import org.joml.Vector2d
 import org.joml.Vector3d
 import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import org.firstinspires.ftc.robotcore.internal.system.AppUtil
+import sigmacorns.control.aim.LogLevel
+import sigmacorns.control.aim.LogcatLogger
+import sigmacorns.control.aim.Logger
 import sigmacorns.math.Pose2d
+import sigmacorns.math.normalizeAngle
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
- * Auto-aiming system with GTSAM-based sensor fusion.
+ * GTSAM-based sensor fusion.
  *
  * Fuses wheel odometry with AprilTag vision measurements using GTSAM factor graph
- * optimization for robust localization and targeting. Runs GTSAM on a dedicated
+ * optimization for robust localization. Runs GTSAM on a dedicated
  * worker thread to avoid blocking the main control loop.
  */
-class AutoAimGTSAM(
+class GTSAMEstimator(
     private val landmarkPositions: Map<Int, LandmarkSpec>,
-    private var goalPosition: Vector2d,
     private val initialPose: Pose2d = Pose2d(0.0, 0.0, 0.0),
-    private val estimatorConfig: EstimatorConfig = EstimatorConfig(),
-    var aimConfig: AimConfig = AimConfig(),
     private val logger: Logger = LogcatLogger(LOG_TAG)
 ) : AutoCloseable {
 
@@ -40,56 +39,6 @@ class AutoAimGTSAM(
         val size: Double = 0.165
     )
 
-    data class EstimatorConfig(
-        val priorSigmaXY: Double = 0.05,
-        val priorSigmaTheta: Double = 0.02,
-        val odomSigmaXY: Double = 0.02,
-        val odomSigmaTheta: Double = 0.01,
-        val defaultPixelSigma: Double = 1.0,
-        val relinearizeThreshold: Double = 0.01,
-        val relinearizeSkip: Int = 1,
-        val enablePartialRelinearization: Boolean = true,
-        val compactOdometry: Boolean = true,
-        val enableRobustTagLoss: Boolean = false,
-        val robustTagLoss: Int = 0,
-        val robustTagLossK: Double = 1.5,
-        val enableTagGating: Boolean = true,
-        val minTagAreaPx: Double = 50.0,
-        val maxTagViewAngleDeg: Double = 60.0,
-        val enableCheiralityCheck: Boolean = false,
-        val cheiralitySigma: Double = 0.1,
-        val minTagZDistance: Double = 0.5,
-        val enablePostProcess: Boolean = true,
-        val postProcessVisionGapS: Double = 0.4,
-        val postProcessSettleS: Double = 2.0,
-        val postProcessSettleUpdates: Int = 3,
-        val fx: Double = 1000.0,
-        val fy: Double = 1000.0,
-        val cx: Double = 320.0,
-        val cy: Double = 240.0,
-        val k1: Double = 0.0,
-        val k2: Double = 0.0,
-        val k3: Double = 0.0,
-        val p1: Double = 0.0,
-        val p2: Double = 0.0,
-        val cameraOffsetX: Double = 0.0,
-        val cameraOffsetY: Double = 0.0,
-        val cameraOffsetZ: Double = 0.5,
-        val cameraRoll: Double = -PI / 2.0,
-        val cameraPitch: Double = 0.0,
-        val cameraYaw: Double = -PI / 2.0,
-        val pixelSigmaAngleK: Double = 2.0,
-        val enableSpatialCorrelation: Boolean = true,
-        val correlationDistanceM: Double = 0.3,
-        val correlationDownweightFactor: Double = 2.0,
-        val correlationHistorySize: Int = 100,
-        val enableBiasCorrection: Boolean = true,
-        val radialBiasK: Double = 0.01,
-        val enableMultiHypothesisInit: Boolean = true,
-        val multiHypothesisThetaThreshold: Double = 1.0,
-        val enableHeadingFlipRecovery: Boolean = true,
-        val headingFlipMinTags: Int = 1
-    )
 
     // ===== Native Library Loading =====
 
@@ -119,11 +68,9 @@ class AutoAimGTSAM(
 
     // ===== Thread Management =====
 
-    private val fusionWorker = FusionWorker(estimatorConfig, initialPose)
-    val turretTargeting = TurretTargeting(goalPosition)
+    private val fusionWorker = FusionWorker(initialPose)
 
     // ===== Thread-Safe State =====
-
     @Volatile private var fusedPoseInternal: Pose2d = initialPose
     private val enqueuedOdomCount = AtomicLong(0)
     private val enqueuedVisionCount = AtomicLong(0)
@@ -131,9 +78,7 @@ class AutoAimGTSAM(
     // ===== Main Thread State =====
 
     private var lastRobotPose: Pose2d? = null
-    private var lastTurretAngle: Double = 0.0
     private var lastUpdateTimeMs: Long = 0
-    private var lastRobotPoseForUncertainty: Pose2d? = null
     private var lastDiagLogMs: Long = 0
     
     // ===== Debug Logging =====
@@ -144,12 +89,6 @@ class AutoAimGTSAM(
     var enabled: Boolean = false
 
     var hasVisionTarget: Boolean = false
-        private set
-
-    var targetTx: Double = 0.0
-        private set
-
-    var targetTy: Double = 0.0
         private set
 
     var trackedTagId: Int = -1
@@ -169,31 +108,11 @@ class AutoAimGTSAM(
 
     var lastDetectionTimeMs: Long = 0
         private set
-
-    var uncertainty: Double = 0.0
-        private set
-
     var fusedPose: Pose2d = initialPose
         private set
 
-    val hasTarget: Boolean
-        get() = turretTargeting.hasTarget(
-            gtsamInitialized = fusionWorker.isInitialized,
-            lastDetectionTimeMs = lastDetectionTimeMs,
-            predictionTimeoutMs = aimConfig.predictionTimeoutMs
-        )
-
-    val usingPrediction: Boolean
-        get() = turretTargeting.usingPrediction(
-            hasVisionTarget = hasVisionTarget,
-            uncertainty = uncertainty,
-            maxAcceptableUncertainty = aimConfig.maxAcceptableUncertainty
-        )
-
     var enableDebugLogging: Boolean = true
 
-    private var hasLoggedLandmarks: Boolean = false
-    
     fun enableDebugLogging(recordingId: String = "gtsam_debug",
                            savePath: String = "/sdcard/FIRST/kotlin_gtsam.rrd") {
         if (debugLogger == null) {
@@ -240,8 +159,8 @@ class AutoAimGTSAM(
         debugLogger?.logCoordinateFrames(
             fusedPose,
             turretAngle, 
-            Vector3d(estimatorConfig.cameraOffsetX, estimatorConfig.cameraOffsetY, estimatorConfig.cameraOffsetZ),
-            estimatorConfig.cameraRoll, estimatorConfig.cameraPitch, estimatorConfig.cameraYaw
+            Vector3d(EstimatorConfig    .cameraOffsetX, EstimatorConfig.cameraOffsetY, EstimatorConfig.cameraOffsetZ),
+            EstimatorConfig.cameraRoll, EstimatorConfig.cameraPitch, EstimatorConfig.cameraYaw
         )
         
         // Log predicted corners for visible tags
@@ -258,17 +177,14 @@ class AutoAimGTSAM(
                         val py = obs.corners[i * 2 + 1]
                         val dx = px - predicted[i].x
                         val dy = py - predicted[i].y
-                        totalError += Math.sqrt(dx * dx + dy * dy)
+                        totalError += sqrt(dx * dx + dy * dy)
                     }
                     debugLogger?.logReprojectionError(obs.tagId, totalError / 4.0)
                 }
             }
         }
 
-        updateUncertainty(robotPose, turretAngle, dt)
-
         lastRobotPose = robotPose
-        lastTurretAngle = turretAngle
         lastUpdateTimeMs = currentTime
 
         fusionWorker.pollError()?.let { error ->
@@ -281,8 +197,7 @@ class AutoAimGTSAM(
             logger.log(
                 LogLevel.INFO,
                 "Diag: odom=${enqueuedOdomCount.get()} vision=${enqueuedVisionCount.get()} " +
-                    "hasVision=$hasVisionTarget uncertainty=%.2f solveMs=%.3f %s %s".format(
-                        uncertainty,
+                    "hasVision=$hasVisionTarget solveMs=%.3f %s %s".format(
                         fusionWorker.lastSolveTimeMs,
                         memorySummary,
                         diagnosticsSummary
@@ -330,15 +245,6 @@ class AutoAimGTSAM(
         rawTyDegrees = status.rawTyDegrees
         lastDetectionTimeMs = status.lastDetectionTimeMs
 
-        if (!hasVisionTarget) {
-            targetTx = 0.0
-            targetTy = 0.0
-            return
-        }
-
-        targetTx = Math.toRadians(rawTxDegrees) + aimConfig.cameraMountingOffsetYaw
-        targetTy = Math.toRadians(rawTyDegrees)
-
         val frame = visionResult.frame ?: return
         if (!fusionWorker.isInitialized) {
             return
@@ -348,7 +254,7 @@ class AutoAimGTSAM(
             fusionWorker.enqueueVision(
                 tagId = observation.tagId,
                 corners = observation.corners,
-                pixelSigma = aimConfig.visionPixelSigma,
+                pixelSigma = EstimatorConfig.defaultPixelSigma,
                 timestampSeconds = frame.timestampSeconds,
                 turretYawRad = turretAngle
             )
@@ -366,70 +272,10 @@ class AutoAimGTSAM(
         trackedTagId = -1
         rawTxDegrees = 0.0
         rawTyDegrees = 0.0
-        targetTx = 0.0
-        targetTy = 0.0
         lastDetectionTimeMs = 0
     }
 
-    // ===== Uncertainty Estimation =====
-
-    private fun updateUncertainty(robotPose: Pose2d, turretAngle: Double, dt: Double) {
-        if (lastRobotPoseForUncertainty != null && dt > 0) {
-            val robotAngVel = normalizeAngle(robotPose.rot - lastRobotPoseForUncertainty!!.rot) / dt
-            val turretAngVel = normalizeAngle(turretAngle - lastTurretAngle) / dt
-
-            val fieldRelTurretAngVel = abs(robotAngVel + turretAngVel)
-            val motionUncertainty =
-                (fieldRelTurretAngVel * aimConfig.turretRotationUncertaintyGain).coerceIn(0.0, 1.0)
-
-            uncertainty = if (motionUncertainty > uncertainty) {
-                motionUncertainty
-            } else {
-                val decayFactor = aimConfig.uncertaintyDecayRate.pow(dt)
-                uncertainty * decayFactor + motionUncertainty * (1 - decayFactor)
-            }
-        }
-
-        lastRobotPoseForUncertainty = robotPose
-    }
-
-    // ===== Public API Methods =====
-
-    fun getTurretYawAdjustment(): Double {
-        return turretTargeting.turretAdjustment(enabled, hasVisionTarget, targetTx, aimConfig)
-    }
-
-    fun getTargetTurretAngle(): Double? {
-        if (!enabled || !hasTarget) {
-            return null
-        }
-        return normalizeAngle(turretTargeting.computeAngles(fusedPose).robotAngle)
-    }
-
-    fun getTargetFieldAngle(): Double? {
-        if (!enabled || !hasTarget) {
-            return null
-        }
-        return normalizeAngle(turretTargeting.computeAngles(fusedPose).fieldAngle)
-    }
-
-    fun resetTarget(newPose: Pose2d? = null) {
-        clearVisionState()
-        uncertainty = 0.0
-        newPose?.let {
-            fusionWorker.requestInitialize(it, landmarkPositions)
-        }
-    }
-
     // ===== Utility Functions =====
-
-    private fun normalizeAngle(angle: Double): Double {
-        var normalized = angle
-        while (normalized > PI) normalized -= 2 * PI
-        while (normalized < -PI) normalized += 2 * PI
-        return normalized
-    }
-
     private fun formatMemoryUsage(usage: FusionWorker.MemoryUsage?): String {
         if (usage == null || !usage.valid) {
             return "mem=unavailable"
@@ -454,10 +300,10 @@ class AutoAimGTSAM(
                 snapshot.pendingValues,
                 snapshot.currentPoseIndex,
                 snapshot.horizonCapacity,
-                snapshot.lastSolveMs.toDouble(),
-                snapshot.avgSolveMs.toDouble(),
-                snapshot.lastHorizonResetMs.toDouble(),
-                snapshot.lastHorizonCovMs.toDouble(),
+                snapshot.lastSolveMs,
+                snapshot.avgSolveMs,
+                snapshot.lastHorizonResetMs,
+                snapshot.lastHorizonCovMs,
                 snapshot.lastHorizonResetPoseIndex
             )
     }

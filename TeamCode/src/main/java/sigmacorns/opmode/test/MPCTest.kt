@@ -7,7 +7,7 @@ import kotlin.math.hypot
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.control.subsystem.DriveController
+import sigmacorns.subsystem.DriveController
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.math.Pose2d
 import sigmacorns.io.HardwareIO

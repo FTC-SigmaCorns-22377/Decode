@@ -1,4 +1,4 @@
-package sigmacorns.control.aim
+package sigmacorns.control.localization
 
 import sigmacorns.math.Pose2d
 import org.joml.Vector2d
@@ -8,7 +8,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class FusionWorker(
-    private val estimatorConfig: AutoAimGTSAM.EstimatorConfig,
     private val initialPose: Pose2d
 ) : AutoCloseable {
 
@@ -29,7 +28,7 @@ class FusionWorker(
 
     private data class InitializeCommand(
         val pose: Pose2d,
-        val landmarks: Map<Int, AutoAimGTSAM.LandmarkSpec>
+        val landmarks: Map<Int, GTSAMEstimator.LandmarkSpec>
     )
 
     data class MemoryUsage(
@@ -83,7 +82,7 @@ class FusionWorker(
     @Volatile private var gtsamHandle: Long = 0L
 
 
-    fun requestInitialize(pose: Pose2d, landmarks: Map<Int, AutoAimGTSAM.LandmarkSpec>) {
+    fun requestInitialize(pose: Pose2d, landmarks: Map<Int, GTSAMEstimator.LandmarkSpec>) {
         pendingInit.set(InitializeCommand(pose, landmarks))
         tickQueue.offer(Tick)
     }
@@ -290,7 +289,7 @@ class FusionWorker(
     }
 
     private fun createHandle(): Long {
-        val config = estimatorConfig
+        val config = EstimatorConfig
         return PoseEstimatorBridge.nativeCreateWithConfig(
             config.priorSigmaXY,
             config.priorSigmaTheta,

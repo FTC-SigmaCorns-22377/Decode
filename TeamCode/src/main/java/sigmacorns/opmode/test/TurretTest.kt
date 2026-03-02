@@ -1,8 +1,8 @@
 package sigmacorns.opmode.test
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import sigmacorns.control.common.MotorRangeMapper
-import sigmacorns.control.subsystem.Turret
+import sigmacorns.control.MotorRangeMapper
+import sigmacorns.subsystem.Turret
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.math.PI
 

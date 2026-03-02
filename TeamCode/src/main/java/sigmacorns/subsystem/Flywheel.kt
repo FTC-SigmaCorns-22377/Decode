@@ -1,4 +1,4 @@
-package sigmacorns.control.subsystem
+package sigmacorns.subsystem
 
 import sigmacorns.io.SigmaIO
 import sigmacorns.sim.LinearDcMotor

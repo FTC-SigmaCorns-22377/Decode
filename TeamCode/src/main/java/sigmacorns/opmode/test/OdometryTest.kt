@@ -3,7 +3,7 @@ package sigmacorns.opmode.test
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.control.subsystem.DriveController
+import sigmacorns.subsystem.DriveController
 
 @TeleOp(group = "test")
 class OdometryTest : SigmaOpMode() {

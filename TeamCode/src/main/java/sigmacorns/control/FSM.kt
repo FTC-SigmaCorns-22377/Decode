@@ -1,4 +1,4 @@
-package sigmacorns.control.common
+package sigmacorns.control
 
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineDispatcher

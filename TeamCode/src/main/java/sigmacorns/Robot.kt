@@ -1,4 +1,4 @@
-package sigmacorns.control
+package sigmacorns
 
 import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
@@ -6,13 +6,13 @@ import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.flywheelParameters
-import sigmacorns.control.common.PollableDispatcher
+import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.control.mpc.MPCClient
 import sigmacorns.control.mpc.MPCRunner
-import sigmacorns.control.subsystem.AimingSystem
-import sigmacorns.control.subsystem.DriveController
-import sigmacorns.control.subsystem.Flywheel
+import sigmacorns.subsystem.AimingSystem
+import sigmacorns.subsystem.DriveController
+import sigmacorns.subsystem.Flywheel
 import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
@@ -23,7 +23,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
-    val aim = AimingSystem(io,blue)
+    val aim = AimingSystem(io, blue)
     val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
     val drive = DriveController()
 

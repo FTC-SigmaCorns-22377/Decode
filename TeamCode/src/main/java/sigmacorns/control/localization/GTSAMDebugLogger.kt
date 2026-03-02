@@ -1,4 +1,4 @@
-package sigmacorns.control.aim
+package sigmacorns.control.localization
 
 import org.joml.Vector2d
 import org.joml.Vector3d
@@ -57,7 +57,7 @@ class GTSAMDebugLogger(
     }
 
     // Log landmark configuration
-    fun logLandmarks(landmarks: Map<Int, AutoAimGTSAM.LandmarkSpec>) {
+    fun logLandmarks(landmarks: Map<Int, GTSAMEstimator.LandmarkSpec>) {
         rr?.apply {
             val positions = landmarks.map { (_, spec) -> spec.position }
             logPoints3D("kotlin/landmarks", positions, 0xFFFF8800.toInt())

@@ -11,8 +11,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.assertNotNull
-import sigmacorns.control.common.FSM
-import sigmacorns.control.common.PollableDispatcher
+import sigmacorns.control.FSM
+import sigmacorns.control.PollableDispatcher
 import sigmacorns.io.SimIO
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds

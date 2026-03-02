@@ -3,7 +3,7 @@ package sigmacorns.constants
 import org.joml.Quaterniond
 import org.joml.Vector2d
 import org.joml.Vector3d
-import sigmacorns.control.aim.AutoAimGTSAM
+import sigmacorns.control.localization.GTSAMEstimator
 import kotlin.math.PI
 
 /**
@@ -18,15 +18,15 @@ object FieldLandmarks {
     private val ypr24 = Vector3d().also { q24.getEulerAnglesZYX(it) }
 
     /** All tracked AprilTag landmarks and their 3D positions/orientations. */
-    val landmarks: Map<Int, AutoAimGTSAM.LandmarkSpec> = mapOf(
-        20 to AutoAimGTSAM.LandmarkSpec(
+    val landmarks: Map<Int, GTSAMEstimator.LandmarkSpec> = mapOf(
+        20 to GTSAMEstimator.LandmarkSpec(
             Vector3d(-1.413321, 1.481870, 0.7493),
             pitch = ypr20.y,
             roll = ypr20.x,
             yaw = ypr20.z,
             size = 0.165
         ),
-        24 to AutoAimGTSAM.LandmarkSpec(
+        24 to GTSAMEstimator.LandmarkSpec(
             Vector3d(1.413321, 1.481870, 0.7493),
             pitch = ypr24.y,
             roll = ypr24.x,

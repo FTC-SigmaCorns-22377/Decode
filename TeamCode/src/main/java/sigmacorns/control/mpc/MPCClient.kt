@@ -2,7 +2,7 @@ package sigmacorns.control.mpc
 
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainCenter
-import sigmacorns.control.common.SlewRateLimiter
+import sigmacorns.control.SlewRateLimiter
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
 import sigmacorns.sim.MecanumDynamics

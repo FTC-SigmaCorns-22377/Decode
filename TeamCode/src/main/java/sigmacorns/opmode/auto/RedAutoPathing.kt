@@ -8,7 +8,7 @@ import org.joml.Vector2d
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.control.common.PollableDispatcher
+import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.control.mpc.MPCClient
 import sigmacorns.control.mpc.MPCRunner

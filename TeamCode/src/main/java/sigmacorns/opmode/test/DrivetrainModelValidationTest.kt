@@ -3,7 +3,7 @@ package sigmacorns.opmode.test
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.control.subsystem.DriveController
+import sigmacorns.subsystem.DriveController
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MECANUM_DT

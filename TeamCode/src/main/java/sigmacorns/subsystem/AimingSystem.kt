@@ -1,17 +1,15 @@
-package sigmacorns.control.subsystem
+package sigmacorns.subsystem
 
 import org.joml.Vector2d
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.turretRange
-import sigmacorns.control.aim.AutoAimGTSAM
-import sigmacorns.control.aim.VisionTracker
+import sigmacorns.control.localization.GTSAMEstimator
+import sigmacorns.control.localization.VisionTracker
 import sigmacorns.control.aim.tune.AdaptiveTuner
 import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
-import sigmacorns.opmode.test.AutoAimGTSAMTest
-import sigmacorns.opmode.test.AutoAimGTSAMTest.Companion.applyRuntimeConfig
 import kotlin.math.hypot
 import kotlin.time.Duration
 
@@ -26,7 +24,7 @@ class AimingSystem(
     private val io: SigmaIO,
     private val blue: Boolean
 ) {
-    lateinit var autoAim: AutoAimGTSAM
+    lateinit var autoAim: GTSAMEstimator
         private set
     var visionTracker: VisionTracker? = null
         private set
@@ -49,11 +47,9 @@ class AimingSystem(
     fun init(initialPose: Pose2d, apriltagTracking: Boolean) {
         turret = Turret(turretRange, io)
 
-        autoAim = AutoAimGTSAM(
+        autoAim = GTSAMEstimator(
             landmarkPositions = FieldLandmarks.landmarks,
-            goalPosition = goalPosition,
             initialPose = initialPose,
-            estimatorConfig = AutoAimGTSAMTest.buildEstimatorConfig()
         )
 
         val limelight = (io as? HardwareIO).takeIf { apriltagTracking }?.limelight
@@ -67,7 +63,6 @@ class AimingSystem(
         dataStore.load()
         adaptiveTuner = AdaptiveTuner(dataStore)
 
-        applyRuntimeConfig(autoAim)
         autoAim.enabled = true
     }
 
@@ -76,7 +71,6 @@ class AimingSystem(
      * Call at the start of each loop iteration.
      */
     fun updateVision() {
-        applyRuntimeConfig(autoAim)
         val visionResult = visionTracker?.read()
         autoAim.update(io.position(), turret.pos, visionResult)
 
@@ -89,14 +83,6 @@ class AimingSystem(
      * Optionally skipped if the opmode wants full manual control of turret target.
      */
     fun applyAutoAimTarget() {
-        if (autoAim.enabled && autoAim.hasTarget) {
-            if (turret.fieldRelativeMode) {
-                autoAim.getTargetFieldAngle()?.let { turret.fieldTargetAngle = it }
-            } else {
-                autoAim.getTargetTurretAngle()?.let { turret.targetAngle = it }
-            }
-            targetDistance = targetDistance.coerceIn(0.1, 10.0)
-        }
     }
 
     /**
