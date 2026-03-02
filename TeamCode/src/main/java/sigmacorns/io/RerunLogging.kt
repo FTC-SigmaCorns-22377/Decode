@@ -4,17 +4,22 @@ import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.State
+import sigmacorns.opmode.SigmaOpMode.Companion.SIM
 
 class RerunLogging private constructor(
     val name: String,
 ): AutoCloseable {
     init {
         try {
-            val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("rerun")
-            if (resolvedPath != null) {
-                System.load(resolvedPath)
+            if(SIM) {
+                System.loadLibrary("rerun");
             } else {
-                System.loadLibrary("rerun")
+                val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("rerun")
+                if (resolvedPath != null) {
+                    System.load(resolvedPath)
+                } else {
+                    System.loadLibrary("rerun")
+                }
             }
         } catch (e: UnsatisfiedLinkError) {
             System.err.println("RerunLogging: failed to load native library 'rerun': ${e.message}")
