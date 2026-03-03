@@ -64,10 +64,10 @@ open class LTVTest(val trajName: String) : SigmaOpMode() {
 
 
                 // u = [FL, BL, BR, FR] in SigmaIO order
-                io.driveFL = u[0]
-                io.driveBL = u[1]
-                io.driveBR = u[2]
-                io.driveFR = u[3]
+                io.driveFL = u[0]*12.0/io.voltage()
+                io.driveBL = u[1]*12.0/io.voltage()
+                io.driveBR = u[2]*12.0/io.voltage()
+                io.driveFR = u[3]*12.0/io.voltage()
 
                 rr?.logState(state)
                 rr?.logInputs(io)
