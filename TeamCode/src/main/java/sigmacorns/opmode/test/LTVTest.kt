@@ -9,6 +9,7 @@ import sigmacorns.control.mpc.TrajoptLoader
 import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
+import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
@@ -32,8 +33,15 @@ open class LTVTest(val trajName: String) : SigmaOpMode() {
 
         val rr = if (SIM) LTVRerunLogger(rerunSink("LTVTest($trajName)")) else null
 
-        LTVClient(drivetrainParameters).use { ltv ->
-            ltv.loadTrajectory(traj)
+        // Use precomputed .bin if available, else fall back to online precomputation
+        val robotDir = TrajoptLoader.robotTrajoptDir()
+        val binFile = File(robotDir, "${projectFile.nameWithoutExtension}_traj0.bin")
+        val ltv = if (binFile.exists()) {
+            LTVClient.fromPrecomputed(binFile.absolutePath)
+        } else {
+            LTVClient(drivetrainParameters).also { it.loadTrajectory(traj) }
+        }
+        ltv.use {
             rr?.logTrajectoryPath(traj)
 
             val state = State(

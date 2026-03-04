@@ -7,22 +7,30 @@ import kotlin.math.floor
 import kotlin.math.min
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
-class LTVClient(
-    val parameters: MecanumParameters,
-    val horizon: Int = 30,
-    val dt: Duration = 20.milliseconds,
-    val qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
-    val rDiag: DoubleArray = doubleArrayOf(0.005, 0.005, 0.005, 0.005),
-    val qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
+class LTVClient private constructor(
+    private val handle: Long,
+    private var dtSeconds: Double,
 ) : AutoCloseable {
 
-    private val handle: Long = MecanumLTVBridge.nativeCreate()
     private var numWindows: Int = 0
     private var numVars: Int = 0
 
-    init {
+    val dt: Duration get() = dtSeconds.seconds
+
+    /**
+     * Primary constructor: configure model params + MPC tuning, then call [loadTrajectory].
+     */
+    constructor(
+        parameters: MecanumParameters,
+        horizon: Int = 30,
+        dt: Duration = 20.milliseconds,
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
+        rDiag: DoubleArray = doubleArrayOf(0.005, 0.005, 0.005, 0.005),
+        qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
+    ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS)) {
         MecanumLTVBridge.nativeSetModelParams(
             handle,
             mass = parameters.weight,
@@ -36,6 +44,24 @@ class LTVClient(
             freeSpeed = parameters.motor.freeSpeed,
         )
         MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0)
+    }
+
+    companion object {
+        /**
+         * Create an LTVClient from a precomputed .bin file.
+         * No model params or config needed — everything is loaded from the file.
+         * This is the fast path for robot use: load time is near-instant (just fread).
+         */
+        fun fromPrecomputed(filepath: String): LTVClient {
+            val handle = MecanumLTVBridge.nativeCreate()
+            val client = LTVClient(handle, 0.0)
+            val n = MecanumLTVBridge.nativeLoadWindows(handle, filepath)
+            require(n > 0) { "Failed to load precomputed windows from $filepath" }
+            client.numWindows = n
+            client.numVars = MecanumLTVBridge.nativeNumVars(handle)
+            client.dtSeconds = MecanumLTVBridge.nativeDt(handle)
+            return client
+        }
     }
 
     /**
@@ -57,9 +83,20 @@ class LTVClient(
             flat[offset + 5] = s.vy         // vy
             flat[offset + 6] = s.omega      // omega
         }
-        numWindows = MecanumLTVBridge.nativeLoadTrajectory(handle, flat, samples.size, dt.toDouble(
-            DurationUnit.SECONDS))
+        numWindows = MecanumLTVBridge.nativeLoadTrajectory(handle, flat, samples.size, dtSeconds)
         numVars = MecanumLTVBridge.nativeNumVars(handle)
+    }
+
+    /**
+     * Load precomputed windows from a .bin file (v2 format).
+     * Can be called on an already-configured client as an alternative to [loadTrajectory].
+     * Updates dt from the file header.
+     */
+    fun loadWindows(filepath: String) {
+        numWindows = MecanumLTVBridge.nativeLoadWindows(handle, filepath)
+        require(numWindows > 0) { "Failed to load precomputed windows from $filepath" }
+        numVars = MecanumLTVBridge.nativeNumVars(handle)
+        dtSeconds = MecanumLTVBridge.nativeDt(handle)
     }
 
     /**
@@ -70,7 +107,7 @@ class LTVClient(
      * @return 4 wheel duty cycles in SigmaIO order: [FL, BL, BR, FR]
      */
     fun solve(state: MecanumState, elapsedSeconds: Duration): DoubleArray {
-        val windowIdx = min(floor(elapsedSeconds / dt).toInt(), numWindows - 1)
+        val windowIdx = min(floor(elapsedSeconds.toDouble(DurationUnit.SECONDS) / dtSeconds).toInt(), numWindows - 1)
 
         // Pack state as [px, py, theta, vx, vy, omega] (LTV native order)
         val x0 = doubleArrayOf(
@@ -91,8 +128,10 @@ class LTVClient(
     }
 
     fun isComplete(elapsedSeconds: Duration): Boolean {
-        return floor(elapsedSeconds / dt).toInt() >= numWindows
+        return floor(elapsedSeconds.toDouble(DurationUnit.SECONDS) / dtSeconds).toInt() >= numWindows
     }
+
+    fun numWindows(): Int = numWindows
 
     override fun close() {
         MecanumLTVBridge.nativeDestroy(handle)

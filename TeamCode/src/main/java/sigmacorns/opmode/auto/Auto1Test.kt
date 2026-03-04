@@ -10,19 +10,20 @@ import sigmacorns.opmode.SigmaOpMode
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
+import kotlin.use
 
 @Autonomous
-class TurnTestAuto : SigmaOpMode() {
+class Auto1Test: SigmaOpMode() {
     override fun runOpMode() {
-        // 1. Find the "turntest" project file in the trajopt directory
+        // 1. Find the "auto-1" project file in the trajopt directory
         val robotDir = TrajoptLoader.robotTrajoptDir()
         val projectFile = TrajoptLoader.findProjectFiles(robotDir)
-            .find { it.nameWithoutExtension == "turntest" }
-            ?: throw IllegalStateException("turntest.json not found in $robotDir")
+            .find { it.nameWithoutExtension == "auto-1" }
+            ?: throw IllegalStateException("auto-1.json not found in $robotDir")
 
-        // 2. Load "Trajectory 1" (needed for initial position + telemetry)
+        // 2. Load "Trajectory 1" from auto-1.json (needed for initial position + telemetry)
         val traj = TrajoptLoader.loadTrajectory(projectFile, "Trajectory 1")
-            ?: throw IllegalStateException("'Trajectory 1' not found in turntest project")
+            ?: throw IllegalStateException("'Trajectory 1' not found in auto-1 project")
 
         // 3. Set the robot's starting position to match the trajectory's first waypoint
         val initialSample = traj.getInitialSample()
@@ -30,7 +31,7 @@ class TurnTestAuto : SigmaOpMode() {
         io.setPosition(initialSample.pos)
 
         // 4. Create the LTV controller — use precomputed .bin if available, else fall back
-        val binFile = File(robotDir, "turntest_traj0.bin")
+        val binFile = File(robotDir, "auto-1.bin")
         val ltv = if (binFile.exists()) {
             LTVClient.fromPrecomputed(binFile.absolutePath)
         } else {

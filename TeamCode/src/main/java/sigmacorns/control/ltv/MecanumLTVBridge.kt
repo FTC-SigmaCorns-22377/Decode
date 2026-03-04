@@ -36,6 +36,12 @@ object MecanumLTVBridge {
     /** Load trajectory as flat array of [t, px, py, theta, vx, vy, omega] per sample. Returns number of windows. */
     @JvmStatic external fun nativeLoadTrajectory(handle: Long, samples: DoubleArray, nSamples: Int, dt: Double): Int
 
+    /** Load precomputed windows from a .bin file (v2 format). Returns number of windows. */
+    @JvmStatic external fun nativeLoadWindows(handle: Long, filepath: String): Int
+
+    /** Returns the control timestep (seconds) from the loaded config. */
+    @JvmStatic external fun nativeDt(handle: Long): Double
+
     /** Solve for window at windowIdx given state x0 [px, py, theta, vx, vy, omega]. Writes N*4 controls to uOut. */
     @JvmStatic external fun nativeSolve(handle: Long, windowIdx: Int, x0: DoubleArray, uOut: DoubleArray): Int
 
