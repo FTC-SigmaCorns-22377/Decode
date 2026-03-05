@@ -18,6 +18,8 @@ import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
+import sigmacorns.subsystem.Intake
+import sigmacorns.subsystem.Transfer
 import java.lang.AutoCloseable
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -26,6 +28,8 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     val aim = AimingSystem(io, blue)
     val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
     val drive = DriveController()
+    val intake = Intake(this)
+    val transfer = Transfer(this)
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
