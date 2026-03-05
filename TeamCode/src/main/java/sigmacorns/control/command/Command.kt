@@ -7,7 +7,7 @@ interface Command {
     fun execute() {}
     fun end(interrupted: Boolean) {}
     fun isFinished(): Boolean = false
-    val requirements: Set<Subsystem> get() = emptySet()
+    val requirements: Set<Subsystem>
 }
 
 fun Command.andThen(next: Command): Command =
