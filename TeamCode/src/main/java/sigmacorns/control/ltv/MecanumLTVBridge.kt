@@ -48,4 +48,10 @@ object MecanumLTVBridge {
     @JvmStatic external fun nativeNumWindows(handle: Long): Int
     @JvmStatic external fun nativeHorizonLength(handle: Long): Int
     @JvmStatic external fun nativeNumVars(handle: Long): Int
+
+    /** Set QP solver type: 0 = FISTA, 1 = HPIPM_OCP */
+    @JvmStatic external fun nativeSetSolverType(handle: Long, type: Int)
+
+    /** Check if a solver type is available in this build. */
+    @JvmStatic external fun nativeIsSolverAvailable(type: Int): Boolean
 }

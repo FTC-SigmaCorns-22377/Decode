@@ -10,6 +10,13 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
+enum class QpSolverType(val nativeId: Int) {
+    FISTA(0),
+    HPIPM_OCP(1);
+
+    val isAvailable: Boolean get() = MecanumLTVBridge.nativeIsSolverAvailable(nativeId)
+}
+
 class LTVClient private constructor(
     private val handle: Long,
     private var dtSeconds: Double,
@@ -30,6 +37,7 @@ class LTVClient private constructor(
         qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
         rDiag: DoubleArray = doubleArrayOf(0.005, 0.005, 0.005, 0.005),
         qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
+        solverType: QpSolverType = QpSolverType.HPIPM_OCP,
     ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS)) {
         MecanumLTVBridge.nativeSetModelParams(
             handle,
@@ -44,6 +52,7 @@ class LTVClient private constructor(
             freeSpeed = parameters.motor.freeSpeed,
         )
         MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0)
+        MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
     }
 
     companion object {
@@ -52,7 +61,10 @@ class LTVClient private constructor(
          * No model params or config needed — everything is loaded from the file.
          * This is the fast path for robot use: load time is near-instant (just fread).
          */
-        fun fromPrecomputed(filepath: String): LTVClient {
+        fun fromPrecomputed(
+            filepath: String,
+            solverType: QpSolverType = QpSolverType.HPIPM_OCP,
+        ): LTVClient {
             val handle = MecanumLTVBridge.nativeCreate()
             val client = LTVClient(handle, 0.0)
             val n = MecanumLTVBridge.nativeLoadWindows(handle, filepath)
@@ -60,6 +72,7 @@ class LTVClient private constructor(
             client.numWindows = n
             client.numVars = MecanumLTVBridge.nativeNumVars(handle)
             client.dtSeconds = MecanumLTVBridge.nativeDt(handle)
+            MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
             return client
         }
     }

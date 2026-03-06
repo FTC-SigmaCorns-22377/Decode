@@ -73,6 +73,8 @@ class TrajoptTrajectory(
     val totalTime: Double,
     val waypointTimes: List<Double> = emptyList(),
     val eventMarkers: List<TrajoptEventMarker> = emptyList(),
+    /** Feedforward controls per timestep: each inner list is [drive, strafe, turn]. */
+    val controls: List<List<Double>> = emptyList(),
 ) {
     fun getInitialSample(): TrajoptSample? = samples.firstOrNull()
     fun getFinalSample(): TrajoptSample? = samples.lastOrNull()
