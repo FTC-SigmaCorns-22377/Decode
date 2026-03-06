@@ -1,22 +1,31 @@
 package sigmacorns.subsystem
 
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import sigmacorns.Robot
-import sigmacorns.io.SigmaIO
+import sigmacorns.constants.ShootWhileMoveConstants
 
 class Logic(val robot: Robot) {
 
-    var shootWhileMoveEnabled = false;
+    var shootWhileMoveEnabled = false
 
     suspend fun shootWhileMove() {
-        shootWhileMoveEnabled = true;
+        shootWhileMoveEnabled = true
 
         while (shootWhileMoveEnabled) {
-            // calculate and update turntable feedforward constant
-            // calculate and update flywheel target
+            robot.aim.updateVelocityComponents()
+            val turretLeadAngle = robot.aim.turretLeadAngle
+            val radialVelocity = robot.aim.radialVelocity
+
+            // update turret PID and setpoint
+            robot.turret.targetAngleOffset = turretLeadAngle
+
+            // set flywheel setpoint to radialVelocity*flywheelLookAheadTime
+            robot.flywheel.target = Flywheel.calculateTargetRPM(robot.aim.targetDistance + radialVelocity*ShootWhileMoveConstants.flywheelLookAheadTime)
+
             yield()
         }
+
+        robot.turret.targetAngleOffset = 0.0
     }
 
 }

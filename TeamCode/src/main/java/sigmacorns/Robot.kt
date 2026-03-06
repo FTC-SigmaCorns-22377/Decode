@@ -6,6 +6,7 @@ import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.flywheelParameters
+import sigmacorns.constants.turretRange
 import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.control.mpc.MPCClient
@@ -20,16 +21,18 @@ import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
 import sigmacorns.subsystem.Intake
 import sigmacorns.subsystem.Transfer
+import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
-    val aim = AimingSystem(io, blue)
+    val aim = AimingSystem(this, blue)
     val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
     val drive = DriveController()
     val intake = Intake(this)
     val transfer = Transfer(this)
+    val turret = Turret(turretRange, io)
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
