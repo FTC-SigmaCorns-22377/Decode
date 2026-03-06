@@ -146,8 +146,8 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
 
         if(zero) {
             aimTurret = false
-            aim.turret.fieldRelativeMode = false
-            aim.turret.targetAngle = 0.0
+            turret.fieldRelativeMode = false
+            turret.targetAngle = 0.0
         }
 
         aim.update(dt, aimTurret)
