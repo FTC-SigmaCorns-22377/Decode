@@ -59,6 +59,8 @@ class Turret(
     /** The raw robot-relative target before limiting (for goal tracking) */
     var goalTargetAngle: Double = 0.0
         private set
+    /** The target angle lookahead offset based on shoot while move dynamics */
+    var targetAngleOffset: Double = 0.0
 
     private var lastSaturatedTarget: Double? = null
     private var lastSaturatedError: Double? = null
@@ -69,12 +71,14 @@ class Turret(
         pos = currentAngle
 
         // Determine the raw target angle (field-relative or robot-relative)
-        val rawTarget = if (fieldRelativeMode) {
-            // Convert field-relative to robot-relative
-            normalizeAngle(fieldTargetAngle - robotHeading)
-        } else {
-            normalizeAngle(targetAngle)
-        }
+        val rawTarget = normalizeAngle(
+            if (fieldRelativeMode) {
+                // Convert field-relative to robot-relative
+                fieldTargetAngle - robotHeading
+            } else {
+                targetAngle
+            } + targetAngleOffset
+        )
 
         goalTargetAngle = rawTarget
 

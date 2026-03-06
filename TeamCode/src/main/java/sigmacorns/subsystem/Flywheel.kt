@@ -47,6 +47,14 @@ class Flywheel(
 
     private var lastU = 0.0
 
+    companion object {
+        // RPM based on distance in
+        fun calculateTargetRPM(dist: Double): Double {
+            // TODO: add these calculations
+            return 5000.0
+        }
+    }
+
     private fun calculate(v0: Double, dt: Duration): Double {
         val e = exp(-motor.stallTorque/inertia/motor.freeSpeed * dt.toDouble(DurationUnit.SECONDS))
         val power = (target - v0*e)/(motor.freeSpeed * (1.0-e))

@@ -1,7 +1,9 @@
 package sigmacorns.subsystem
 
 import org.joml.Vector2d
+import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
+import sigmacorns.constants.ShootWhileMoveConstants
 import sigmacorns.constants.turretRange
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
@@ -10,6 +12,7 @@ import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
+import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.time.Duration
 
@@ -21,14 +24,12 @@ import kotlin.time.Duration
  * targeting between [updateVision] and [updateTurret] for manual control.
  */
 class AimingSystem(
-    private val io: SigmaIO,
+    private val robot: Robot,
     private val blue: Boolean
 ) {
     lateinit var autoAim: GTSAMEstimator
         private set
     var visionTracker: VisionTracker? = null
-        private set
-    lateinit var turret: Turret
         private set
     lateinit var adaptiveTuner: AdaptiveTuner
         private set
@@ -41,18 +42,51 @@ class AimingSystem(
     var targetDistance: Double = 3.0
         private set
 
+    var radialVelocity: Double = 0.0
+        private set
+
+    var turretLeadAngle: Double = 0.0
+        private set
+
+    /**
+     * Decompose the robot's field-relative velocity into radial and lateral
+     * components relative to the goal direction, and compute the turret lead
+     * angle to compensate for lateral motion.
+     */
+    fun updateVelocityComponents() {
+        val fusedPose = autoAim.fusedPose
+        val vel = robot.io.velocity()
+
+        val toGoal = Vector2d(
+            goalPosition.x - fusedPose.v.x,
+            goalPosition.y - fusedPose.v.y
+        )
+        val dist = toGoal.length()
+        if (dist < 0.01) {
+            radialVelocity = 0.0
+            turretLeadAngle = 0.0
+            return
+        }
+
+        val radialDir = Vector2d(toGoal).div(dist)
+        val lateralDir = Vector2d(-radialDir.y, radialDir.x)
+
+        radialVelocity = vel.v.dot(radialDir)
+        val lateralVelocity = vel.v.dot(lateralDir)
+
+        turretLeadAngle = atan2(-lateralVelocity, dist) * ShootWhileMoveConstants.turretLookAheadTime
+    }
+
     /**
      * Initialize all subsystems. Call once before the main loop.
      */
     fun init(initialPose: Pose2d, apriltagTracking: Boolean) {
-        turret = Turret(turretRange, io)
-
         autoAim = GTSAMEstimator(
             landmarkPositions = FieldLandmarks.landmarks,
             initialPose = initialPose,
         )
 
-        val limelight = (io as? HardwareIO).takeIf { apriltagTracking }?.limelight
+        val limelight = (robot.io as? HardwareIO).takeIf { apriltagTracking }?.limelight
         visionTracker = VisionTracker(
             limelight = limelight,
             allowedTagIds = FieldLandmarks.landmarkTagIds
@@ -72,7 +106,7 @@ class AimingSystem(
      */
     fun updateVision() {
         val visionResult = visionTracker?.read()
-        autoAim.update(io.position(), turret.pos, visionResult)
+        autoAim.update(robot.io.position(), robot.turret.pos, visionResult)
 
         val fusedPose = autoAim.fusedPose
         targetDistance = hypot(goalPosition.x - fusedPose.v.x, goalPosition.y - fusedPose.v.y)
@@ -90,15 +124,15 @@ class AimingSystem(
      * Call after setting turret target (auto or manual).
      */
     fun updateTurret(dt: Duration) {
-        turret.robotHeading = autoAim.fusedPose.rot
-        turret.robotAngularVelocity = io.velocity().rot
-        turret.targetDistance = targetDistance
+        robot.turret.robotHeading = autoAim.fusedPose.rot
+        robot.turret.robotAngularVelocity = robot.io.velocity().rot
+        robot.turret.targetDistance = targetDistance
 
         positionOverride?.let {
-            if(turret.fieldRelativeMode) turret.targetAngle = it else turret.fieldTargetAngle = it
+            if(robot.turret.fieldRelativeMode) robot.turret.targetAngle = it else robot.turret.fieldTargetAngle = it
         }
 
-        turret.update(dt)
+        robot.turret.update(dt)
     }
 
     /**
@@ -115,6 +149,7 @@ class AimingSystem(
      */
     fun update(dt: Duration, target: Boolean = true) {
         updateVision()
+        updateVelocityComponents()
         if(target) applyAutoAimTarget()
         updateTurret(dt)
     }
