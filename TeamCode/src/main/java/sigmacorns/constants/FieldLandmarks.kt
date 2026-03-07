@@ -53,4 +53,7 @@ object FieldLandmarks {
         val pos2d = goalPosition(blue)
         return Vector3d(pos2d.x, pos2d.y, goalHeight)
     }
+
+    val goalZoneCorners = listOf(Vector2d(0.0, 0.0), Vector2d(-1.83, 1.83), Vector2d(1.83, 1.83))
+    val farZoneCorners = listOf(Vector2d(-0.61, -1.83), Vector2d(0.0, -1.22), Vector2d(0.61, -1.83))
 }
