@@ -1,16 +1,12 @@
 package sigmacorns.io
 
-import com.qualcomm.hardware.broadcom.BroadcomColorSensorImpl
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.hardware.lynx.LynxModule
-import com.qualcomm.hardware.rev.RevColorSensorV3
 import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.DcMotorEx
 import com.qualcomm.robotcore.hardware.DcMotorSimple
-import com.qualcomm.robotcore.hardware.DistanceSensor
 import com.qualcomm.robotcore.hardware.HardwareMap
-import com.qualcomm.robotcore.hardware.IMU
 import com.qualcomm.robotcore.hardware.Servo
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
@@ -36,6 +32,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveFRMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveFR")
     private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
 
+    private val frontBrakeServo: Servo = hardwareMap.get(Servo::class.java,"frontBrake")
+    private val backBrakeServo: Servo = hardwareMap.get(Servo::class.java,"backBrake")
+
     //shooter
     private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
     //intake
@@ -57,6 +56,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var driveBL: Double = 0.0
     override var driveFR: Double = 0.0
     override var driveBR: Double = 0.0
+
+    override var frontBrake: Double = 0.0
+    override var backBrake: Double = 0.0
+
     override var flywheel: Double = 0.0
     override var intake: Double = 0.0
     override var turret: Double = 0.0
@@ -74,6 +77,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private var lastDriveFR: Double = Double.NaN
     private var lastDriveBL: Double = Double.NaN
     private var lastDriveBR: Double = Double.NaN
+    private var lastFrontBrake: Double = Double.NaN
+    private var lastBackBrake: Double = Double.NaN
     private var lastFlywheel: Double = Double.NaN
     private var lastIntake: Double = Double.NaN
     private var lastTurret: Double = Double.NaN
@@ -146,6 +151,20 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         if (shouldUpdate(driveBR, lastDriveBR)) {
             driveBRMotor.power = driveBR
             lastDriveBR = driveBR
+        }
+
+        if (shouldUpdate(driveBR, lastDriveBR)) {
+            driveBRMotor.power = driveBR
+            lastDriveBR = driveBR
+        }
+
+        if (shouldUpdate(frontBrake, lastFrontBrake)) {
+            frontBrakeServo.position = frontBrake
+            lastFrontBrake = frontBrake
+        }
+        if (shouldUpdate(backBrake, lastBackBrake)) {
+            backBrakeServo.position = backBrake
+            lastBackBrake = backBrake
         }
 
         if (shouldUpdate(flywheel, lastFlywheel)) {
