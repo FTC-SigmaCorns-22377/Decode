@@ -26,7 +26,7 @@ data class WindowSelConfig(
     val headingWeight: Double = 0.3,
     val searchRadius: Int     = 10,
     val maxJump: Int          = 5,
-    val holdRadius: Double    = 0.1,
+    val holdRadius: Double    = 0.05,
 )
 
 enum class QpSolverType(val nativeId: Int) {
@@ -39,6 +39,7 @@ enum class QpSolverType(val nativeId: Int) {
 class LTVClient private constructor(
     private val handle: Long,
     private var dtSeconds: Double,
+    private var solverType: QpSolverType = QpSolverType.FISTA,
 ) : AutoCloseable {
 
     private var numWindows: Int = 0
@@ -76,29 +77,29 @@ class LTVClient private constructor(
             freeSpeed = parameters.motor.freeSpeed,
         )
         MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0)
+        this.solverType = solverType
         MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
         setWindowSelConfig(windowSelConfig)
     }
 
     companion object {
         /**
-         * Create an LTVClient from a precomputed .bin file.
+         * Create a FISTA LTVClient from a precomputed .bin file.
          * No model params or config needed — everything is loaded from the file.
          * This is the fast path for robot use: load time is near-instant (just fread).
          */
         fun fromPrecomputed(
             filepath: String,
-            solverType: QpSolverType = QpSolverType.HPIPM_OCP,
         ): LTVClient {
             val handle = MecanumLTVBridge.nativeCreate()
-            val client = LTVClient(handle, 0.0)
+            val client = LTVClient(handle, 0.0, QpSolverType.FISTA)
             val n = MecanumLTVBridge.nativeLoadWindows(handle, filepath)
             require(n > 0) { "Failed to load precomputed windows from $filepath" }
             client.numWindows = n
             client.numVars = MecanumLTVBridge.nativeNumVars(handle)
             client.dtSeconds = MecanumLTVBridge.nativeDt(handle)
             client.prevCallElapsed = null
-            MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
+            MecanumLTVBridge.nativeSetSolverType(handle, QpSolverType.FISTA.nativeId)
             return client
         }
     }
@@ -151,6 +152,9 @@ class LTVClient private constructor(
     }
 
     fun loadWindows(filepath: String) {
+        require(solverType != QpSolverType.HPIPM_OCP) {
+            "HPIPM_OCP is incompatible with precomputed windows; use loadTrajectory instead"
+        }
         numWindows = MecanumLTVBridge.nativeLoadWindows(handle, filepath)
         require(numWindows > 0) { "Failed to load precomputed windows from $filepath" }
         numVars = MecanumLTVBridge.nativeNumVars(handle)
