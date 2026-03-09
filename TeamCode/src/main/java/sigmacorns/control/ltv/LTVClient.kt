@@ -4,11 +4,30 @@ import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.MecanumState
 import kotlin.math.floor
-import kotlin.math.min
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
+
+/**
+ * Tuning parameters for cost-based window selection.
+ *
+ * @param posWeight      Weight on squared position+heading distance in the cost function.
+ * @param timeWeight     Weight on squared time-schedule deviation in the cost function.
+ * @param headingWeight  Scale applied to heading error (radians) in the distance metric.
+ * @param searchRadius   Max windows to search forward from the current window each solve.
+ * @param maxJump        Hard cap on window advance per solve call.
+ * @param holdRadius     XY distance (metres) beyond which the window is frozen until the
+ *                       robot re-approaches. Accumulated time is reset on re-entry.
+ */
+data class WindowSelConfig(
+    val posWeight: Double     = 1.0,
+    val timeWeight: Double    = 0.5,
+    val headingWeight: Double = 0.3,
+    val searchRadius: Int     = 10,
+    val maxJump: Int          = 5,
+    val holdRadius: Double    = 0.1,
+)
 
 enum class QpSolverType(val nativeId: Int) {
     FISTA(0),
@@ -25,6 +44,10 @@ class LTVClient private constructor(
     private var numWindows: Int = 0
     private var numVars: Int = 0
 
+    // Tracks the elapsed time of the previous solve call for dt_since_last computation.
+    // Null before the first solve after a trajectory load.
+    private var prevCallElapsed: Double? = null
+
     val dt: Duration get() = dtSeconds.seconds
 
     /**
@@ -38,6 +61,7 @@ class LTVClient private constructor(
         rDiag: DoubleArray = doubleArrayOf(0.005, 0.005, 0.005, 0.005),
         qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
         solverType: QpSolverType = QpSolverType.HPIPM_OCP,
+        windowSelConfig: WindowSelConfig = WindowSelConfig()
     ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS)) {
         MecanumLTVBridge.nativeSetModelParams(
             handle,
@@ -53,6 +77,7 @@ class LTVClient private constructor(
         )
         MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0)
         MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
+        setWindowSelConfig(windowSelConfig)
     }
 
     companion object {
@@ -72,6 +97,7 @@ class LTVClient private constructor(
             client.numWindows = n
             client.numVars = MecanumLTVBridge.nativeNumVars(handle)
             client.dtSeconds = MecanumLTVBridge.nativeDt(handle)
+            client.prevCallElapsed = null
             MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
             return client
         }
@@ -98,6 +124,7 @@ class LTVClient private constructor(
         }
         numWindows = MecanumLTVBridge.nativeLoadTrajectory(handle, flat, samples.size, dtSeconds)
         numVars = MecanumLTVBridge.nativeNumVars(handle)
+        prevCallElapsed = null
     }
 
     /**
@@ -105,22 +132,47 @@ class LTVClient private constructor(
      * Can be called on an already-configured client as an alternative to [loadTrajectory].
      * Updates dt from the file header.
      */
+    /** Update window selection tuning. Takes effect on the next [solve] call. */
+    fun setWindowSelConfig(cfg: WindowSelConfig) {
+        MecanumLTVBridge.nativeSetWindowSelConfig(
+            handle,
+            cfg.posWeight, cfg.timeWeight, cfg.headingWeight,
+            cfg.searchRadius, cfg.maxJump, cfg.holdRadius,
+        )
+    }
+
+    /**
+     * Save precomputed windows to a .bin file (v2 format).
+     * The file can be reloaded via [fromPrecomputed] or [loadWindows].
+     */
+    fun saveWindows(filepath: String) {
+        val result = MecanumLTVBridge.nativeSaveWindows(handle, filepath)
+        require(result == 0) { "Failed to save precomputed windows to $filepath" }
+    }
+
     fun loadWindows(filepath: String) {
         numWindows = MecanumLTVBridge.nativeLoadWindows(handle, filepath)
         require(numWindows > 0) { "Failed to load precomputed windows from $filepath" }
         numVars = MecanumLTVBridge.nativeNumVars(handle)
         dtSeconds = MecanumLTVBridge.nativeDt(handle)
+        prevCallElapsed = null
     }
 
     /**
      * Solve the LTV OCP for the current state and elapsed time.
+     *
+     * On the first call after loading a trajectory, pass total time since trajectory start.
+     * On subsequent calls, the time since the previous call is computed automatically.
      *
      * @param state Current mecanum state (pos + vel as Pose2d)
      * @param elapsedSeconds Time since trajectory start
      * @return 4 wheel duty cycles in SigmaIO order: [FL, BL, BR, FR]
      */
     fun solve(state: MecanumState, elapsedSeconds: Duration): DoubleArray {
-        val windowIdx = min(floor(elapsedSeconds.toDouble(DurationUnit.SECONDS) / dtSeconds).toInt(), numWindows - 1)
+        val elapsedSec = elapsedSeconds.toDouble(DurationUnit.SECONDS)
+        val prev = prevCallElapsed
+        val dtSinceLast = if (prev == null) elapsedSec else (elapsedSec - prev)
+        prevCallElapsed = elapsedSec
 
         // Pack state as [px, py, theta, vx, vy, omega] (LTV native order)
         val x0 = doubleArrayOf(
@@ -129,7 +181,7 @@ class LTVClient private constructor(
         )
 
         val uOut = DoubleArray(numVars)
-        MecanumLTVBridge.nativeSolve(handle, windowIdx, x0, uOut)
+        MecanumLTVBridge.nativeSolve(handle, dtSinceLast, x0, uOut)
 
         // First 4 values are the controls for the first timestep
         // JNI order: [FL, FR, RL, RR] → SigmaIO order: [FL, BL, BR, FR]
@@ -140,8 +192,29 @@ class LTVClient private constructor(
         return doubleArrayOf(fl, rl, rr, fr) // [FL, BL, BR, FR]
     }
 
-    fun isComplete(elapsedSeconds: Duration): Boolean {
-        return floor(elapsedSeconds.toDouble(DurationUnit.SECONDS) / dtSeconds).toInt() >= numWindows
+    /** Returns the window index selected by the most recent solve() call. */
+    fun prevWindowIdx(): Int = MecanumLTVBridge.nativeGetPrevIdx(handle)
+
+    /**
+     * Returns the reference state [px, py, theta, vx, vy, omega] for the given window index,
+     * or null if the index is out of range.
+     */
+    fun getWindowRef(windowIdx: Int): DoubleArray? {
+        val out = DoubleArray(6)
+        return if (MecanumLTVBridge.nativeGetWindowRef(handle, windowIdx, out)) out else null
+    }
+
+    /**
+     * Returns true when the solver has reached the last window.
+     * Uses the selected window index rather than elapsed time so that trials
+     * spending time in hold mode (approaching the path) are not prematurely
+     * considered complete. The [elapsedSeconds] safety cutoff (default 3× trajectory
+     * duration) guards against infinite loops if a robot never converges.
+     */
+    fun isComplete(elapsedSeconds: Duration, safetyMultiplier: Double = 3.0): Boolean {
+        val windowDone = prevWindowIdx() >= numWindows - 1
+        val safetyCutoff = elapsedSeconds.toDouble(DurationUnit.SECONDS) >= dtSeconds * numWindows * safetyMultiplier
+        return windowDone || safetyCutoff
     }
 
     fun numWindows(): Int = numWindows

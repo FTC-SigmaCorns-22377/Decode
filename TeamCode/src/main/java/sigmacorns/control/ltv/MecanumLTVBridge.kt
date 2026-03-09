@@ -36,14 +36,34 @@ object MecanumLTVBridge {
     /** Load trajectory as flat array of [t, px, py, theta, vx, vy, omega] per sample. Returns number of windows. */
     @JvmStatic external fun nativeLoadTrajectory(handle: Long, samples: DoubleArray, nSamples: Int, dt: Double): Int
 
+    /** Configure cost-based window selection tuning. */
+    @JvmStatic external fun nativeSetWindowSelConfig(
+        handle: Long,
+        posWeight: Double, timeWeight: Double, headingWeight: Double,
+        searchRadius: Int, maxJump: Int, holdRadius: Double,
+    )
+
+    /** Save precomputed windows to a .bin file (v2 format). Returns 0 on success. */
+    @JvmStatic external fun nativeSaveWindows(handle: Long, filepath: String): Int
+
     /** Load precomputed windows from a .bin file (v2 format). Returns number of windows. */
     @JvmStatic external fun nativeLoadWindows(handle: Long, filepath: String): Int
 
     /** Returns the control timestep (seconds) from the loaded config. */
     @JvmStatic external fun nativeDt(handle: Long): Double
 
-    /** Solve for window at windowIdx given state x0 [px, py, theta, vx, vy, omega]. Writes N*4 controls to uOut. */
-    @JvmStatic external fun nativeSolve(handle: Long, windowIdx: Int, x0: DoubleArray, uOut: DoubleArray): Int
+    /**
+     * Solve given state x0 [px, py, theta, vx, vy, omega] and time elapsed since last solve.
+     * On first call after load, pass total elapsed time since trajectory start.
+     * Writes N*4 controls to uOut. Returns the selected window index, or -1 on error.
+     */
+    @JvmStatic external fun nativeSolve(handle: Long, dtSinceLast: Double, x0: DoubleArray, uOut: DoubleArray): Int
+
+    /** Returns the window index selected by the most recent solve() call. */
+    @JvmStatic external fun nativeGetPrevIdx(handle: Long): Int
+
+    /** Fills xRefOut[6] with x_ref_0 for windowIdx. Returns false on bad index. */
+    @JvmStatic external fun nativeGetWindowRef(handle: Long, windowIdx: Int, xRefOut: DoubleArray): Boolean
 
     @JvmStatic external fun nativeNumWindows(handle: Long): Int
     @JvmStatic external fun nativeHorizonLength(handle: Long): Int
