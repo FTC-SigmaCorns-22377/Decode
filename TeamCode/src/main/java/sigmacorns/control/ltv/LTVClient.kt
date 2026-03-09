@@ -26,7 +26,7 @@ data class WindowSelConfig(
     val headingWeight: Double = 0.3,
     val searchRadius: Int     = 10,
     val maxJump: Int          = 5,
-    val holdRadius: Double    = 0.05,
+    val holdRadius: Double    = 0.5,
 )
 
 enum class QpSolverType(val nativeId: Int) {

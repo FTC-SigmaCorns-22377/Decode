@@ -20,7 +20,7 @@ class LTVSimple : LTVTest("Trajectory 1")
 
 open class LTVTest(val trajName: String) : SigmaOpMode() {
     override fun runOpMode() {
-        val projectFile = MPCTest.findProjectFile()
+        val projectFile = MPCTest.findProjectFile("simple")
             ?: throw IllegalStateException("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
 
         val traj = TrajoptLoader.loadTrajectory(projectFile, trajName)
@@ -36,7 +36,7 @@ open class LTVTest(val trajName: String) : SigmaOpMode() {
         // Use precomputed .bin if available, else fall back to online precomputation
         val robotDir = TrajoptLoader.robotTrajoptDir()
         val binFile = File(robotDir, "${projectFile.nameWithoutExtension}_traj0.bin")
-        val ltv = if (binFile.exists()) {
+        val ltv = if (false) {
             LTVClient.fromPrecomputed(binFile.absolutePath)
         } else {
             LTVClient(drivetrainParameters).also { it.loadTrajectory(traj) }

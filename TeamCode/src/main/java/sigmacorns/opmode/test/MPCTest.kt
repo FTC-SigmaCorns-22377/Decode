@@ -53,10 +53,10 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
         }
 
         /** Find the first trajectory project file in the trajopt directory. */
-        fun findProjectFile(): File? {
+        fun findProjectFile(name: String): File? {
             val robotDir = TrajoptLoader.robotTrajoptDir()
             if (robotDir.exists()) {
-                return TrajoptLoader.findProjectFiles(robotDir).firstOrNull()
+                return TrajoptLoader.findProjectFiles(robotDir).find { it.nameWithoutExtension==name }
             }
             return null
         }
@@ -64,7 +64,7 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
 
     override fun runOpMode() {
         // Load trajectory from trajopt project file
-        val projectFile = findProjectFile()
+        val projectFile = findProjectFile("simple")
             ?: throw IllegalStateException("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
 
         val traj = TrajoptLoader.loadTrajectory(projectFile, trajName)
