@@ -151,6 +151,52 @@ class MecanumDynamics(val p: MecanumParameters) {
      *
      * @return the integrated [MecanumState]
      */
+    /**
+     * Computes net force and torque on the robot in field frame, without integrating.
+     * Used by JoltSimIO to let Jolt handle integration and collisions.
+     *
+     * @param motorPowers motor powers ordered [FL, BL, BR, FR]
+     * @param fieldVel field-frame velocity (vx, vy, omega)
+     * @param heading robot heading in radians
+     * @return Pose2d(Fx_field, Fy_field, Tz) in Newtons and N*m
+     */
+    fun computeForces(motorPowers: DoubleArray, fieldVel: Pose2d, heading: Double): Pose2d {
+        // Convert field velocity to robot-relative
+        val robotVel = Pose2d(fieldVel.v.x, fieldVel.v.y, fieldVel.rot).also {
+            it.v = Matrix2d().rotate(-heading) * it.v
+        }
+
+        val wheelVels = mecanumInverseVelKinematics(robotVel)
+
+        val powers = Vector4d(motorPowers[0], motorPowers[1], motorPowers[2], motorPowers[3])
+
+        // Motor torques
+        val torques = Vector4d(
+            p.motor.torque(powers.x, wheelVels.x),
+            p.motor.torque(powers.y, wheelVels.y),
+            p.motor.torque(powers.z, wheelVels.z),
+            p.motor.torque(powers.w, wheelVels.w),
+        )
+
+        // Robot-frame accelerations from motor torques
+        val acc = mecanumForwardAccKinematics(torques)
+
+        // Convert accelerations to forces (F = m*a, T = I*alpha)
+        var fx = acc.v.x * p.weight
+        var fy = acc.v.y * p.weight
+        var tz = acc.rot * p.rotInertia
+
+        // Add viscous drag in robot frame
+        fx -= p.cDragLin * robotVel.v.x * p.weight
+        fy -= p.cDragLin * robotVel.v.y * p.weight
+        tz -= p.cDragRot * robotVel.rot * p.rotInertia
+
+        // Rotate forces to field frame
+        val fieldForce = Matrix2d().rotate(heading) * Vector2d(fx, fy)
+
+        return Pose2d(fieldForce.x, fieldForce.y, tz)
+    }
+
     fun integrate(tf: Double, dt: Double, u: DoubleArray, x: MecanumState): MecanumState {
         val x0 = doubleArrayOf(x.vel.v.x, x.vel.v.y, x.vel.rot, x.pos.v.x, x.pos.v.y, x.pos.rot)
 
