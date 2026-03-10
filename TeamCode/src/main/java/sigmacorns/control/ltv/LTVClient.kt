@@ -82,28 +82,6 @@ class LTVClient private constructor(
         setWindowSelConfig(windowSelConfig)
     }
 
-    companion object {
-        /**
-         * Create a FISTA LTVClient from a precomputed .bin file.
-         * No model params or config needed — everything is loaded from the file.
-         * This is the fast path for robot use: load time is near-instant (just fread).
-         */
-        fun fromPrecomputed(
-            filepath: String,
-        ): LTVClient {
-            val handle = MecanumLTVBridge.nativeCreate()
-            val client = LTVClient(handle, 0.0, QpSolverType.FISTA)
-            val n = MecanumLTVBridge.nativeLoadWindows(handle, filepath)
-            require(n > 0) { "Failed to load precomputed windows from $filepath" }
-            client.numWindows = n
-            client.numVars = MecanumLTVBridge.nativeNumVars(handle)
-            client.dtSeconds = MecanumLTVBridge.nativeDt(handle)
-            client.prevCallElapsed = null
-            MecanumLTVBridge.nativeSetSolverType(handle, QpSolverType.FISTA.nativeId)
-            return client
-        }
-    }
-
     /**
      * Load a trajectory from a TrajoptTrajectory.
      * Converts from trajopt state order [vx, vy, omega, x, y, heading] to
@@ -128,11 +106,6 @@ class LTVClient private constructor(
         prevCallElapsed = null
     }
 
-    /**
-     * Load precomputed windows from a .bin file (v2 format).
-     * Can be called on an already-configured client as an alternative to [loadTrajectory].
-     * Updates dt from the file header.
-     */
     /** Update window selection tuning. Takes effect on the next [solve] call. */
     fun setWindowSelConfig(cfg: WindowSelConfig) {
         MecanumLTVBridge.nativeSetWindowSelConfig(
@@ -144,22 +117,10 @@ class LTVClient private constructor(
 
     /**
      * Save precomputed windows to a .bin file (v2 format).
-     * The file can be reloaded via [fromPrecomputed] or [loadWindows].
      */
     fun saveWindows(filepath: String) {
         val result = MecanumLTVBridge.nativeSaveWindows(handle, filepath)
         require(result == 0) { "Failed to save precomputed windows to $filepath" }
-    }
-
-    fun loadWindows(filepath: String) {
-        require(solverType != QpSolverType.HPIPM_OCP) {
-            "HPIPM_OCP is incompatible with precomputed windows; use loadTrajectory instead"
-        }
-        numWindows = MecanumLTVBridge.nativeLoadWindows(handle, filepath)
-        require(numWindows > 0) { "Failed to load precomputed windows from $filepath" }
-        numVars = MecanumLTVBridge.nativeNumVars(handle)
-        dtSeconds = MecanumLTVBridge.nativeDt(handle)
-        prevCallElapsed = null
     }
 
     /**

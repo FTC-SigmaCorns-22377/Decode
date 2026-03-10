@@ -46,12 +46,6 @@ object MecanumLTVBridge {
     /** Save precomputed windows to a .bin file (v2 format). Returns 0 on success. */
     @JvmStatic external fun nativeSaveWindows(handle: Long, filepath: String): Int
 
-    /** Load precomputed windows from a .bin file (v2 format). Returns number of windows. */
-    @JvmStatic external fun nativeLoadWindows(handle: Long, filepath: String): Int
-
-    /** Returns the control timestep (seconds) from the loaded config. */
-    @JvmStatic external fun nativeDt(handle: Long): Double
-
     /**
      * Solve given state x0 [px, py, theta, vx, vy, omega] and time elapsed since last solve.
      * On first call after load, pass total elapsed time since trajectory start.
