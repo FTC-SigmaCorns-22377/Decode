@@ -1,6 +1,8 @@
 [submodule "deps/mecanum_LTV_OCP"]
 	path = deps/mecanum_LTV_OCP
 	url = https://github.com/FTC-SigmaCorns-22377/mecanum_LTV_OCP
+	branch = main
 [submodule "deps/mecanum_trajopt"]
 	path = deps/mecanum_trajopt
 	url = https://github.com/FTC-SigmaCorns-22377/mecanum_trajopt
+	branch = main
