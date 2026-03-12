@@ -38,7 +38,7 @@ function connect() {
 
 function applyFrame(state) {
     if (!state) return;
-    updateRobot(state.robot.x, state.robot.y, state.robot.theta);
+    updateRobot(state.robot.x, state.robot.y, state.robot.theta, state.robot.turretAngle);
     updateBalls(state.balls || []);
     timeDisplay.textContent = state.t.toFixed(3) + 's';
 }

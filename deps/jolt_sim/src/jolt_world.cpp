@@ -206,10 +206,10 @@ void JoltWorld::step(float dt) {
 
     // Apply queued force and torque to robot
     if (queuedFx_ != 0.0f || queuedFy_ != 0.0f) {
-        // Our sim: X=forward in field, Y=left in field
-        // Jolt: X=X, Z=forward (we map sim Y -> Jolt -Z... actually let's keep it simple)
-        // Convention: sim (x,y) maps to Jolt (x, z), sim theta maps to rotation about Y
-        bodyInterface.AddForce(robotBodyId_, JPH::Vec3(queuedFx_, 0, queuedFy_));
+        // Sim frame: x=forward, y=left, z=up
+        // Jolt frame: X=right, Y=up, Z=forward (robot faces +Z, intake along +Z)
+        // Mapping: sim x -> Jolt +Z, sim y -> Jolt -X
+        bodyInterface.AddForce(robotBodyId_, JPH::Vec3(-queuedFy_, 0, queuedFx_));
     }
     if (queuedTz_ != 0.0f) {
         bodyInterface.AddTorque(robotBodyId_, JPH::Vec3(0, queuedTz_, 0));
@@ -242,8 +242,8 @@ void JoltWorld::applyRobotForce(float fx, float fy, float tz) {
 void JoltWorld::setRobotPose(float x, float y, float theta) {
     auto& bodyInterface = physicsSystem_->GetBodyInterface();
 
-    // sim (x,y,theta) -> Jolt (x, z, rotY)
-    JPH::Vec3 pos(x, ROBOT_HEIGHT / 2.0f, y);
+    // sim (x,y,theta) -> Jolt (-y, height, x)
+    JPH::Vec3 pos(-y, ROBOT_HEIGHT / 2.0f, x);
     JPH::Quat rot = JPH::Quat::sRotation(JPH::Vec3::sAxisY(), theta);
 
     bodyInterface.SetPositionAndRotation(robotBodyId_, pos, rot, JPH::EActivation::Activate);
@@ -263,12 +263,12 @@ void JoltWorld::getRobotState(float out[6]) {
     // For rotation about Y: theta = 2*atan2(qy, qw)
     float theta = 2.0f * std::atan2(rot.GetY(), rot.GetW());
 
-    // Jolt (x, z) -> sim (x, y)
-    out[0] = pos.GetX();
-    out[1] = pos.GetZ();
+    // Jolt -> sim: sim x = Jolt Z, sim y = -Jolt X
+    out[0] = pos.GetZ();
+    out[1] = -pos.GetX();
     out[2] = theta;
-    out[3] = vel.GetX();
-    out[4] = vel.GetZ();
+    out[3] = vel.GetZ();
+    out[4] = -vel.GetX();
     out[5] = angVel.GetY();
 }
 
@@ -278,10 +278,10 @@ int JoltWorld::spawnBall(float x, float y, float z, float vx, float vy, float vz
     auto shapeSettings = JPH::SphereShapeSettings(BALL_RADIUS);
     auto shapeResult = shapeSettings.Create();
 
-    // sim (x, y, z) -> Jolt (x, z_jolt, y_jolt) where z is up in sim -> y is up in Jolt
+    // sim (x, y, z) -> Jolt (-y, z, x): sim x->Jolt Z, sim y->Jolt -X, sim z->Jolt Y
     JPH::BodyCreationSettings bodySettings(
         shapeResult.Get(),
-        JPH::Vec3(x, z, y), // sim z (up) -> Jolt y (up)
+        JPH::Vec3(-y, z, x),
         JPH::Quat::sIdentity(),
         JPH::EMotionType::Dynamic,
         Layers::MOVING
@@ -295,7 +295,7 @@ int JoltWorld::spawnBall(float x, float y, float z, float vx, float vy, float vz
     bodySettings.mMassPropertiesOverride.mMass = BALL_MASS;
 
     JPH::BodyID ballId = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::Activate);
-    bodyInterface.SetLinearVelocity(ballId, JPH::Vec3(vx, vz, vy));
+    bodyInterface.SetLinearVelocity(ballId, JPH::Vec3(-vy, vz, vx));
 
     int index = static_cast<int>(balls_.size());
     balls_.push_back({ballId, color});
@@ -323,10 +323,10 @@ void JoltWorld::getBallStates(float* out) const {
 
     for (int i = 0; i < static_cast<int>(balls_.size()); i++) {
         JPH::Vec3 pos = bodyInterface.GetPosition(balls_[i].bodyId);
-        // Jolt (x, y, z) -> sim (x, z_jolt, y_jolt)
-        out[i * 3 + 0] = pos.GetX();
-        out[i * 3 + 1] = pos.GetZ(); // Jolt Z -> sim Y
-        out[i * 3 + 2] = pos.GetY(); // Jolt Y -> sim Z (up)
+        // Jolt -> sim: sim x = Jolt Z, sim y = -Jolt X, sim z = Jolt Y
+        out[i * 3 + 0] = pos.GetZ();
+        out[i * 3 + 1] = -pos.GetX();
+        out[i * 3 + 2] = pos.GetY();
     }
 }
 

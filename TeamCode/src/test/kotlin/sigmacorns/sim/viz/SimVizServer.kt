@@ -42,7 +42,10 @@ class SimVizServer(
             "robot" to mapOf(
                 "x" to robotState[0],
                 "y" to robotState[1],
-                "theta" to robotState[2]
+                "theta" to robotState[2],
+                "turretAngle" to simIO.turretPosition(),
+                "hoodAngle" to simIO.hoodAngle,
+                "flywheelRPM" to simIO.flywheelVelocity() * 60.0 / (2.0 * Math.PI)
             ),
             "balls" to balls.map { b ->
                 mapOf("x" to b.x, "y" to b.y, "z" to b.z, "color" to b.color.name.lowercase())
