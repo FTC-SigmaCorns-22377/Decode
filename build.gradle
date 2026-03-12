@@ -39,3 +39,45 @@ allprojects {
 repositories {
     mavenCentral()
 }
+
+tasks.register('runTrajopt', Exec) {
+    description = 'Starts the trajopt server with TeamCode/trajopt/ as the project directory'
+    group = 'setup'
+
+    workingDir "${projectDir}/deps/mecanum_trajopt"
+    commandLine 'scripts/host.sh', '--project-dir', "${projectDir}/TeamCode/trajopt"
+}
+
+tasks.register('setupDeps', Exec) {
+    description = 'Initializes all git submodules recursively and runs trajopt setup script'
+    group = 'setup'
+
+    doFirst {
+        println "Initializing and updating git submodules..."
+    }
+
+    commandLine 'git', 'submodule', 'update', '--init', '--recursive'
+
+    doLast {
+        println "Checking out main branch in submodules..."
+        exec {
+            commandLine 'git', 'submodule', 'foreach', '--recursive',
+                'git checkout $(git symbolic-ref refs/remotes/origin/HEAD | sed \'s@^refs/remotes/origin/@@\')'
+        }
+
+        println "Pulling Git LFS objects..."
+        exec {
+            commandLine 'git', 'lfs', 'pull'
+        }
+        exec {
+            commandLine 'git', 'submodule', 'foreach', '--recursive', 'git lfs pull'
+        }
+
+        println "Running trajopt setup script..."
+        exec {
+            workingDir "${projectDir}/deps/mecanum_trajopt"
+            commandLine 'bash', 'scripts/setup.sh'
+        }
+        println "setupDeps complete."
+    }
+}

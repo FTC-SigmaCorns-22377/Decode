@@ -207,3 +207,36 @@ tasks.register("syncTrajopt") {
         logger.lifecycle("Synced trajopt assets to ${remoteDir}")
     }
 }
+
+tasks.register("buildMecanumLtvOcp") {
+    group = "build"
+    description = "Builds mecanum_LTV_OCP for Android arm64-v8a and copies libmecanum_ltv_jni.so into jniLibs"
+
+    doLast {
+        def ndkDir = android.ndkDirectory
+        if (ndkDir == null || !ndkDir.exists()) {
+            throw new GradleException("Android NDK not found. Ensure ndk.dir is set in local.properties or ndkVersion is configured.")
+        }
+
+        def repoRoot = file("${rootProject.projectDir}/deps/mecanum_LTV_OCP")
+        def buildDir  = file("${repoRoot}/build-android-a53")
+
+        providers.exec {
+            commandLine "bash", "scripts/build_android_cortex_a53.sh",
+                "--ndk", ndkDir.absolutePath,
+                "--build-dir", buildDir.absolutePath
+            workingDir repoRoot
+        }.result.get()
+
+        def builtLib = fileTree(buildDir).matching { include "**/libmecanum_ltv_jni.so" }.singleFile
+
+        def jniLibsDir = file("${projectDir}/src/main/jniLibs/arm64-v8a")
+        jniLibsDir.mkdirs()
+        copy {
+            from builtLib
+            into jniLibsDir
+        }
+
+        logger.lifecycle("Copied ${builtLib.name} to ${jniLibsDir}")
+    }
+}

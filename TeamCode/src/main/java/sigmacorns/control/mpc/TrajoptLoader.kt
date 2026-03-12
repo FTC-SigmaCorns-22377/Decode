@@ -1,6 +1,7 @@
 package sigmacorns.control.mpc
 
 import com.google.gson.Gson
+import sigmacorns.opmode.SigmaOpMode.Companion.SIM
 import java.io.File
 import java.io.FileReader
 
@@ -88,6 +89,7 @@ object TrajoptLoader {
             totalTime = data.totalTime,
             waypointTimes = data.waypoint_times!!,
             eventMarkers = entry.eventMarkers ?: emptyList(),
+            controls = data.controls,
         )
     }
 
@@ -124,5 +126,5 @@ object TrajoptLoader {
     /**
      * Default trajopt directory on the robot.
      */
-    fun robotTrajoptDir(): File = File("/sdcard/FIRST/trajopt")
+    fun robotTrajoptDir(): File = if(!SIM)  File("/sdcard/FIRST/trajopt") else File("./trajopt")
 }
