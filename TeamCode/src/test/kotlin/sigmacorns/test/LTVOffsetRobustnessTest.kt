@@ -102,7 +102,7 @@ class LTVOffsetRobustnessTest {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
 
-        val projectFile = MPCTest.findProjectFile()
+        val projectFile = MPCTest.findProjectFile("simple")
             ?: error("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
         val traj = TrajoptLoader.loadFirstTrajectory(projectFile)
             ?: error("No trajectory found in ${projectFile.name}")
@@ -333,7 +333,7 @@ class LTVOffsetRobustnessTest {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
 
-        val projectFile = MPCTest.findProjectFile()
+        val projectFile = MPCTest.findProjectFile("simple")
             ?: error("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
         val trajectories = TrajoptLoader.loadAllTrajectories(projectFile)
         require(trajectories.isNotEmpty()) { "No trajectories found in ${projectFile.name}" }

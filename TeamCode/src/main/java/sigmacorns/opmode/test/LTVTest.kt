@@ -34,13 +34,7 @@ open class LTVTest(val trajName: String) : SigmaOpMode() {
         val rr = if (SIM) LTVRerunLogger(rerunSink("LTVTest($trajName)")) else null
 
         // Use precomputed .bin if available, else fall back to online precomputation
-        val robotDir = TrajoptLoader.robotTrajoptDir()
-        val binFile = File(robotDir, "${projectFile.nameWithoutExtension}_traj0.bin")
-        val ltv = if (false) {
-            LTVClient.fromPrecomputed(binFile.absolutePath)
-        } else {
-            LTVClient(drivetrainParameters).also { it.loadTrajectory(traj) }
-        }
+        val ltv = LTVClient(drivetrainParameters).also { it.loadTrajectory(traj) }
         ltv.use {
             rr?.logTrajectoryPath(traj)
 

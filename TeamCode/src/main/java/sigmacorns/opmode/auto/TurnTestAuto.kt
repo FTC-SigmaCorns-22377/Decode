@@ -30,12 +30,7 @@ class TurnTestAuto : SigmaOpMode() {
         io.setPosition(initialSample.pos)
 
         // 4. Create the LTV controller — use precomputed .bin if available, else fall back
-        val binFile = File(robotDir, "turntest_traj0.bin")
-        val ltv = if (binFile.exists()) {
-            LTVClient.fromPrecomputed(binFile.absolutePath)
-        } else {
-            LTVClient(drivetrainParameters).also { it.loadTrajectory(traj) }
-        }
+        val ltv = LTVClient(drivetrainParameters).also { it.loadTrajectory(traj) }
         ltv.use {
 
             // 5. Build the state object that tracks robot pose/velocity
