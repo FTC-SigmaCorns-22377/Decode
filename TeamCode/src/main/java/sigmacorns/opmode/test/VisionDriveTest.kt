@@ -9,7 +9,8 @@ import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.subsystem.DriveController
 
 @TeleOp(name = "Vision Drive Test", group = "Test")
-class VisionDriveTest : SigmaOpMode() {
+class
+VisionDriveTest : SigmaOpMode() {
 
     // Drive speed when chasing a ball
     private val chaseSpeed = 0.3
