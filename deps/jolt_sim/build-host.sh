@@ -13,10 +13,21 @@ cmake "${SCRIPT_DIR}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 
-cmake --build . --parallel "$(nproc)"
+if command -v nproc >/dev/null 2>&1; then
+    PARALLEL_JOBS="$(nproc)"
+else
+    PARALLEL_JOBS="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+fi
+
+cmake --build . --parallel "${PARALLEL_JOBS}"
 
 # Copy the shared library to test jniLibs
 mkdir -p "${OUTPUT_DIR}"
-cp libjolt_sim_jni.so "${OUTPUT_DIR}/"
+if [[ "$(uname)" == "Darwin" ]]; then
+    LIB_NAME="libjolt_sim_jni.dylib"
+else
+    LIB_NAME="libjolt_sim_jni.so"
+fi
+cp "${LIB_NAME}" "${OUTPUT_DIR}/"
 
-echo "Built and copied libjolt_sim_jni.so to ${OUTPUT_DIR}/"
+echo "Built and copied ${LIB_NAME} to ${OUTPUT_DIR}/"

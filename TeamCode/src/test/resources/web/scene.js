@@ -64,7 +64,7 @@ const robotMesh = new THREE.Mesh(robotGeo, robotMat);
 robotMesh.position.y = ROBOT_HEIGHT / 2;
 scene.add(robotMesh);
 
-// Direction indicator on robot
+// Direction indicator on robot (yellow cone pointing forward)
 const arrowGeo = new THREE.ConeGeometry(0.04, 0.1, 8);
 const arrowMat = new THREE.MeshStandardMaterial({ color: 0xffcc00 });
 const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
@@ -72,16 +72,44 @@ arrowMesh.rotation.x = -Math.PI / 2;
 arrowMesh.position.set(0, ROBOT_HEIGHT / 2, ROBOT_SIZE / 2 - 0.02);
 robotMesh.add(arrowMesh);
 
+// Shooter turret (~1/4 robot volume, sits on top of robot)
+const SHOOTER_WIDTH = 0.2;
+const SHOOTER_LENGTH = 0.2;
+const SHOOTER_HEIGHT = 0.15;
+// Centered 2/3 back from front: front is +Z = ROBOT_SIZE/2, offset = 0.2 - 2/3*0.4 = -0.067
+const SHOOTER_Z_OFFSET = ROBOT_SIZE / 2 - (2 / 3) * ROBOT_SIZE;
+
+const shooterGroup = new THREE.Group();
+shooterGroup.position.set(0, ROBOT_HEIGHT / 2 + SHOOTER_HEIGHT / 2, SHOOTER_Z_OFFSET);
+robotMesh.add(shooterGroup);
+
+const shooterGeo = new THREE.BoxGeometry(SHOOTER_WIDTH, SHOOTER_HEIGHT, SHOOTER_LENGTH);
+const shooterMat = new THREE.MeshStandardMaterial({ color: 0x3366cc });
+const shooterMesh = new THREE.Mesh(shooterGeo, shooterMat);
+shooterGroup.add(shooterMesh);
+
+// Shooter direction indicator (small cone on the front face of the shooter)
+const shooterArrowGeo = new THREE.ConeGeometry(0.02, 0.06, 6);
+const shooterArrowMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
+const shooterArrowMesh = new THREE.Mesh(shooterArrowGeo, shooterArrowMat);
+shooterArrowMesh.rotation.x = -Math.PI / 2;
+shooterArrowMesh.position.set(0, SHOOTER_HEIGHT / 2, SHOOTER_LENGTH / 2);
+shooterGroup.add(shooterArrowMesh);
+
 // Ball pool
 const ballMeshes = [];
 const greenMat = new THREE.MeshStandardMaterial({ color: 0x00cc44 });
 const purpleMat = new THREE.MeshStandardMaterial({ color: 0x9933ff });
 const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 16, 12);
 
-function updateRobot(x, y, theta) {
-    // sim (x, y) -> Three.js (x, z), sim theta -> rotation about Y
-    robotMesh.position.set(x, ROBOT_HEIGHT / 2, y);
+function updateRobot(x, y, theta, turretAngle) {
+    // sim (x=forward, y=left) -> Three.js (x=-y, z=x), sim theta -> rotation about -Y
+    robotMesh.position.set(-y, ROBOT_HEIGHT / 2, x);
     robotMesh.rotation.y = -theta;
+    // Turret rotates about Y axis relative to robot
+    if (turretAngle !== undefined) {
+        shooterGroup.rotation.y = -turretAngle;
+    }
 }
 
 function updateBalls(balls) {
@@ -101,7 +129,7 @@ function updateBalls(balls) {
             ballMeshes.push(mesh);
         }
         const b = balls[i];
-        mesh.position.set(b.x, b.z, b.y); // sim z (up) -> Three.js y
+        mesh.position.set(-b.y, b.z, b.x); // sim (x=fwd, y=left, z=up) -> Three.js (x=-y, y=z, z=x)
         mesh.material = b.color === 'green' ? greenMat : purpleMat;
     }
 }
