@@ -1,9 +1,16 @@
 package sigmacorns.io
 
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.constants.flywheelMotor
+import sigmacorns.sim.FlywheelParameters
 import sigmacorns.math.Pose2d
+import sigmacorns.sim.FlywheelDynamics
+import sigmacorns.sim.FlywheelState
 import sigmacorns.sim.JoltNative
 import sigmacorns.sim.MecanumDynamics
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -20,11 +27,18 @@ enum class BallColor(val joltId: Int) {
 class JoltSimIO : SigmaIO, AutoCloseable {
     private val handle: Long = JoltNative.nativeCreate()
     private val drivetrain = MecanumDynamics(drivetrainParameters)
+    private val flywheelDynamics = FlywheelDynamics(SIM_FLYWHEEL_PARAMS)
     private val robotState = FloatArray(6) // [x, y, theta, vx, vy, omega]
 
     private var t = 0.seconds
+    private var flywheelState = FlywheelState()
+    private var turretAngleRad = 0.0
+    private var turretOffset = 0.0
 
     val heldBalls = mutableListOf<BallColor>()
+
+    /** Hood angle in radians from horizontal (controls ball launch elevation). */
+    var hoodAngle: Double = Math.toRadians(DEFAULT_BALL_LAUNCH_ANGLE_DEGREES)
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -44,11 +58,13 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         return Pose2d(robotState[3].toDouble(), robotState[4].toDouble(), robotState[5].toDouble())
     }
 
-    override fun flywheelVelocity(): Double = 0.0
+    override fun flywheelVelocity(): Double = flywheelState.omega
 
-    override fun turretPosition(): Double = 0.0
+    override fun turretPosition(): Double = turretAngleRad
 
-    override fun setTurretPosition(offset: Double) {}
+    override fun setTurretPosition(offset: Double) {
+        turretOffset = offset
+    }
 
     override fun setPosition(p: Pose2d) {
         JoltNative.nativeSetRobotPose(handle, p.v.x.toFloat(), p.v.y.toFloat(), p.rot.toFloat())
@@ -61,7 +77,8 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     override fun voltage(): Double = 12.0
 
     override fun update() {
-        val dt = SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS).toFloat()
+        val dtSeconds = SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS)
+        val dt = dtSeconds.toFloat()
 
         // Read current robot state from Jolt
         JoltNative.nativeGetRobotState(handle, robotState)
@@ -76,6 +93,17 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         JoltNative.nativeApplyRobotForce(handle,
             forces.v.x.toFloat(), forces.v.y.toFloat(), forces.rot.toFloat())
         JoltNative.nativeStep(handle, dt)
+
+        // Integrate flywheel dynamics
+        flywheelState = flywheelDynamics.integrate(dtSeconds, dtSeconds, doubleArrayOf(flywheel), flywheelState)
+
+        // Integrate turret (servo position model)
+        // turret power 0..1 maps to -SERVO_TURRET_RANGE/2..+SERVO_TURRET_RANGE/2
+        val turretTarget = (turret - 0.5) * SERVO_TURRET_RANGE
+        val turretError = turretTarget - turretAngleRad
+        val turretVel = (SERVO_K * turretError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
+        turretAngleRad += turretVel * dtSeconds
+        turretAngleRad = turretAngleRad.coerceIn(-SERVO_TURRET_RANGE / 2.0, SERVO_TURRET_RANGE / 2.0)
 
         // Intake: pick up balls if intake is running and we have capacity
         if (intake > 0.3 && heldBalls.size < 3) {
@@ -96,27 +124,60 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         t += SIM_UPDATE_TIME
     }
 
+    // --- Shooter API ---
+
+    /**
+     * Shoots a held ball using the flywheel RPM and hood angle.
+     *
+     * The flywheel (at the front of the shooter) determines exit speed via surface velocity.
+     * The adjustable hood (at the back) controls the exit angle/elevation.
+     * The turret angle determines the horizontal launch direction relative to the robot.
+     */
+    fun shootBall() {
+        if (heldBalls.isEmpty()) return
+
+        val exitSpeed = abs(flywheelState.omega) * FLYWHEEL_WHEEL_RADIUS * LAUNCH_EFFICIENCY
+        if (exitSpeed < 0.1) return // flywheel not spinning fast enough
+
+        val color = heldBalls.removeAt(0)
+
+        JoltNative.nativeGetRobotState(handle, robotState)
+        val robotX = robotState[0].toDouble()
+        val robotY = robotState[1].toDouble()
+        val robotTheta = robotState[2].toDouble()
+
+        // Launch direction: robot heading + turret angle
+        val launchHeading = robotTheta + turretAngleRad
+
+        // Hood angle splits exit speed into horizontal and vertical components
+        val horizontalSpeed = exitSpeed * cos(hoodAngle)
+        val verticalSpeed = exitSpeed * sin(hoodAngle)
+
+        val vx = horizontalSpeed * cos(launchHeading)
+        val vy = horizontalSpeed * sin(launchHeading)
+        val vz = verticalSpeed
+
+        // Start at the shooter position on the robot (offset along robot heading)
+        val shooterX = robotX + SHOOTER_FORWARD_OFFSET * cos(robotTheta)
+        val shooterY = robotY + SHOOTER_FORWARD_OFFSET * sin(robotTheta)
+        val shooterZ = ROBOT_HEIGHT + SHOOTER_HEIGHT / 2.0
+
+        // Then project forward along the launch heading to clear the robot body
+        val clearance = SHOOTER_LENGTH / 2.0 + 0.05
+        val spawnX = shooterX + clearance * cos(launchHeading)
+        val spawnY = shooterY + clearance * sin(launchHeading)
+        val spawnZ = shooterZ
+
+        JoltNative.nativeSpawnBall(handle,
+            spawnX.toFloat(), spawnY.toFloat(), spawnZ.toFloat(),
+            vx.toFloat(), vy.toFloat(), vz.toFloat(),
+            color.joltId)
+    }
+
     // --- Ball API ---
 
     fun spawnBall(x: Float, y: Float, z: Float, color: BallColor): Int {
         return JoltNative.nativeSpawnBall(handle, x, y, z, 0f, 0f, 0f, color.joltId)
-    }
-
-    fun launchBall(color: BallColor, speed: Float = 5f) {
-        if (heldBalls.isEmpty()) return
-        heldBalls.removeAt(0)
-
-        JoltNative.nativeGetRobotState(handle, robotState)
-        val x = robotState[0]
-        val y = robotState[1]
-        val theta = robotState[2]
-        val z = 0.2f // launch height
-
-        val vx = speed * kotlin.math.cos(theta)
-        val vy = speed * kotlin.math.sin(theta)
-        val vz = speed * 0.5f // upward component
-
-        JoltNative.nativeSpawnBall(handle, x, y, z, vx, vy, vz, color.joltId)
     }
 
     fun getBallCount(): Int = JoltNative.nativeGetBallCount(handle)
@@ -167,5 +228,36 @@ class JoltSimIO : SigmaIO, AutoCloseable {
 
     override fun close() {
         JoltNative.nativeDestroy(handle)
+    }
+
+    companion object {
+        val SIM_UPDATE_TIME = 5.milliseconds
+
+        // Robot geometry (must match C++ jolt_world.h)
+        const val ROBOT_HEIGHT = 0.15
+        const val ROBOT_LENGTH = 0.4
+
+        // Shooter geometry (~1/4 robot volume: 0.2 x 0.2 x 0.15)
+        const val SHOOTER_WIDTH = 0.2
+        const val SHOOTER_LENGTH = 0.2
+        const val SHOOTER_HEIGHT = 0.15
+        // Shooter center is 2/3 back from the front of the robot
+        const val SHOOTER_FORWARD_OFFSET = ROBOT_LENGTH / 2.0 - (2.0 / 3.0) * ROBOT_LENGTH // ≈ -0.067
+
+        // Flywheel: front of the hooded shooter, gives exit speed
+        const val FLYWHEEL_WHEEL_RADIUS = 0.05 // 50mm contact wheel
+        const val LAUNCH_EFFICIENCY = 0.3      // energy transfer to ball
+
+        // Turret (servo model)
+        const val SERVO_TURRET_RANGE = 2 * Math.PI // rad, full range of servo
+        const val SERVO_K = 10.0 // proportional gain (1/s)
+        const val SERVO_MAX_SPEED = Math.PI // rad/s, max angular velocity
+
+        // Default hood angle
+        const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0
+
+        // Sim-specific flywheel inertia (small wheel, not the full hardware assembly)
+        const val SIM_FLYWHEEL_INERTIA = 0.001 // kg·m^2
+        val SIM_FLYWHEEL_PARAMS = FlywheelParameters(flywheelMotor, SIM_FLYWHEEL_INERTIA, 0.0001)
     }
 }
