@@ -97,9 +97,13 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Integrate flywheel dynamics
         flywheelState = flywheelDynamics.integrate(dtSeconds, dtSeconds, doubleArrayOf(flywheel), flywheelState)
 
-        // Integrate turret (simple velocity model, clamped to ±π/2)
-        turretAngleRad += turret * MAX_TURRET_SPEED * dtSeconds
-        turretAngleRad = turretAngleRad.coerceIn(-Math.PI / 2.0, Math.PI / 2.0)
+        // Integrate turret (servo position model)
+        // turret power 0..1 maps to -SERVO_TURRET_RANGE/2..+SERVO_TURRET_RANGE/2
+        val turretTarget = (turret - 0.5) * SERVO_TURRET_RANGE
+        val turretError = turretTarget - turretAngleRad
+        val turretVel = (SERVO_K * turretError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
+        turretAngleRad += turretVel * dtSeconds
+        turretAngleRad = turretAngleRad.coerceIn(-SERVO_TURRET_RANGE / 2.0, SERVO_TURRET_RANGE / 2.0)
 
         // Intake: pick up balls if intake is running and we have capacity
         if (intake > 0.3 && heldBalls.size < 3) {
@@ -244,8 +248,10 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         const val FLYWHEEL_WHEEL_RADIUS = 0.05 // 50mm contact wheel
         const val LAUNCH_EFFICIENCY = 0.3      // energy transfer to ball
 
-        // Turret
-        const val MAX_TURRET_SPEED = Math.PI // rad/s
+        // Turret (servo model)
+        const val SERVO_TURRET_RANGE = 2 * Math.PI // rad, full range of servo
+        const val SERVO_K = 10.0 // proportional gain (1/s)
+        const val SERVO_MAX_SPEED = Math.PI // rad/s, max angular velocity
 
         // Default hood angle
         const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0

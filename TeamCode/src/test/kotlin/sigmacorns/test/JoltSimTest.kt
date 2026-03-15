@@ -175,19 +175,20 @@ class JoltSimTest {
 
     @Test
     fun testTurretRotation() {
-        // Turret should rotate when given power
+        // Servo turret: 0..1 maps to -π..+π target position
+        // Setting turret=1.0 targets +π (full right)
         sim.turret = 1.0
         repeat(100) { sim.update() } // 500ms
 
         val angle = sim.turretPosition()
-        println("Turret after 500ms at full power: ${Math.toDegrees(angle)}°")
+        println("Turret after 500ms at servo=1.0: ${Math.toDegrees(angle)}°")
         assertTrue(angle > 0.1, "Turret should have rotated positively, got $angle rad")
 
-        // Turret should clamp to ±π/2
-        repeat(400) { sim.update() } // 2 more seconds at full power
+        // Turret should clamp to ±π (SERVO_TURRET_RANGE/2)
+        repeat(400) { sim.update() } // 2 more seconds
         val clampedAngle = sim.turretPosition()
-        assertTrue(clampedAngle <= Math.PI / 2.0 + 0.001,
-            "Turret should clamp to π/2, got $clampedAngle rad")
+        assertTrue(clampedAngle <= Math.PI + 0.001,
+            "Turret should clamp to π, got $clampedAngle rad")
     }
 
     @Test
@@ -223,9 +224,10 @@ class JoltSimTest {
     @Test
     fun testShooterTurretDirection() {
         // Rotate turret 90° left, shoot, verify ball goes in +y direction
-        sim.turret = 1.0
-        repeat(100) { sim.update() } // let turret rotate
-        sim.turret = 0.0
+        // servo=0.75 targets +π/2 (90° left)
+        sim.turret = 0.75
+        repeat(200) { sim.update() } // let turret settle
+        sim.turret = 0.75 // hold position
 
         val turretAngle = sim.turretPosition()
         println("Turret angle: ${Math.toDegrees(turretAngle)}°")
@@ -287,8 +289,8 @@ class JoltSimTest {
             Thread.sleep(5)
         }
 
-        // Phase 3: Rotate turret left while shooting
-        sim.turret = 0.3
+        // Phase 3: Rotate turret left while shooting (servo=0.65 = ~54° left)
+        sim.turret = 0.65
         val ballsToShoot = sim.heldBalls.size
 
         for (shot in 0 until ballsToShoot) {
@@ -316,7 +318,7 @@ class JoltSimTest {
         sim.driveBL = 0.3
         sim.driveBR = 0.3
         sim.driveFR = 0.3
-        sim.turret = -0.5
+        sim.turret = 0.25 // servo=0.25 targets -π/2 (sweep right)
 
         repeat(600) { i ->
             sim.update()
