@@ -1,11 +1,14 @@
 package sigmacorns.test
 
+import com.qualcomm.robotcore.hardware.Gamepad
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import sigmacorns.io.BallColor
 import sigmacorns.io.JoltSimIO
+import sigmacorns.sim.SimGamepad
+import sigmacorns.subsystem.DriveController
 import kotlin.math.abs
 
 class JoltSimTest {
@@ -341,20 +344,26 @@ class JoltSimTest {
         val server = sigmacorns.sim.viz.SimVizServer(sim)
         server.start()
 
-        println("Visualizer running at http://localhost:8080")
-        println("Press Ctrl+C to stop")
+        val gamepad = Gamepad()
+        val simGamepad = SimGamepad(gamepad)
+        val driveController = DriveController()
 
-        // Drive in a circle
-        sim.driveFL = 1.0
-        sim.driveBL = 1.0
-        sim.driveBR = 1.0
-        sim.driveFR = 1.0
+        println("Visualizer running at http://localhost:8080")
+        println("Use a connected gamepad to drive. Press Ctrl+C to stop.")
 
         var frameCount = 0
         while (true) {
+            simGamepad.tick()
+            driveController.update(gamepad, sim)
+
+            // Right trigger = intake, left bumper = flywheel, right bumper = shoot
+            sim.intake = gamepad.right_trigger.toDouble()
+            sim.flywheel = if (gamepad.left_bumper) 1.0 else 0.0
+            if (gamepad.right_bumper) sim.shootBall()
+
             sim.update()
             frameCount++
-            if (frameCount % 4 == 0) { // ~50Hz broadcast at 200Hz sim
+            if (frameCount % 4 == 0) {
                 server.broadcastState()
             }
             Thread.sleep(5)
