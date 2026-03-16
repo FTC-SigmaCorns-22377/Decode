@@ -11,9 +11,6 @@ interface SigmaIO {
     var driveFR: Double
     var driveBR: Double
 
-    var backBrake: Double
-    var frontBrake: Double
-
     var flywheel: Double
     //intake
     var intake: Double
