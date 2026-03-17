@@ -85,6 +85,33 @@ struct BallInfo {
     int color; // 0 = green, 1 = purple
 };
 
+struct GoalInfo {
+    // Goal triangle walls (3-sided structure in field corner)
+    JPH::BodyID sideWallAId;    // along -X field wall (back wall)
+    JPH::BodyID sideWallBId;    // along ±Z field wall (side wall)
+    JPH::BodyID frontWallId;    // diagonal front face at lip height (hypotenuse)
+
+    // Classifier ramp
+    JPH::BodyID rampFloorId;    // sloped ramp surface
+    JPH::BodyID rampRailAId;    // ramp side rail
+    JPH::BodyID rampRailBId;    // ramp side rail
+    JPH::BodyID gateId;         // kinematic gate (push to open)
+    JPH::BodyID rampWallId;     // trapezoidal wall below ramp
+
+    // Rectangular extension connecting triangle to ramp
+    JPH::BodyID rectInnerWallId;  // along ±Z wall covering ramp section
+    JPH::BodyID rectPerpWallId;   // perpendicular wall at triangle front, into the field
+    JPH::BodyID cornerWallId;     // connects wall B (at wall) to wall A (offset) at corner
+
+    // Lever (balance platform near goal opening)
+    JPH::BodyID leverId;
+
+    float zSign = 0.0f;         // +1 for red corner (+Z), -1 for blue corner (-Z)
+    int scoredBalls = 0;
+    float gateOpenAmount = 0.0f; // 0 = closed, up to GATE_TRAVEL = fully open
+    float leverAngle = 0.0f;    // tilt in radians
+};
+
 class JoltWorld {
 public:
     JoltWorld();
@@ -102,11 +129,21 @@ public:
     void getBallColors(int* out) const;
     int  getIntakeOverlaps(int* out, int max);
 
+    // Goal API
+    // [redScore, blueScore, redGateOpen, blueGateOpen, redLeverAngle, blueLeverAngle]
+    void getGoalStates(float* out) const;
+
 private:
     void buildField();
+    void buildGoals();
+    void buildGoalSide(GoalInfo& goal, float zSign);
     void createRobot();
     void createIntakeSensor();
+    void checkGoalScoring();
+    void updateGates(float dt);
+    void updateLevers(float dt);
     JPH::BodyID createStaticBox(JPH::Vec3 halfExtent, JPH::Vec3 position, float friction);
+    JPH::BodyID createStaticBoxRotated(JPH::Vec3 halfExtent, JPH::Vec3 position, JPH::Quat rotation, float friction);
 
     // Jolt infrastructure
     JPH::TempAllocatorImpl*     tempAllocator_ = nullptr;
@@ -122,6 +159,13 @@ private:
     JPH::BodyID robotBodyId_;
     JPH::BodyID intakeSensorId_;
     std::vector<BallInfo> balls_;
+
+    // Goals
+    GoalInfo redGoal_;
+    GoalInfo blueGoal_;
+
+    // Field body IDs (ground + 4 walls) for cleanup
+    std::vector<JPH::BodyID> fieldBodyIds_;
 
     // Queued forces (applied each step)
     float queuedFx_  = 0.0f;
@@ -147,4 +191,35 @@ private:
     static constexpr float INTAKE_WIDTH   = 0.3f;
     static constexpr float INTAKE_DEPTH   = 0.1f;
     static constexpr float INTAKE_HEIGHT  = 0.1f;
+
+    // Goal structure (from DECODE game manual)
+    // 3-sided triangular structure in field corner, open top
+    static constexpr float HALF_FIELD         = FIELD_SIZE / 2.0f; // 1.8288m
+    static constexpr float GOAL_LEG           = 0.6858f;  // 27" each leg of the right triangle
+    static constexpr float GOAL_WALL_THICK    = 0.03f;    // physics thickness (thicker than real 1cm for reliable collision)
+    static constexpr float GOAL_LIP_HEIGHT    = 0.9843f;  // 38.75" top lip from tiles
+    static constexpr float GOAL_TOTAL_HEIGHT  = 1.3716f;  // 54" max height at corner
+    static constexpr float GOAL_BACKBOARD_EXT = 0.381f;   // 15" backboard above lip
+
+    // Classifier ramp (aluminum extrusion channel, holds up to 9 artifacts)
+    static constexpr float CRAMP_LENGTH       = 1.00f;    // ramp channel length
+    static constexpr float CRAMP_WIDTH        = 0.16f;    // channel width (> ball diameter)
+    static constexpr float CRAMP_START_H      = 0.49f;    // input end height (~halfway up goal)
+    static constexpr float CRAMP_END_H        = 0.127f;   // output end height (~ball diameter)
+    static constexpr float CRAMP_MID_H        = (CRAMP_START_H + CRAMP_END_H) / 2.0f;
+    static constexpr float CRAMP_RAIL_HEIGHT  = 0.10f;    // side rail height
+    static constexpr float CRAMP_RAIL_THICK   = 0.01f;    // side rail thickness
+    static constexpr float CRAMP_WALL_THICK   = 0.01f;    // trapezoid wall below ramp
+
+    // Gate (push-to-open, gravity-closed)
+    static constexpr float GATE_CLOSED_H      = 0.14f;    // 5.5" contact area when closed
+    static constexpr float GATE_OPEN_H        = 0.076f;   // 3" when open
+    static constexpr float GATE_TRAVEL        = 0.051f;   // 2" horizontal displacement
+    static constexpr float GATE_WIDTH         = 0.16f;    // matches ramp width
+    static constexpr float GATE_THICK         = 0.02f;
+
+    // Lever (gate actuator arm at ramp output end)
+    static constexpr float LEVER_LENGTH       = 0.15f;   // arm extension toward field (~6")
+    static constexpr float LEVER_WIDTH        = 0.04f;   // narrow handle width
+    static constexpr float LEVER_THICKNESS    = 0.02f;
 };

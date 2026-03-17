@@ -51,16 +51,17 @@ JoltWorld::JoltWorld() {
         JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, 1 // single thread for determinism
     );
 
-    const uint32_t maxBodies       = 256;
+    const uint32_t maxBodies       = 512;
     const uint32_t numBodyMutexes  = 0; // auto
-    const uint32_t maxBodyPairs    = 256;
-    const uint32_t maxContactConstraints = 256;
+    const uint32_t maxBodyPairs    = 512;
+    const uint32_t maxContactConstraints = 512;
 
     physicsSystem_ = new JPH::PhysicsSystem();
     physicsSystem_->Init(maxBodies, numBodyMutexes, maxBodyPairs, maxContactConstraints,
                          bpLayerInterface_, objectVsBroadPhase_, objectLayerPair_);
 
     buildField();
+    buildGoals();
     createRobot();
     createIntakeSensor();
 }
@@ -83,8 +84,25 @@ JoltWorld::~JoltWorld() {
     bodyInterface.RemoveBody(robotBodyId_);
     bodyInterface.DestroyBody(robotBodyId_);
 
-    // Field walls and ground are static - clean up too
-    // (PhysicsSystem destructor handles remaining bodies)
+    // Remove goal bodies
+    auto removeGoal = [&](GoalInfo& g) {
+        for (auto id : { g.sideWallAId, g.sideWallBId, g.frontWallId,
+                         g.rectInnerWallId, g.rectPerpWallId, g.cornerWallId,
+                         g.rampFloorId, g.rampRailAId, g.rampRailBId,
+                         g.rampWallId, g.gateId, g.leverId }) {
+            bodyInterface.RemoveBody(id);
+            bodyInterface.DestroyBody(id);
+        }
+    };
+    removeGoal(redGoal_);
+    removeGoal(blueGoal_);
+
+    // Remove field bodies (ground + walls)
+    for (auto id : fieldBodyIds_) {
+        bodyInterface.RemoveBody(id);
+        bodyInterface.DestroyBody(id);
+    }
+    fieldBodyIds_.clear();
 
     delete physicsSystem_;
     delete jobSystem_;
@@ -95,10 +113,12 @@ JPH::BodyID JoltWorld::createStaticBox(JPH::Vec3 halfExtent, JPH::Vec3 position,
     auto& bodyInterface = physicsSystem_->GetBodyInterface();
 
     // Jolt adds convexRadius on top of half-extents, so shrink half-extents to compensate
-    constexpr float cr = 0.005f;
+    // Use a smaller convex radius for thin shapes
+    float minHalf = std::min({halfExtent.GetX(), halfExtent.GetY(), halfExtent.GetZ()});
+    float cr = std::min(0.005f, minHalf * 0.5f);
+    cr = std::max(cr, 0.001f); // minimum convex radius
     JPH::Vec3 adjusted = halfExtent - JPH::Vec3(cr, cr, cr);
-    // Clamp to avoid negative
-    adjusted = JPH::Vec3::sMax(adjusted, JPH::Vec3::sZero());
+    adjusted = JPH::Vec3::sMax(adjusted, JPH::Vec3(0.001f, 0.001f, 0.001f));
     JPH::BoxShapeSettings shapeSettings(adjusted, cr);
     auto shapeResult = shapeSettings.Create();
 
@@ -118,37 +138,324 @@ void JoltWorld::buildField() {
     float halfThick = WALL_THICKNESS / 2.0f;
 
     // Ground plane
-    createStaticBox(
+    fieldBodyIds_.push_back(createStaticBox(
         JPH::Vec3(halfField, 0.01f, halfField),
         JPH::Vec3(0, -0.01f, 0),
         0.5f
-    );
+    ));
 
     // Walls: +X, -X, +Z, -Z (field is in XZ plane, Y is up)
-    // +X wall
-    createStaticBox(
+    fieldBodyIds_.push_back(createStaticBox(
         JPH::Vec3(halfThick, halfWallH, halfField),
         JPH::Vec3(halfField + halfThick, halfWallH, 0),
         WALL_FRICTION
-    );
-    // -X wall
-    createStaticBox(
+    ));
+    fieldBodyIds_.push_back(createStaticBox(
         JPH::Vec3(halfThick, halfWallH, halfField),
         JPH::Vec3(-halfField - halfThick, halfWallH, 0),
         WALL_FRICTION
-    );
-    // +Z wall
-    createStaticBox(
+    ));
+    fieldBodyIds_.push_back(createStaticBox(
         JPH::Vec3(halfField, halfWallH, halfThick),
         JPH::Vec3(0, halfWallH, halfField + halfThick),
         WALL_FRICTION
-    );
-    // -Z wall
-    createStaticBox(
+    ));
+    fieldBodyIds_.push_back(createStaticBox(
         JPH::Vec3(halfField, halfWallH, halfThick),
         JPH::Vec3(0, halfWallH, -halfField - halfThick),
         WALL_FRICTION
+    ));
+}
+
+JPH::BodyID JoltWorld::createStaticBoxRotated(JPH::Vec3 halfExtent, JPH::Vec3 position,
+                                               JPH::Quat rotation, float friction) {
+    auto& bodyInterface = physicsSystem_->GetBodyInterface();
+
+    float minHalf = std::min({halfExtent.GetX(), halfExtent.GetY(), halfExtent.GetZ()});
+    float cr = std::min(0.005f, minHalf * 0.5f);
+    cr = std::max(cr, 0.001f);
+    JPH::Vec3 adjusted = halfExtent - JPH::Vec3(cr, cr, cr);
+    adjusted = JPH::Vec3::sMax(adjusted, JPH::Vec3(0.001f, 0.001f, 0.001f));
+    JPH::BoxShapeSettings shapeSettings(adjusted, cr);
+    auto shapeResult = shapeSettings.Create();
+
+    JPH::BodyCreationSettings bodySettings(
+        shapeResult.Get(), position, rotation,
+        JPH::EMotionType::Static, Layers::NON_MOVING
     );
+    bodySettings.mFriction = friction;
+
+    return bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::DontActivate);
+}
+
+void JoltWorld::buildGoalSide(GoalInfo& goal, float zSign) {
+    auto& bodyInterface = physicsSystem_->GetBodyInterface();
+    goal.zSign = zSign;
+
+    // Goal sits in the corner where -X wall meets ±Z wall.
+    // zSign: +1 for red (corner at -X, +Z), -1 for blue (corner at -X, -Z)
+    // Triangle is offset from the ±Z wall by CRAMP_WIDTH so the ramp can sit flush against the wall.
+    float cornerX = -HALF_FIELD;
+    float cornerZ = zSign * HALF_FIELD;
+    float goalOffset = CRAMP_WIDTH; // triangle inset from ±Z wall
+
+    // Side wall A: along -X field wall, extending from corner toward field center (Z direction)
+    // Uses full GOAL_TOTAL_HEIGHT at corner; physics uses max height (visual shows taper)
+    float wallAMidZ = cornerZ - zSign * (goalOffset + GOAL_LEG / 2.0f);
+    goal.sideWallAId = createStaticBox(
+        JPH::Vec3(GOAL_WALL_THICK / 2.0f, GOAL_TOTAL_HEIGHT / 2.0f, GOAL_LEG / 2.0f),
+        JPH::Vec3(cornerX + GOAL_WALL_THICK / 2.0f, GOAL_TOTAL_HEIGHT / 2.0f, wallAMidZ),
+        0.3f
+    );
+
+    // Side wall B: flush against ±Z field wall, extending from corner in +X direction
+    float wallBMidX = cornerX + GOAL_LEG / 2.0f;
+    goal.sideWallBId = createStaticBox(
+        JPH::Vec3(GOAL_LEG / 2.0f, GOAL_TOTAL_HEIGHT / 2.0f, GOAL_WALL_THICK / 2.0f),
+        JPH::Vec3(wallBMidX, GOAL_TOTAL_HEIGHT / 2.0f, cornerZ - zSign * GOAL_WALL_THICK / 2.0f),
+        0.3f
+    );
+
+    // Corner connector: along -X wall, bridges wall B (at ±Z wall) to wall A (offset)
+    float cornerConnLen = goalOffset;
+    float cornerConnMidZ = cornerZ - zSign * goalOffset / 2.0f;
+    goal.cornerWallId = createStaticBox(
+        JPH::Vec3(GOAL_WALL_THICK / 2.0f, GOAL_TOTAL_HEIGHT / 2.0f, cornerConnLen / 2.0f),
+        JPH::Vec3(cornerX + GOAL_WALL_THICK / 2.0f, GOAL_TOTAL_HEIGHT / 2.0f, cornerConnMidZ),
+        0.3f
+    );
+
+    // Front wall (diagonal hypotenuse): connects the open ends of the two legs
+    // End of leg A: (cornerX, cornerZ - zSign * (goalOffset + GOAL_LEG))
+    // End of leg B: (cornerX + GOAL_LEG, cornerZ - zSign * goalOffset)
+    // Midpoint and rotation around Y axis
+    float frontLength = GOAL_LEG * 1.4142f; // sqrt(2)
+    float frontMidX = cornerX + GOAL_LEG / 2.0f;
+    float frontMidZ = cornerZ - zSign * (goalOffset + GOAL_LEG / 2.0f);
+    float frontAngle = zSign * 3.14159f / 4.0f; // ±45° around Y
+
+    JPH::Quat frontRot = JPH::Quat::sRotation(JPH::Vec3::sAxisY(), frontAngle);
+    goal.frontWallId = createStaticBoxRotated(
+        JPH::Vec3(frontLength / 2.0f, GOAL_LIP_HEIGHT / 2.0f, GOAL_WALL_THICK / 2.0f),
+        JPH::Vec3(frontMidX, GOAL_LIP_HEIGHT / 2.0f, frontMidZ),
+        frontRot, 0.3f
+    );
+
+    // --- Classifier ramp ---
+    // Runs alongside the ±Z field wall, extending in +X from the goal triangle.
+    // Ramp is flush against the ±Z wall; the triangle is offset inward by CRAMP_WIDTH.
+    // A rectangular extension bridges the offset triangle to the wall-hugging ramp.
+    float rampStartX = cornerX + GOAL_LEG;                    // near goal exit
+    float rampEndX = rampStartX + CRAMP_LENGTH;               // output end (gate)
+    float rampMidX = (rampStartX + rampEndX) / 2.0f;
+
+    // Ramp center: flush against ±Z wall (inner edge at wall)
+    float rampZ = cornerZ - zSign * CRAMP_WIDTH / 2.0f;
+
+    // --- Rectangular extension walls ---
+    // Inner wall: along ±Z wall covering the ramp section (wall B covers the triangle area)
+    goal.rectInnerWallId = createStaticBox(
+        JPH::Vec3(CRAMP_LENGTH / 2.0f, GOAL_LIP_HEIGHT / 2.0f, GOAL_WALL_THICK / 2.0f),
+        JPH::Vec3(rampMidX, GOAL_LIP_HEIGHT / 2.0f, cornerZ - zSign * GOAL_WALL_THICK / 2.0f),
+        0.3f
+    );
+    // Perpendicular wall at X = cornerX + GOAL_LEG, connecting ±Z wall to the offset triangle
+    float perpLen = goalOffset; // bridges from wall to offset triangle
+    float perpMidZ = cornerZ - zSign * perpLen / 2.0f;
+    goal.rectPerpWallId = createStaticBox(
+        JPH::Vec3(GOAL_WALL_THICK / 2.0f, GOAL_LIP_HEIGHT / 2.0f, perpLen / 2.0f),
+        JPH::Vec3(rampStartX, GOAL_LIP_HEIGHT / 2.0f, perpMidZ),
+        0.3f
+    );
+
+    // Ramp slope: atan((START_H - END_H) / LENGTH)
+    float rampSlopeAngle = std::atan2(CRAMP_START_H - CRAMP_END_H, CRAMP_LENGTH);
+
+    // Ramp floor: slopes from CRAMP_START_H down to CRAMP_END_H along X
+    JPH::Quat rampRot = JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), -rampSlopeAngle);
+    goal.rampFloorId = createStaticBoxRotated(
+        JPH::Vec3(CRAMP_LENGTH / 2.0f, 0.005f, CRAMP_WIDTH / 2.0f),
+        JPH::Vec3(rampMidX, CRAMP_MID_H, rampZ),
+        rampRot, 0.4f
+    );
+
+    // Ramp side rails: flat on the ground, tall enough to reach the high end of the ramp
+    float railHeight = CRAMP_START_H + CRAMP_RAIL_HEIGHT;
+    goal.rampRailAId = createStaticBox(
+        JPH::Vec3(CRAMP_LENGTH / 2.0f, railHeight / 2.0f, CRAMP_RAIL_THICK / 2.0f),
+        JPH::Vec3(rampMidX, railHeight / 2.0f, rampZ - CRAMP_WIDTH / 2.0f),
+        0.3f
+    );
+    goal.rampRailBId = createStaticBox(
+        JPH::Vec3(CRAMP_LENGTH / 2.0f, railHeight / 2.0f, CRAMP_RAIL_THICK / 2.0f),
+        JPH::Vec3(rampMidX, railHeight / 2.0f, rampZ + CRAMP_WIDTH / 2.0f),
+        0.3f
+    );
+
+    // Trapezoidal wall below the ramp
+    float wallBelowAvgH = CRAMP_MID_H / 2.0f;
+    goal.rampWallId = createStaticBox(
+        JPH::Vec3(CRAMP_LENGTH / 2.0f, wallBelowAvgH, CRAMP_WIDTH / 2.0f + CRAMP_WALL_THICK),
+        JPH::Vec3(rampMidX, wallBelowAvgH, rampZ),
+        0.3f
+    );
+
+    // Gate: kinematic body at the output end of the ramp
+    {
+        float minHalf2 = std::min({GATE_THICK / 2.0f, GATE_CLOSED_H / 2.0f, GATE_WIDTH / 2.0f});
+        float cr2 = std::min(0.005f, minHalf2 * 0.5f);
+        cr2 = std::max(cr2, 0.001f);
+        JPH::Vec3 gateHalf(GATE_THICK / 2.0f - cr2, GATE_CLOSED_H / 2.0f - cr2, GATE_WIDTH / 2.0f - cr2);
+        gateHalf = JPH::Vec3::sMax(gateHalf, JPH::Vec3(0.001f, 0.001f, 0.001f));
+        JPH::BoxShapeSettings ss(gateHalf, cr2);
+        auto sr = ss.Create();
+
+        JPH::BodyCreationSettings bs(
+            sr.Get(),
+            JPH::Vec3(rampEndX, CRAMP_END_H / 2.0f, rampZ),
+            JPH::Quat::sIdentity(),
+            JPH::EMotionType::Kinematic, Layers::MOVING
+        );
+        bs.mFriction = 0.5f;
+        goal.gateId = bodyInterface.CreateAndAddBody(bs, JPH::EActivation::Activate);
+    }
+
+    // Lever: see-saw at the ramp output end, extends toward field center.
+    // Robot pushes outer end down → inner end lifts → balls flow out past gate.
+    {
+        // Box: LEVER_WIDTH along X (ramp direction), LEVER_LENGTH along Z (toward field)
+        float minHalf = std::min({LEVER_WIDTH / 2.0f, LEVER_THICKNESS / 2.0f, LEVER_LENGTH / 2.0f});
+        float cr = std::min(0.005f, minHalf * 0.5f);
+        cr = std::max(cr, 0.001f);
+        JPH::Vec3 leverHalf(LEVER_WIDTH / 2.0f - cr, LEVER_THICKNESS / 2.0f - cr, LEVER_LENGTH / 2.0f - cr);
+        leverHalf = JPH::Vec3::sMax(leverHalf, JPH::Vec3(0.001f, 0.001f, 0.001f));
+        JPH::BoxShapeSettings ss(leverHalf, cr);
+        auto sr = ss.Create();
+
+        // Centered at the field-center edge of the ramp, extending outward
+        float leverZ = rampZ - zSign * (CRAMP_WIDTH / 2.0f + LEVER_LENGTH / 2.0f);
+        float leverY = CRAMP_END_H;
+        JPH::BodyCreationSettings bs(
+            sr.Get(),
+            JPH::Vec3(rampEndX, leverY, leverZ),
+            JPH::Quat::sIdentity(),
+            JPH::EMotionType::Kinematic, Layers::MOVING
+        );
+        bs.mFriction = 0.5f;
+        goal.leverId = bodyInterface.CreateAndAddBody(bs, JPH::EActivation::Activate);
+    }
+}
+
+void JoltWorld::buildGoals() {
+    buildGoalSide(redGoal_, 1.0f);   // red: corner at +Z
+    buildGoalSide(blueGoal_, -1.0f); // blue: corner at -Z
+}
+
+void JoltWorld::checkGoalScoring() {
+    auto& bodyInterface = physicsSystem_->GetBodyInterface();
+
+    GoalInfo* goals[] = { &redGoal_, &blueGoal_ };
+
+    for (auto* goal : goals) {
+        float zs = goal->zSign;
+
+        for (int i = static_cast<int>(balls_.size()) - 1; i >= 0; i--) {
+            JPH::Vec3 bp = bodyInterface.GetPosition(balls_[i].bodyId);
+
+            // Triangle check in XZ plane:
+            // Triangle is offset from ±Z wall by CRAMP_WIDTH.
+            // deltaX = distance from -X wall (toward field center)
+            // deltaZ = distance from offset wall B (toward field center)
+            // Inside triangle when: deltaX >= 0, deltaZ >= 0, deltaX + deltaZ <= GOAL_LEG
+            float deltaX = bp.GetX() + HALF_FIELD;
+            float deltaZ = HALF_FIELD - zs * bp.GetZ() - CRAMP_WIDTH;
+
+            // Height check: ball is inside the goal (below lip, above ground)
+            bool insideTriangle = deltaX >= 0.0f && deltaX <= GOAL_LEG
+                               && deltaZ >= 0.0f && deltaZ <= GOAL_LEG
+                               && (deltaX + deltaZ) <= GOAL_LEG;
+            bool insideHeight = bp.GetY() > BALL_RADIUS && bp.GetY() < GOAL_LIP_HEIGHT;
+
+            if (insideTriangle && insideHeight) {
+                goal->scoredBalls++;
+                bodyInterface.RemoveBody(balls_[i].bodyId);
+                bodyInterface.DestroyBody(balls_[i].bodyId);
+                balls_[i] = balls_.back();
+                balls_.pop_back();
+            }
+        }
+    }
+}
+
+void JoltWorld::updateGates(float dt) {
+    auto& bodyInterface = physicsSystem_->GetBodyInterface();
+
+    GoalInfo* goals[] = { &redGoal_, &blueGoal_ };
+
+    for (auto* goal : goals) {
+        JPH::Vec3 gatePos = bodyInterface.GetPosition(goal->gateId);
+        JPH::Vec3 robotPos = bodyInterface.GetPosition(robotBodyId_);
+
+        // Check if robot is near the gate and pushing it
+        float dist = (robotPos - gatePos).Length();
+        bool robotPushing = dist < (ROBOT_WIDTH / 2.0f + GATE_THICK + 0.05f);
+
+        if (robotPushing && goal->gateOpenAmount < GATE_TRAVEL) {
+            // Open the gate
+            goal->gateOpenAmount += dt * 0.1f; // opens over ~0.5s
+            goal->gateOpenAmount = std::min(goal->gateOpenAmount, GATE_TRAVEL);
+        } else if (!robotPushing && goal->gateOpenAmount > 0.0f) {
+            // Gravity closes the gate
+            goal->gateOpenAmount -= dt * 0.08f;
+            goal->gateOpenAmount = std::max(goal->gateOpenAmount, 0.0f);
+        }
+
+        // Move the gate: slides in +X direction when opening
+        JPH::Vec3 newPos = gatePos;
+        float origX = -HALF_FIELD + GOAL_LEG + CRAMP_LENGTH;
+        float rampZ = goal->zSign * HALF_FIELD - goal->zSign * CRAMP_WIDTH / 2.0f;
+        newPos.SetX(origX + goal->gateOpenAmount);
+        newPos.SetZ(rampZ); // keep Z stable
+
+        bodyInterface.MoveKinematic(goal->gateId, newPos, JPH::Quat::sIdentity(), dt);
+    }
+}
+
+void JoltWorld::updateLevers(float dt) {
+    auto& bodyInterface = physicsSystem_->GetBodyInterface();
+    GoalInfo* goals[] = { &redGoal_, &blueGoal_ };
+
+    for (auto* goal : goals) {
+        JPH::Vec3 leverPos = bodyInterface.GetPosition(goal->leverId);
+        JPH::Vec3 robotPos = bodyInterface.GetPosition(robotBodyId_);
+
+        // Check if robot is near the lever's outer end (field-center side)
+        float dist = (robotPos - leverPos).Length();
+        bool robotPushing = dist < (ROBOT_WIDTH / 2.0f + LEVER_LENGTH / 2.0f + 0.05f);
+
+        float targetAngle = 0.0f;
+        if (robotPushing) {
+            // Robot pushes outer end down → lever tilts so inner end goes up
+            targetAngle = 0.35f;
+        }
+
+        float angleDiff = targetAngle - goal->leverAngle;
+        goal->leverAngle += angleDiff * std::min(dt * 5.0f, 1.0f);
+
+        // Tilt around X axis: -zSign makes the field-center end go DOWN
+        // (for red zSign=+1, lever extends in -Z; negative X rotation lowers -Z end)
+        JPH::Quat tilt = JPH::Quat::sRotation(JPH::Vec3::sAxisX(), -goal->zSign * goal->leverAngle);
+        bodyInterface.MoveKinematic(goal->leverId, leverPos, tilt, dt);
+    }
+}
+
+void JoltWorld::getGoalStates(float* out) const {
+    out[0] = static_cast<float>(redGoal_.scoredBalls);
+    out[1] = static_cast<float>(blueGoal_.scoredBalls);
+    out[2] = redGoal_.gateOpenAmount;
+    out[3] = blueGoal_.gateOpenAmount;
+    out[4] = redGoal_.leverAngle;
+    out[5] = blueGoal_.leverAngle;
 }
 
 void JoltWorld::createRobot() {
@@ -231,6 +538,11 @@ void JoltWorld::step(float dt) {
 
     // Step physics
     physicsSystem_->Update(dt, 1, tempAllocator_, jobSystem_);
+
+    // Check goal scoring and update levers
+    checkGoalScoring();
+    updateGates(dt);
+    updateLevers(dt);
 }
 
 void JoltWorld::applyRobotForce(float fx, float fy, float tz) {

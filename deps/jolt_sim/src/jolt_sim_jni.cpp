@@ -178,4 +178,13 @@ Java_sigmacorns_sim_JoltNative_nativeGetIntakeOverlaps(JNIEnv* env, jclass, jlon
     return from_handle(handle)->getIntakeOverlaps(arr.data(), max);
 }
 
+JNIEXPORT void JNICALL
+Java_sigmacorns_sim_JoltNative_nativeGetGoalStates(JNIEnv* env, jclass, jlong handle,
+                                                    jfloatArray out) {
+    if (!check_handle(env, handle)) return;
+    ScopedFloatArray arr(env, out, 0);
+    if (!arr.valid()) return;
+    from_handle(handle)->getGoalStates(arr.data());
+}
+
 } // extern "C"
