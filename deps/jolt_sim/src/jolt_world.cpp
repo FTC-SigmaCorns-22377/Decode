@@ -232,7 +232,7 @@ void JoltWorld::buildGoalSide(GoalInfo& goal, float zSign) {
     float frontLength = GOAL_LEG * 1.4142f; // sqrt(2)
     float frontMidX = cornerX + GOAL_LEG / 2.0f;
     float frontMidZ = cornerZ - zSign * (goalOffset + GOAL_LEG / 2.0f);
-    float frontAngle = zSign * 3.14159f / 4.0f; // ±45° around Y
+    float frontAngle = -zSign * 3.14159f / 4.0f; // ±45° around Y (matches Three.js convention)
 
     JPH::Quat frontRot = JPH::Quat::sRotation(JPH::Vec3::sAxisY(), frontAngle);
     goal.frontWallId = createStaticBoxRotated(
@@ -292,11 +292,12 @@ void JoltWorld::buildGoalSide(GoalInfo& goal, float zSign) {
         0.3f
     );
 
-    // Trapezoidal wall below the ramp
-    float wallBelowAvgH = CRAMP_MID_H / 2.0f;
+    // Solid fill below the ramp — height capped at ramp's lowest point (CRAMP_END_H)
+    // so it never protrudes above the ramp surface
+    float wallBelowH = CRAMP_END_H / 2.0f;
     goal.rampWallId = createStaticBox(
-        JPH::Vec3(CRAMP_LENGTH / 2.0f, wallBelowAvgH, CRAMP_WIDTH / 2.0f + CRAMP_WALL_THICK),
-        JPH::Vec3(rampMidX, wallBelowAvgH, rampZ),
+        JPH::Vec3(CRAMP_LENGTH / 2.0f, wallBelowH, CRAMP_WIDTH / 2.0f + CRAMP_WALL_THICK),
+        JPH::Vec3(rampMidX, wallBelowH, rampZ),
         0.3f
     );
 
@@ -310,9 +311,11 @@ void JoltWorld::buildGoalSide(GoalInfo& goal, float zSign) {
         JPH::BoxShapeSettings ss(gateHalf, cr2);
         auto sr = ss.Create();
 
+        // Position gate so its top clears a ball sitting on the ramp end
+        float gateCenterY = CRAMP_END_H + GATE_CLOSED_H / 2.0f;
         JPH::BodyCreationSettings bs(
             sr.Get(),
-            JPH::Vec3(rampEndX, CRAMP_END_H / 2.0f, rampZ),
+            JPH::Vec3(rampEndX, gateCenterY, rampZ),
             JPH::Quat::sIdentity(),
             JPH::EMotionType::Kinematic, Layers::MOVING
         );

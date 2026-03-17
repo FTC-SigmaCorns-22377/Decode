@@ -109,6 +109,90 @@ class JoltVisualizerTest {
     }
 
     @Test
+    fun testGoalScoringWithVisualizer() {
+        val server = sigmacorns.sim.viz.SimVizServer(sim, 8082)
+        server.start()
+
+        println("Goal scoring visualizer running at http://localhost:8082")
+
+        val halfField = 3.6576f / 2f
+        val crampWidth = 0.16f
+        val goalLeg = 0.6858f
+        val crampStartH = 0.49f
+        val goalTotalHeight = 1.3716f
+
+        // Phase 1: Drop balls from above into the red goal scoring zone
+        println("--- Phase 1: Dropping balls into red goal ---")
+        for (i in 0 until 5) {
+            val offset = 0.03f + i * 0.05f
+            sim.spawnBall(
+                halfField - crampWidth - offset,
+                halfField - offset,
+                goalTotalHeight - 0.05f + i * 0.1f,
+                if (i % 2 == 0) BallColor.GREEN else BallColor.PURPLE
+            )
+        }
+
+        repeat(600) { i ->
+            sim.update()
+            if (i % 4 == 0) server.broadcastState()
+            Thread.sleep(5)
+        }
+
+        val gs1 = sim.getGoalState()
+        println("Red score after drop: ${gs1.redScore}")
+
+        // Phase 2: Drop balls onto the ramp — they roll down and stay at the gate
+        println("--- Phase 2: Balls dropping onto ramp and rolling ---")
+        val rampStartJoltX = -halfField + goalLeg
+        val rampZ = halfField - crampWidth / 2f
+
+        for (i in 0 until 3) {
+            sim.spawnBall(
+                rampZ,
+                -rampStartJoltX - i * 0.12f,
+                crampStartH + 0.3f + i * 0.15f,
+                if (i % 2 == 0) BallColor.GREEN else BallColor.PURPLE
+            )
+        }
+
+        repeat(1600) { i ->
+            sim.update()
+            if (i % 4 == 0) server.broadcastState()
+            Thread.sleep(5)
+        }
+
+        val balls = sim.getBallStates()
+        println("Balls remaining in ramp: ${balls.size}")
+        for ((idx, b) in balls.withIndex()) {
+            println("  Ball $idx: (${b.x}, ${b.y}, ${b.z})")
+        }
+
+        // Phase 3: Drop balls into the blue goal
+        println("--- Phase 3: Dropping balls into blue goal ---")
+        for (i in 0 until 3) {
+            val offset = 0.03f + i * 0.05f
+            sim.spawnBall(
+                -(halfField - crampWidth - offset),
+                halfField - offset,
+                goalTotalHeight - 0.05f + i * 0.1f,
+                BallColor.PURPLE
+            )
+        }
+
+        repeat(600) { i ->
+            sim.update()
+            if (i % 4 == 0) server.broadcastState()
+            Thread.sleep(5)
+        }
+
+        val gs2 = sim.getGoalState()
+        println("Final scores — Red: ${gs2.redScore}, Blue: ${gs2.blueScore}")
+
+        server.stop()
+    }
+
+    @Test
     fun testWithWasdDrive() {
         sim.spawnFieldBalls()
 
