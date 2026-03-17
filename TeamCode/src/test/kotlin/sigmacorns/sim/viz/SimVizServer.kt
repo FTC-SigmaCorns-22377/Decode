@@ -6,6 +6,8 @@ import io.javalin.websocket.WsContext
 import sigmacorns.io.JoltSimIO
 import java.util.concurrent.ConcurrentHashMap
 
+data class WasdState(val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false, val q: Boolean = false, val e: Boolean = false)
+
 class SimVizServer(
     private val simIO: JoltSimIO,
     private val port: Int = 8080
@@ -16,10 +18,16 @@ class SimVizServer(
     private val clients = ConcurrentHashMap.newKeySet<WsContext>()
     private val gson = Gson()
 
+    @Volatile var wasdState: WasdState = WasdState()
+        private set
+
     fun start(): SimVizServer {
         app.ws("/sim") { ws ->
             ws.onConnect { ctx -> clients.add(ctx) }
             ws.onClose { ctx -> clients.remove(ctx) }
+            ws.onMessage { ctx ->
+                try { wasdState = gson.fromJson(ctx.message(), WasdState::class.java) } catch (_: Exception) {}
+            }
         }
         app.start(port)
         return this

@@ -67,4 +67,29 @@ scrubber.addEventListener('input', () => {
     }
 });
 
+// WASD keyboard drive input
+const keys = { w: false, a: false, s: false, d: false, q: false, e: false };
+
+function sendKeys() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(keys));
+    }
+}
+
+document.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    if (key in keys && !keys[key]) {
+        keys[key] = true;
+        sendKeys();
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    const key = e.key.toLowerCase();
+    if (key in keys) {
+        keys[key] = false;
+        sendKeys();
+    }
+});
+
 connect();

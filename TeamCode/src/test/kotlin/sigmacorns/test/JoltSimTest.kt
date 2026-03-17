@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import sigmacorns.io.BallColor
 import sigmacorns.io.JoltSimIO
+import sigmacorns.math.Pose2d
 import sigmacorns.sim.SimGamepad
 import sigmacorns.subsystem.DriveController
 import kotlin.math.abs
@@ -335,6 +336,36 @@ class JoltSimTest {
         assertEquals(0, sim.heldBalls.size, "All balls should have been shot")
 
         server.stop()
+    }
+
+    @Test
+    fun testWithWasdDrive() {
+        sim.spawnFieldBalls()
+
+        val server = sigmacorns.sim.viz.SimVizServer(sim)
+        server.start()
+
+        val driveController = DriveController()
+
+        println("Visualizer running at http://localhost:8080")
+        println("Use WASD keys in the browser to drive. Press Ctrl+C to stop.")
+
+        var frameCount = 0
+        while (true) {
+            val wasd = server.wasdState
+            val vx = if (wasd.w) 1.0 else if (wasd.s) -1.0 else 0.0
+            val vy = if (wasd.a) -1.0 else if (wasd.d) 1.0 else 0.0
+            val omega = if (wasd.q) -1.0 else if (wasd.e) 1.0 else 0.0
+            driveController.drive(Pose2d(vx, vy, omega), sim)
+            sim.turret = 0.5
+
+            sim.update()
+            frameCount++
+            if (frameCount % 4 == 0) {
+                server.broadcastState()
+            }
+            Thread.sleep(5)
+        }
     }
 
     @Test
