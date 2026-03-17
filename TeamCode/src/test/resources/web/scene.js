@@ -211,12 +211,6 @@ function createGoalStructure(zSign, color) {
     const rampMidX = (rampStartX + rampEndX) / 2;
     const rampZ = cZ - zSign * CRAMP_WIDTH / 2; // flush against ±Z wall
 
-    // Inner wall along ±Z wall covering ramp section (extends above field wall height)
-    const rectInnerGeo = new THREE.BoxGeometry(CRAMP_LENGTH, GOAL_LIP_HEIGHT, GOAL_WALL_THICK_VIS);
-    const rectInnerMesh = new THREE.Mesh(rectInnerGeo, goalMat);
-    rectInnerMesh.position.set(rampMidX, GOAL_LIP_HEIGHT / 2, cZ - zSign * GOAL_WALL_THICK_VIS / 2);
-    group.add(rectInnerMesh);
-
     // Perpendicular wall at triangle front, connecting ±Z wall to offset triangle
     const perpLen = goalOffset;
     const perpMidZ = cZ - zSign * perpLen / 2;
@@ -296,7 +290,7 @@ function createGoalStructure(zSign, color) {
     // Gate at output end (at ramp end height)
     const gateGeo = new THREE.BoxGeometry(GATE_THICK, GATE_CLOSED_H, GATE_WIDTH);
     const gateMesh = new THREE.Mesh(gateGeo, gateMat);
-    gateMesh.position.set(rampEndX, CRAMP_END_H / 2, rampZ);
+    gateMesh.position.set(rampEndX, CRAMP_END_H + GATE_CLOSED_H / 2, rampZ);
     group.add(gateMesh);
 
     // --- Lever (see-saw at ramp output end, extends toward field center) ---
