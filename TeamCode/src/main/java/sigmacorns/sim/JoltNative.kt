@@ -18,4 +18,5 @@ object JoltNative {
     @JvmStatic external fun nativeGetBallStates(handle: Long, out: FloatArray)
     @JvmStatic external fun nativeGetBallColors(handle: Long, out: IntArray)
     @JvmStatic external fun nativeGetIntakeOverlaps(handle: Long, out: IntArray, max: Int): Int
+    @JvmStatic external fun nativeGetGoalStates(handle: Long, out: FloatArray)
 }

@@ -45,6 +45,8 @@ class SimVizServer(
 
         val balls = simIO.getBallStates()
 
+        val goalState = simIO.getGoalState()
+
         val state = mapOf(
             "t" to simIO.time().inWholeMilliseconds / 1000.0,
             "robot" to mapOf(
@@ -58,7 +60,15 @@ class SimVizServer(
             "balls" to balls.map { b ->
                 mapOf("x" to b.x, "y" to b.y, "z" to b.z, "color" to b.color.name.lowercase())
             },
-            "heldBalls" to simIO.heldBalls.map { it.name.lowercase() }
+            "heldBalls" to simIO.heldBalls.map { it.name.lowercase() },
+            "goals" to mapOf(
+                "redScore" to goalState.redScore,
+                "blueScore" to goalState.blueScore,
+                "redGateOpen" to goalState.redGateOpen,
+                "blueGateOpen" to goalState.blueGateOpen,
+                "redLeverAngle" to goalState.redLeverAngle,
+                "blueLeverAngle" to goalState.blueLeverAngle
+            )
         )
 
         val json = gson.toJson(state)

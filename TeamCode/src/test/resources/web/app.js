@@ -1,4 +1,4 @@
-import { updateRobot, updateBalls } from './scene.js';
+import { updateRobot, updateBalls, updateGoals } from './scene.js';
 
 const frames = [];
 let isLive = true;
@@ -40,6 +40,7 @@ function applyFrame(state) {
     if (!state) return;
     updateRobot(state.robot.x, state.robot.y, state.robot.theta, state.robot.turretAngle);
     updateBalls(state.balls || []);
+    updateGoals(state.goals);
     timeDisplay.textContent = state.t.toFixed(3) + 's';
 }
 

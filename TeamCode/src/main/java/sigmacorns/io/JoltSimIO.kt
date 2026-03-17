@@ -174,6 +174,30 @@ class JoltSimIO : SigmaIO, AutoCloseable {
             color.joltId)
     }
 
+    // --- Goal API ---
+
+    data class GoalState(
+        val redScore: Int,
+        val blueScore: Int,
+        val redGateOpen: Float,
+        val blueGateOpen: Float,
+        val redLeverAngle: Float,
+        val blueLeverAngle: Float
+    )
+
+    fun getGoalState(): GoalState {
+        val out = FloatArray(6)
+        JoltNative.nativeGetGoalStates(handle, out)
+        return GoalState(
+            redScore = out[0].toInt(),
+            blueScore = out[1].toInt(),
+            redGateOpen = out[2],
+            blueGateOpen = out[3],
+            redLeverAngle = out[4],
+            blueLeverAngle = out[5]
+        )
+    }
+
     // --- Ball API ---
 
     fun spawnBall(x: Float, y: Float, z: Float, color: BallColor): Int {
