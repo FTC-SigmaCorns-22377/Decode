@@ -1,4 +1,4 @@
-package sigmacorns.test
+package sigmacorns.test.jolt
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -10,7 +10,7 @@ import sigmacorns.io.JoltSimIO
 /**
  * Tests for goal scoring and classifier ramp behavior.
  *
- * Coordinate mapping: sim (x, y, z) → Jolt (-y, z, x)
+ * Coordinate mapping: sim (x, y, z) -> Jolt (-y, z, x)
  *   sim x = Jolt Z (forward), sim y = -Jolt X (left), sim z = Jolt Y (up)
  *
  * Red goal (zSign=+1): corner at Jolt (-HF, 0, +HF), triangle offset from +Z wall by CRAMP_WIDTH.

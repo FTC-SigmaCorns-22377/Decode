@@ -104,7 +104,7 @@ shooterGroup.add(shooterArrowMesh);
 
 const HF = FIELD_SIZE / 2;
 const GOAL_LEG = 0.6858;
-const GOAL_WALL_THICK_VIS = 0.01; // visual thickness (1cm, thinner than physics 3cm)
+const GOAL_WALL_THICK_VIS = 0.03; // match physics thickness for accurate collision visualization
 const GOAL_LIP_HEIGHT = 0.9843;
 const GOAL_TOTAL_HEIGHT = 1.3716;
 const CRAMP_LENGTH = 1.00;
@@ -211,7 +211,11 @@ function createGoalStructure(zSign, color) {
     const rampMidX = (rampStartX + rampEndX) / 2;
     const rampZ = cZ - zSign * CRAMP_WIDTH / 2; // flush against ±Z wall
 
-    // Inner wall along ±Z wall covering ramp section: physics only (field wall provides visual)
+    // Inner wall along ±Z wall covering ramp section (extends above field wall height)
+    const rectInnerGeo = new THREE.BoxGeometry(CRAMP_LENGTH, GOAL_LIP_HEIGHT, GOAL_WALL_THICK_VIS);
+    const rectInnerMesh = new THREE.Mesh(rectInnerGeo, goalMat);
+    rectInnerMesh.position.set(rampMidX, GOAL_LIP_HEIGHT / 2, cZ - zSign * GOAL_WALL_THICK_VIS / 2);
+    group.add(rectInnerMesh);
 
     // Perpendicular wall at triangle front, connecting ±Z wall to offset triangle
     const perpLen = goalOffset;
