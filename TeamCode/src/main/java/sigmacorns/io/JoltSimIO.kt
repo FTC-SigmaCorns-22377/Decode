@@ -2,7 +2,9 @@ package sigmacorns.io
 
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
+import sigmacorns.constants.turretTicksPerRad
 import sigmacorns.sim.FlywheelParameters
+import sigmacorns.sim.LinearDcMotor
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.FlywheelDynamics
 import sigmacorns.sim.FlywheelState
@@ -33,6 +35,7 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     private var t = 0.seconds
     private var flywheelState = FlywheelState()
     private var turretAngleRad = 0.0
+    private var turretVelocityRad = 0.0
     private var turretOffset = 0.0
 
     val heldBalls = mutableListOf<BallColor>()
@@ -60,7 +63,7 @@ class JoltSimIO : SigmaIO, AutoCloseable {
 
     override fun flywheelVelocity(): Double = flywheelState.omega
 
-    override fun turretPosition(): Double = turretAngleRad
+    override fun turretPosition(): Double = turretAngleRad * turretTicksPerRad + turretOffset
 
     override fun setTurretPosition(offset: Double) {
         turretOffset = offset
@@ -97,13 +100,13 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Integrate flywheel dynamics
         flywheelState = flywheelDynamics.integrate(dtSeconds, dtSeconds, doubleArrayOf(flywheel), flywheelState)
 
-        // Integrate turret (servo position model)
-        // turret power 0..1 maps to -SERVO_TURRET_RANGE/2..+SERVO_TURRET_RANGE/2
-        val turretTarget = (turret - 0.5) * SERVO_TURRET_RANGE
-        val turretError = turretTarget - turretAngleRad
-        val turretVel = (SERVO_K * turretError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
-        turretAngleRad += turretVel * dtSeconds
-        turretAngleRad = turretAngleRad.coerceIn(-SERVO_TURRET_RANGE / 2.0, SERVO_TURRET_RANGE / 2.0)
+        // Integrate turret (DC motor model matching HardwareIO behavior)
+        // turret accepts power -1..1, returns encoder ticks from turretPosition()
+        val turretTorque = TURRET_MOTOR.torque(turret, turretVelocityRad)
+        val turretAccel = turretTorque / TURRET_INERTIA - TURRET_DAMPING * turretVelocityRad
+        turretVelocityRad += turretAccel * dtSeconds
+        turretAngleRad += turretVelocityRad * dtSeconds
+        turretAngleRad = turretAngleRad.coerceIn(-TURRET_ANGLE_LIMIT, TURRET_ANGLE_LIMIT)
 
         // Intake: pick up balls if intake is running and we have capacity
         if (intake > 0.3 && heldBalls.size < 3) {
@@ -272,10 +275,16 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         const val FLYWHEEL_WHEEL_RADIUS = 0.05 // 50mm contact wheel
         const val LAUNCH_EFFICIENCY = 0.3      // energy transfer to ball
 
-        // Turret (servo model)
-        const val SERVO_TURRET_RANGE = 2 * Math.PI // rad, full range of servo
-        const val SERVO_K = 10.0 // proportional gain (1/s)
-        const val SERVO_MAX_SPEED = Math.PI // rad/s, max angular velocity
+        // Turret (DC motor model matching hardware)
+        // Uses the same bare motor specs with a turret-specific gear ratio
+        private const val TURRET_GEAR_RATIO = (1.0 + 46.0 / 11.0) * 76.0 / 19.0
+        val TURRET_MOTOR = LinearDcMotor(
+            sigmacorns.constants.bareMotorTopSpeed / TURRET_GEAR_RATIO,
+            sigmacorns.constants.bareMotorStallTorque * TURRET_GEAR_RATIO
+        )
+        const val TURRET_INERTIA = 0.005 // kg·m^2, turret assembly inertia
+        const val TURRET_DAMPING = 0.5 // viscous damping coefficient
+        val TURRET_ANGLE_LIMIT = Math.PI / 2.0 // ±90° range matching turretRange limits
 
         // Default hood angle
         const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0
