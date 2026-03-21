@@ -1,5 +1,7 @@
 # Setup
 
+> **Prerequisites:** Make sure `git-lfs` and `cmake` are installed on your system before proceeding.
+
 ## 1. Create `local.properties`
 
 Create a `local.properties` file in the root of the project with the following contents:
