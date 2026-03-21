@@ -51,6 +51,9 @@ val drivetrainCenter = Vector2d(0.03996203, 0.0)
 val flywheelGearRatio = 1.0
 val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio,bareMotorStallTorque*flywheelGearRatio)
 
+val intakeGearRatio = 3.0
+val intakeMotor = LinearDcMotor(bareMotorTopSpeed/intakeGearRatio, bareMotorStallTorque*intakeGearRatio)
+
 /**
  * Parameters of the dual-motor flywheel used in the simulator
  */

@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "decode@ftc-claude": true
+  }
+}

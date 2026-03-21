@@ -96,6 +96,53 @@ shooterArrowMesh.rotation.x = -Math.PI / 2;
 shooterArrowMesh.position.set(0, SHOOTER_HEIGHT / 2, SHOOTER_LENGTH / 2);
 shooterGroup.add(shooterArrowMesh);
 
+// --- Intake roller assembly (pivots at top-front edge of chassis) ---
+const INTAKE_BAR_LENGTH = 0.127;
+const INTAKE_ROLLER_RADIUS = 0.0254;
+const INTAKE_WIDTH_VIS = 0.3;
+
+const intakeGroup = new THREE.Group();
+intakeGroup.position.set(0, ROBOT_HEIGHT / 2, ROBOT_SIZE / 2);
+robotMesh.add(intakeGroup);
+
+// Two bar meshes connecting pivot to roller
+const barMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+const barGeo = new THREE.BoxGeometry(0.02, 0.02, INTAKE_BAR_LENGTH);
+const barLeft = new THREE.Mesh(barGeo, barMat);
+barLeft.position.set(-INTAKE_WIDTH_VIS / 2 + 0.02, 0, INTAKE_BAR_LENGTH / 2);
+intakeGroup.add(barLeft);
+const barRight = new THREE.Mesh(barGeo, barMat);
+barRight.position.set(INTAKE_WIDTH_VIS / 2 - 0.02, 0, INTAKE_BAR_LENGTH / 2);
+intakeGroup.add(barRight);
+
+// Roller cylinder at end of bars
+const rollerMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+const rollerGeo = new THREE.CylinderGeometry(INTAKE_ROLLER_RADIUS, INTAKE_ROLLER_RADIUS, INTAKE_WIDTH_VIS, 12);
+rollerGeo.rotateZ(Math.PI / 2); // align along X
+const rollerMesh = new THREE.Mesh(rollerGeo, rollerMat);
+rollerMesh.position.set(0, 0, INTAKE_BAR_LENGTH);
+intakeGroup.add(rollerMesh);
+
+// --- Flywheel (front of shooter) ---
+const FLYWHEEL_RADIUS = 0.05;
+const flywheelMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+const flywheelGeo = new THREE.CylinderGeometry(FLYWHEEL_RADIUS, FLYWHEEL_RADIUS, SHOOTER_WIDTH * 0.8, 16);
+flywheelGeo.rotateZ(Math.PI / 2); // align along X
+const flywheelMesh = new THREE.Mesh(flywheelGeo, flywheelMat);
+flywheelMesh.position.set(0, 0, SHOOTER_LENGTH / 2);
+shooterGroup.add(flywheelMesh);
+
+// --- Hood (pivots at flywheel shaft, extends backward) ---
+const hoodGroup = new THREE.Group();
+hoodGroup.position.set(0, 0, SHOOTER_LENGTH / 2);
+shooterGroup.add(hoodGroup);
+
+const hoodMat = new THREE.MeshStandardMaterial({ color: 0xcc6633, transparent: true, opacity: 0.7 });
+const hoodGeo = new THREE.BoxGeometry(SHOOTER_WIDTH * 0.9, 0.01, SHOOTER_LENGTH * 0.6);
+const hoodMesh = new THREE.Mesh(hoodGeo, hoodMat);
+hoodMesh.position.set(0, FLYWHEEL_RADIUS, -SHOOTER_LENGTH * 0.3);
+hoodGroup.add(hoodMesh);
+
 // ---- Goal structures (DECODE game-accurate) ----
 // Jolt XYZ maps directly to Three.js XYZ for static geometry.
 // Three.js rotation.y has OPPOSITE sign convention from Jolt Quat around Y.
@@ -338,13 +385,25 @@ const greenMat = new THREE.MeshStandardMaterial({ color: 0x00cc44 });
 const purpleMat = new THREE.MeshStandardMaterial({ color: 0x9933ff });
 const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 16, 12);
 
-function updateRobot(x, y, theta, turretAngle) {
+function updateRobot(x, y, theta, turretAngle, intakeAngle, hoodAngle, flywheelRPM) {
     // sim (x=forward, y=left) -> Three.js (x=-y, z=x), sim theta -> rotation about -Y
     robotMesh.position.set(-y, ROBOT_HEIGHT / 2, x);
     robotMesh.rotation.y = -theta;
     // Turret rotates about Y axis relative to robot
     if (turretAngle !== undefined) {
         shooterGroup.rotation.y = -turretAngle;
+    }
+    // Intake pivots around X axis
+    if (intakeAngle !== undefined) {
+        intakeGroup.rotation.x = intakeAngle;
+    }
+    // Hood pivots around X axis (negative = tilts upward)
+    if (hoodAngle !== undefined) {
+        hoodGroup.rotation.x = -hoodAngle;
+    }
+    // Flywheel visual spin
+    if (flywheelRPM !== undefined && flywheelRPM !== 0) {
+        flywheelMesh.rotation.x += (flywheelRPM / 60) * 2 * Math.PI * 0.016; // ~60fps
     }
 }
 

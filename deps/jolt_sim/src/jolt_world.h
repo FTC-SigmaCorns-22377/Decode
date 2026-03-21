@@ -11,8 +11,12 @@
 #include <Jolt/Physics/Body/BodyActivationListener.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
+#include <Jolt/Physics/Collision/GroupFilterTable.h>
 
 #include <vector>
 #include <mutex>
@@ -52,8 +56,6 @@ public:
             default: return "UNKNOWN";
         }
     }
-#else
-    const char* GetBroadPhaseLayerName(JPH::BroadPhaseLayer) const override { return ""; }
 #endif
 };
 
@@ -85,6 +87,12 @@ struct BallInfo {
     int color; // 0 = green, 1 = purple
 };
 
+struct IntakeInfo {
+    JPH::BodyID rollerBodyId;
+    float rollerOmega = 0.0f;  // set from Kotlin each frame
+    float hingeAngle = -0.305f; // simulated hinge angle (rad), starts at rest
+};
+
 struct GoalInfo {
     // Goal triangle walls (3-sided structure in field corner)
     JPH::BodyID sideWallAId;    // along -X field wall (back wall)
@@ -112,7 +120,31 @@ struct GoalInfo {
     float leverAngle = 0.0f;    // tilt in radians
 };
 
+// Forward declaration
+class JoltWorld;
+
+class IntakeContactListener : public JPH::ContactListener {
+public:
+    IntakeContactListener(JoltWorld* world) : world_(world) {}
+
+    void OnContactAdded(const JPH::Body& body1, const JPH::Body& body2,
+                        const JPH::ContactManifold& manifold,
+                        JPH::ContactSettings& settings) override;
+
+    void OnContactPersisted(const JPH::Body& body1, const JPH::Body& body2,
+                            const JPH::ContactManifold& manifold,
+                            JPH::ContactSettings& settings) override;
+
+private:
+    void applyIntakeEffect(const JPH::Body& body1, const JPH::Body& body2,
+                           const JPH::ContactManifold& manifold,
+                           JPH::ContactSettings& settings);
+    JoltWorld* world_;
+};
+
 class JoltWorld {
+    friend class IntakeContactListener;
+
 public:
     JoltWorld();
     ~JoltWorld();
@@ -127,7 +159,11 @@ public:
     int  getBallCount() const;
     void getBallStates(float* out) const;  // [x,y,z] * count
     void getBallColors(int* out) const;
-    int  getIntakeOverlaps(int* out, int max);
+
+    // Intake API
+    void setIntakeRollerOmega(float omega);
+    void getIntakeState(float* out) const;  // [hingeAngle, rollerOmega]
+    int  getPendingPickups(int* out, int max);
 
     // Goal API
     // [redScore, blueScore, redGateOpen, blueGateOpen, redLeverAngle, blueLeverAngle]
@@ -138,7 +174,8 @@ private:
     void buildGoals();
     void buildGoalSide(GoalInfo& goal, float zSign);
     void createRobot();
-    void createIntakeSensor();
+    void createIntakeRoller();
+    void updateIntake(float dt);
     void checkGoalScoring();
     void updateGates(float dt);
     void updateLevers(float dt);
@@ -155,10 +192,19 @@ private:
     ObjectVsBroadPhaseLayerFilterImpl   objectVsBroadPhase_;
     ObjectLayerPairFilterImpl           objectLayerPair_;
 
+    // Contact listener
+    IntakeContactListener* contactListener_ = nullptr;
+
+    // Collision group filter (prevents robot-roller collision)
+    JPH::Ref<JPH::GroupFilterTable> robotRollerGroupFilter_;
+
     // Bodies
     JPH::BodyID robotBodyId_;
-    JPH::BodyID intakeSensorId_;
+    IntakeInfo intake_;
     std::vector<BallInfo> balls_;
+
+    // Pending pickups (ball indices to be picked up by Kotlin)
+    std::vector<int> pendingPickups_;
 
     // Goals
     GoalInfo redGoal_;
@@ -187,10 +233,22 @@ private:
     static constexpr float BALL_MASS      = 0.5f;
     static constexpr float BALL_FRICTION  = 0.8f;
 
-    static constexpr float INTAKE_OFFSET  = 0.2f; // offset in front of robot center
+    // Intake sensor (legacy, kept for reference)
+    static constexpr float INTAKE_OFFSET  = 0.2f; // offset in front of robot center = ROBOT_LENGTH/2
     static constexpr float INTAKE_WIDTH   = 0.3f;
     static constexpr float INTAKE_DEPTH   = 0.1f;
     static constexpr float INTAKE_HEIGHT  = 0.1f;
+
+    // Intake roller physics
+    static constexpr float INTAKE_BAR_LENGTH      = 0.127f;   // 5" bar length
+    static constexpr float INTAKE_ROLLER_RADIUS    = 0.0254f;  // 2" diameter / 2
+    static constexpr float INTAKE_MASS             = 0.227f;   // ~0.5 lb
+    static constexpr float INTAKE_ROLLER_FRICTION  = 0.9f;     // rubber wheels
+    static constexpr float INTAKE_REST_ANGLE       = -0.305f;  // ~-17.5 deg (roller hangs below chassis top)
+    static constexpr float INTAKE_MIN_ANGLE        = -0.7f;    // gravity rest lower limit
+    static constexpr float INTAKE_MAX_ANGLE        = 1.22f;    // ~70 deg, max ball push-up angle
+    static constexpr float INTAKE_HINGE_FRICTION   = 0.01f;    // Nm pivot damping
+    static constexpr float INTAKE_OMEGA_THRESHOLD  = 10.0f;    // min roller rad/s for ball pickup
 
     // Goal structure (from DECODE game manual)
     // 3-sided triangular structure in field corner, open top

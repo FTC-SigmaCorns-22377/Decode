@@ -54,7 +54,9 @@ class SimVizServer(
                 "y" to robotState[1],
                 "theta" to robotState[2],
                 "turretAngle" to simIO.turretPosition(),
-                "hoodAngle" to simIO.hoodAngle,
+                "intakeAngle" to simIO.intakeAngle(),
+                "intakeRollerRPM" to simIO.intakeRollerVelocity() * 60.0 / (2.0 * Math.PI),
+                "hoodAngle" to simIO.hoodPosition(),
                 "flywheelRPM" to simIO.flywheelVelocity() * 60.0 / (2.0 * Math.PI)
             ),
             "balls" to balls.map { b ->

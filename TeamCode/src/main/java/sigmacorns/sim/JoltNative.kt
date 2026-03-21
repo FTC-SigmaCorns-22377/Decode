@@ -17,6 +17,8 @@ object JoltNative {
     @JvmStatic external fun nativeGetBallCount(handle: Long): Int
     @JvmStatic external fun nativeGetBallStates(handle: Long, out: FloatArray)
     @JvmStatic external fun nativeGetBallColors(handle: Long, out: IntArray)
-    @JvmStatic external fun nativeGetIntakeOverlaps(handle: Long, out: IntArray, max: Int): Int
+    @JvmStatic external fun nativeSetIntakeRollerOmega(handle: Long, omega: Float)
+    @JvmStatic external fun nativeGetIntakeState(handle: Long, out: FloatArray)
+    @JvmStatic external fun nativeGetPendingPickups(handle: Long, out: IntArray, max: Int): Int
     @JvmStatic external fun nativeGetGoalStates(handle: Long, out: FloatArray)
 }

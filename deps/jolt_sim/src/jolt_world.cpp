@@ -63,7 +63,10 @@ JoltWorld::JoltWorld() {
     buildField();
     buildGoals();
     createRobot();
-    createIntakeSensor();
+    createIntakeRoller();
+
+    contactListener_ = new IntakeContactListener(this);
+    physicsSystem_->SetContactListener(contactListener_);
 }
 
 JoltWorld::~JoltWorld() {
@@ -76,9 +79,9 @@ JoltWorld::~JoltWorld() {
     }
     balls_.clear();
 
-    // Remove intake sensor
-    bodyInterface.RemoveBody(intakeSensorId_);
-    bodyInterface.DestroyBody(intakeSensorId_);
+    // Remove intake roller
+    bodyInterface.RemoveBody(intake_.rollerBodyId);
+    bodyInterface.DestroyBody(intake_.rollerBodyId);
 
     // Remove robot
     bodyInterface.RemoveBody(robotBodyId_);
@@ -104,6 +107,7 @@ JoltWorld::~JoltWorld() {
     }
     fieldBodyIds_.clear();
 
+    delete contactListener_;
     delete physicsSystem_;
     delete jobSystem_;
     delete tempAllocator_;
@@ -488,27 +492,55 @@ void JoltWorld::createRobot() {
                                 JPH::EAllowedDOFs::TranslationZ |
                                 JPH::EAllowedDOFs::RotationY;
 
+    // Collision group: robot is subGroup 0, intake roller is subGroup 1
+    // They won't collide with each other but will collide with everything else
+    robotRollerGroupFilter_ = new JPH::GroupFilterTable(2);
+    robotRollerGroupFilter_->DisableCollision(0, 1);
+    bodySettings.mCollisionGroup.SetGroupFilter(robotRollerGroupFilter_);
+    bodySettings.mCollisionGroup.SetGroupID(0);
+    bodySettings.mCollisionGroup.SetSubGroupID(0);
+
     robotBodyId_ = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::Activate);
 }
 
-void JoltWorld::createIntakeSensor() {
+void JoltWorld::createIntakeRoller() {
     auto& bodyInterface = physicsSystem_->GetBodyInterface();
 
-    constexpr float cr = 0.005f;
-    JPH::Vec3 intakeHalf(INTAKE_WIDTH / 2.0f - cr, INTAKE_HEIGHT / 2.0f - cr, INTAKE_DEPTH / 2.0f - cr);
-    JPH::BoxShapeSettings shapeSettings(intakeHalf, cr);
-    auto shapeResult = shapeSettings.Create();
+    // Create cylinder shape for the roller: axis along X (width direction)
+    // CylinderShape has axis along Y by default, so rotate 90deg around Z
+    float cylConvexRadius = std::min(0.005f, INTAKE_ROLLER_RADIUS * 0.3f);
+    JPH::CylinderShapeSettings cylinderSettings(INTAKE_WIDTH / 2.0f - cylConvexRadius,
+                                                  INTAKE_ROLLER_RADIUS - cylConvexRadius,
+                                                  cylConvexRadius);
+    auto cylinderResult = cylinderSettings.Create();
 
+    // Rotate cylinder so its axis aligns with Jolt X (robot width direction)
+    JPH::RotatedTranslatedShapeSettings rotatedSettings(
+        JPH::Vec3::sZero(),
+        JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), 3.14159265f / 2.0f),
+        cylinderResult.Get()
+    );
+    auto rotatedResult = rotatedSettings.Create();
+
+    // Compute initial roller position based on rest angle
+    // Pivot is at top-front edge of chassis: (0, ROBOT_HEIGHT, ROBOT_LENGTH/2)
+    float pivotY = ROBOT_HEIGHT;
+    float pivotZ = ROBOT_LENGTH / 2.0f;
+    float rollerY = pivotY + INTAKE_BAR_LENGTH * std::sin(INTAKE_REST_ANGLE);
+    float rollerZ = pivotZ + INTAKE_BAR_LENGTH * std::cos(INTAKE_REST_ANGLE);
+
+    // Use kinematic body that follows the robot (avoids hinge constraint instability)
     JPH::BodyCreationSettings bodySettings(
-        shapeResult.Get(),
-        JPH::Vec3(0, ROBOT_HEIGHT / 2.0f, INTAKE_OFFSET), // offset in front
+        rotatedResult.Get(),
+        JPH::Vec3(0, rollerY, rollerZ),
         JPH::Quat::sIdentity(),
         JPH::EMotionType::Kinematic,
-        Layers::SENSOR
+        Layers::MOVING
     );
-    bodySettings.mIsSensor = true;
+    bodySettings.mFriction = INTAKE_ROLLER_FRICTION;
 
-    intakeSensorId_ = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::Activate);
+    intake_.rollerBodyId = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::Activate);
+    intake_.hingeAngle = INTAKE_REST_ANGLE;
 }
 
 void JoltWorld::step(float dt) {
@@ -526,23 +558,11 @@ void JoltWorld::step(float dt) {
     }
     queuedFx_ = queuedFy_ = queuedTz_ = 0.0f;
 
-    // Update intake sensor position to match robot
-    {
-        JPH::Vec3 robotPos = bodyInterface.GetPosition(robotBodyId_);
-        JPH::Quat robotRot = bodyInterface.GetRotation(robotBodyId_);
-
-        // Offset the sensor in the robot's local forward direction (Z in Jolt)
-        JPH::Vec3 localOffset(0, 0, INTAKE_OFFSET);
-        JPH::Vec3 worldOffset = robotRot * localOffset;
-        JPH::Vec3 sensorPos = robotPos + worldOffset;
-
-        bodyInterface.MoveKinematic(intakeSensorId_, sensorPos, robotRot, dt);
-    }
-
     // Step physics
     physicsSystem_->Update(dt, 1, tempAllocator_, jobSystem_);
 
-    // Check goal scoring and update levers
+    // Post-step: check pickups, scoring, and mechanisms
+    updateIntake(dt);
     checkGoalScoring();
     updateGates(dt);
     updateLevers(dt);
@@ -651,20 +671,146 @@ void JoltWorld::getBallColors(int* out) const {
     }
 }
 
-int JoltWorld::getIntakeOverlaps(int* out, int max) {
+// --- Intake API ---
+
+void JoltWorld::setIntakeRollerOmega(float omega) {
+    intake_.rollerOmega = omega;
+}
+
+void JoltWorld::getIntakeState(float* out) const {
+    out[0] = intake_.hingeAngle;
+    out[1] = intake_.rollerOmega;
+}
+
+void JoltWorld::updateIntake(float dt) {
     auto& bodyInterface = physicsSystem_->GetBodyInterface();
 
-    JPH::Vec3 sensorPos = bodyInterface.GetPosition(intakeSensorId_);
-    float sensorRadius = std::max({INTAKE_WIDTH, INTAKE_DEPTH, INTAKE_HEIGHT});
+    JPH::Vec3 robotPos = bodyInterface.GetPosition(robotBodyId_);
+    JPH::Quat robotRot = bodyInterface.GetRotation(robotBodyId_);
 
-    int count = 0;
-    for (int i = 0; i < static_cast<int>(balls_.size()) && count < max; i++) {
+    // Pivot point in robot local frame
+    float pivotY = ROBOT_HEIGHT;
+    float pivotZ = ROBOT_LENGTH / 2.0f;
+
+    // Simulate hinge: check if any ball is pushing the intake upward
+    float pushAngle = 0.0f;
+    for (int i = 0; i < static_cast<int>(balls_.size()); i++) {
         JPH::Vec3 ballPos = bodyInterface.GetPosition(balls_[i].bodyId);
-        float dist = (ballPos - sensorPos).Length();
-        // Simple proximity check - ball center within sensor bounding region
-        if (dist < sensorRadius + BALL_RADIUS) {
-            out[count++] = i;
+        JPH::Vec3 localBall = robotRot.Conjugated() * (ballPos - robotPos);
+
+        // Check if ball is in the intake zone (near the roller)
+        float rollerY = pivotY + INTAKE_BAR_LENGTH * std::sin(intake_.hingeAngle);
+        float rollerZ = pivotZ + INTAKE_BAR_LENGTH * std::cos(intake_.hingeAngle);
+
+        float distToRoller = std::sqrt(
+            (localBall.GetY() - rollerY) * (localBall.GetY() - rollerY) +
+            (localBall.GetZ() - rollerZ) * (localBall.GetZ() - rollerZ));
+
+        if (distToRoller < BALL_RADIUS + INTAKE_ROLLER_RADIUS + 0.02f) {
+            // Ball is touching roller — compute push angle
+            float ballAngle = std::atan2(localBall.GetY() - pivotY, localBall.GetZ() - pivotZ);
+            if (ballAngle > intake_.hingeAngle) {
+                pushAngle = std::max(pushAngle, ballAngle - intake_.hingeAngle);
+            }
         }
     }
+
+    // Apply push + gravity return
+    if (pushAngle > 0.01f) {
+        intake_.hingeAngle += pushAngle * std::min(dt * 10.0f, 1.0f);
+    } else {
+        // Gravity return toward rest angle
+        float restError = INTAKE_REST_ANGLE - intake_.hingeAngle;
+        intake_.hingeAngle += restError * std::min(dt * 3.0f, 1.0f);
+    }
+    intake_.hingeAngle = std::max(INTAKE_MIN_ANGLE, std::min(INTAKE_MAX_ANGLE, intake_.hingeAngle));
+
+    // Move kinematic roller to follow robot
+    float rollerY = pivotY + INTAKE_BAR_LENGTH * std::sin(intake_.hingeAngle);
+    float rollerZ = pivotZ + INTAKE_BAR_LENGTH * std::cos(intake_.hingeAngle);
+    JPH::Vec3 localRollerPos(0, rollerY, rollerZ);
+    JPH::Vec3 worldRollerPos = robotPos + robotRot * localRollerPos;
+    bodyInterface.MoveKinematic(intake_.rollerBodyId, worldRollerPos, robotRot, dt);
+
+    // Check for ball pickups if roller is spinning
+    if (std::abs(intake_.rollerOmega) < INTAKE_OMEGA_THRESHOLD) return;
+
+    for (int i = static_cast<int>(balls_.size()) - 1; i >= 0; i--) {
+        JPH::Vec3 ballPos = bodyInterface.GetPosition(balls_[i].bodyId);
+        JPH::Vec3 localBall = robotRot.Conjugated() * (ballPos - robotPos);
+
+        // Check if ball is near the front face of the chassis
+        bool nearFrontFace = localBall.GetZ() > (ROBOT_LENGTH / 2.0f - BALL_RADIUS) &&
+                             localBall.GetZ() < (ROBOT_LENGTH / 2.0f + INTAKE_BAR_LENGTH + BALL_RADIUS);
+        bool withinWidth = std::abs(localBall.GetX()) < (INTAKE_WIDTH / 2.0f + BALL_RADIUS);
+        bool withinHeight = localBall.GetY() > -BALL_RADIUS && localBall.GetY() < (ROBOT_HEIGHT + BALL_RADIUS * 2);
+
+        if (nearFrontFace && withinWidth && withinHeight) {
+            pendingPickups_.push_back(i);
+        }
+    }
+
+    // Sort descending so swap-and-pop removal works correctly
+    std::sort(pendingPickups_.begin(), pendingPickups_.end(), std::greater<int>());
+}
+
+int JoltWorld::getPendingPickups(int* out, int max) {
+    int count = std::min(static_cast<int>(pendingPickups_.size()), max);
+    for (int i = 0; i < count; i++) {
+        out[i] = pendingPickups_[i];
+    }
+    pendingPickups_.clear();
     return count;
+}
+
+// --- Contact listener: conveyor belt effect ---
+
+void IntakeContactListener::OnContactAdded(const JPH::Body& body1, const JPH::Body& body2,
+                                            const JPH::ContactManifold& manifold,
+                                            JPH::ContactSettings& settings) {
+    applyIntakeEffect(body1, body2, manifold, settings);
+}
+
+void IntakeContactListener::OnContactPersisted(const JPH::Body& body1, const JPH::Body& body2,
+                                                const JPH::ContactManifold& manifold,
+                                                JPH::ContactSettings& settings) {
+    applyIntakeEffect(body1, body2, manifold, settings);
+}
+
+void IntakeContactListener::applyIntakeEffect(const JPH::Body& body1, const JPH::Body& body2,
+                                               const JPH::ContactManifold& manifold,
+                                               JPH::ContactSettings& settings) {
+    if (std::abs(world_->intake_.rollerOmega) < 1.0f) return;
+
+    // Determine which body is the roller and which is the ball
+    bool body1IsRoller = (body1.GetID() == world_->intake_.rollerBodyId);
+    bool body2IsRoller = (body2.GetID() == world_->intake_.rollerBodyId);
+    if (!body1IsRoller && !body2IsRoller) return;
+
+    const JPH::Body& rollerBody = body1IsRoller ? body1 : body2;
+    const JPH::Body& otherBody = body1IsRoller ? body2 : body1;
+
+    // Check if the other body is a ball
+    bool isBall = false;
+    for (const auto& ball : world_->balls_) {
+        if (ball.bodyId == otherBody.GetID()) {
+            isBall = true;
+            break;
+        }
+    }
+    if (!isBall) return;
+
+    // Compute conveyor belt direction: from roller toward chassis (in -Z local direction)
+    // Must use NoLock interface since we're inside a physics callback
+    auto& bodyInterface = world_->physicsSystem_->GetBodyInterfaceNoLock();
+    JPH::Quat robotRot = bodyInterface.GetRotation(world_->robotBodyId_);
+
+    // Robot forward is +Z in Jolt, so "toward chassis" is -Z in robot frame
+    JPH::Vec3 pullDirection = robotRot * JPH::Vec3(0, 0, -1.0f);
+
+    float surfaceSpeed = std::abs(world_->intake_.rollerOmega) * JoltWorld::INTAKE_ROLLER_RADIUS;
+
+    // Set relative surface velocity to create conveyor belt effect
+    // This pulls the ball toward the chassis
+    settings.mRelativeLinearSurfaceVelocity = pullDirection * surfaceSpeed;
 }

@@ -2,7 +2,7 @@ package sigmacorns.io
 
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
-import sigmacorns.constants.turretTicksPerRad
+import sigmacorns.constants.intakeMotor
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
 import sigmacorns.math.Pose2d
@@ -30,18 +30,21 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     private val handle: Long = JoltNative.nativeCreate()
     private val drivetrain = MecanumDynamics(drivetrainParameters)
     private val flywheelDynamics = FlywheelDynamics(SIM_FLYWHEEL_PARAMS)
+    private val intakeRollerDynamics = FlywheelDynamics(INTAKE_ROLLER_PARAMS)
     private val robotState = FloatArray(6) // [x, y, theta, vx, vy, omega]
 
     private var t = 0.seconds
     private var flywheelState = FlywheelState()
+    private var intakeRollerState = FlywheelState()
     private var turretAngleRad = 0.0
     private var turretVelocityRad = 0.0
     private var turretOffset = 0.0
+    private var hoodAngleRad = Math.toRadians(DEFAULT_BALL_LAUNCH_ANGLE_DEGREES)
 
     val heldBalls = mutableListOf<BallColor>()
 
-    /** Hood angle in radians from horizontal (controls ball launch elevation). */
-    var hoodAngle: Double = Math.toRadians(DEFAULT_BALL_LAUNCH_ANGLE_DEGREES)
+    /** Hood servo input: 0.0 = horizontal, 1.0 = 70 degrees */
+    var hood: Double = DEFAULT_BALL_LAUNCH_ANGLE_DEGREES / 70.0
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -100,21 +103,34 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Integrate flywheel dynamics
         flywheelState = flywheelDynamics.integrate(dtSeconds, dtSeconds, doubleArrayOf(flywheel), flywheelState)
 
-        // Integrate turret (DC motor model matching HardwareIO behavior)
-        // turret accepts power -1..1, returns encoder ticks from turretPosition()
-        val turretTorque = TURRET_MOTOR.torque(turret, turretVelocityRad)
-        val turretAccel = turretTorque / TURRET_INERTIA - TURRET_DAMPING * turretVelocityRad
-        turretVelocityRad += turretAccel * dtSeconds
-        turretAngleRad += turretVelocityRad * dtSeconds
-        turretAngleRad = turretAngleRad.coerceIn(-TURRET_ANGLE_LIMIT, TURRET_ANGLE_LIMIT)
+        // Integrate intake roller dynamics
+        intakeRollerState = intakeRollerDynamics.integrate(dtSeconds, dtSeconds, doubleArrayOf(intake), intakeRollerState)
 
-        // Intake: pick up balls if intake is running and we have capacity
-        if (intake > 0.3 && heldBalls.size < 3) {
-            val overlaps = IntArray(10)
-            val count = JoltNative.nativeGetIntakeOverlaps(handle, overlaps, 10)
-            if (count > 0) {
-                // Pick up the first overlapping ball
-                val ballIdx = overlaps[0]
+        // Send roller omega to C++ for contact surface velocity
+        JoltNative.nativeSetIntakeRollerOmega(handle, intakeRollerState.omega.toFloat())
+
+        // Integrate turret (servo position model)
+        // turret power 0..1 maps to -SERVO_TURRET_RANGE/2..+SERVO_TURRET_RANGE/2
+        val turretTarget = (turret - 0.5) * SERVO_TURRET_RANGE
+        val turretError = turretTarget - turretAngleRad
+        val turretVel = (SERVO_K * turretError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
+        turretAngleRad += turretVel * dtSeconds
+        turretAngleRad = turretAngleRad.coerceIn(-SERVO_TURRET_RANGE / 2.0, SERVO_TURRET_RANGE / 2.0)
+
+        // Integrate hood servo
+        val hoodTarget = hood.coerceIn(0.0, 1.0) * HOOD_RANGE
+        val hoodError = hoodTarget - hoodAngleRad
+        val hoodVel = (SERVO_K * hoodError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
+        hoodAngleRad += hoodVel * dtSeconds
+        hoodAngleRad = hoodAngleRad.coerceIn(0.0, HOOD_RANGE)
+
+        // Physics-based intake: check for pending pickups from C++
+        if (heldBalls.size < 3) {
+            val pickupBuf = IntArray(10)
+            val count = JoltNative.nativeGetPendingPickups(handle, pickupBuf, 10)
+            for (i in 0 until count) {
+                if (heldBalls.size >= 3) break
+                val ballIdx = pickupBuf[i]
                 val colors = IntArray(JoltNative.nativeGetBallCount(handle))
                 JoltNative.nativeGetBallColors(handle, colors)
                 if (ballIdx < colors.size) {
@@ -153,8 +169,8 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         val launchHeading = robotTheta + turretAngleRad
 
         // Hood angle splits exit speed into horizontal and vertical components
-        val horizontalSpeed = exitSpeed * cos(hoodAngle)
-        val verticalSpeed = exitSpeed * sin(hoodAngle)
+        val horizontalSpeed = exitSpeed * cos(hoodAngleRad)
+        val verticalSpeed = exitSpeed * sin(hoodAngleRad)
 
         val vx = horizontalSpeed * cos(launchHeading)
         val vy = horizontalSpeed * sin(launchHeading)
@@ -176,6 +192,18 @@ class JoltSimIO : SigmaIO, AutoCloseable {
             vx.toFloat(), vy.toFloat(), vz.toFloat(),
             color.joltId)
     }
+
+    // --- Intake/Hood getters ---
+
+    fun intakeRollerVelocity(): Double = intakeRollerState.omega
+
+    fun intakeAngle(): Double {
+        val state = FloatArray(2)
+        JoltNative.nativeGetIntakeState(handle, state)
+        return state[0].toDouble()
+    }
+
+    fun hoodPosition(): Double = hoodAngleRad
 
     // --- Goal API ---
 
@@ -292,5 +320,12 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Sim-specific flywheel inertia (small wheel, not the full hardware assembly)
         const val SIM_FLYWHEEL_INERTIA = 0.001 // kg·m^2
         val SIM_FLYWHEEL_PARAMS = FlywheelParameters(flywheelMotor, SIM_FLYWHEEL_INERTIA, 0.0001)
+
+        // Intake roller dynamics (reuses FlywheelDynamics with different parameters)
+        const val INTAKE_ROLLER_INERTIA = 0.0005 // kg·m^2
+        val INTAKE_ROLLER_PARAMS = FlywheelParameters(intakeMotor, INTAKE_ROLLER_INERTIA, 0.0001)
+
+        // Hood servo (controls launch angle)
+        val HOOD_RANGE = Math.toRadians(70.0)  // 0 to 70 degrees
     }
 }
