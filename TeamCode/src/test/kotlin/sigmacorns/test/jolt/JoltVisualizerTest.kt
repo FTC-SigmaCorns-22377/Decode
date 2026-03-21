@@ -5,6 +5,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import sigmacorns.Robot
 import sigmacorns.io.BallColor
 import sigmacorns.io.JoltSimIO
 import sigmacorns.math.Pose2d
@@ -245,6 +246,99 @@ class JoltVisualizerTest {
             sim.intake = gamepad.right_trigger.toDouble()
             sim.flywheel = if (gamepad.left_bumper) 1.0 else 0.0
             if (gamepad.right_bumper) sim.shootBall()
+
+            sim.update()
+            frameCount++
+            if (frameCount % 4 == 0) {
+                server.broadcastState()
+            }
+            Thread.sleep(5)
+        }
+    }
+
+    /**
+     * Runs the full Robot.kt control stack on the Jolt sim.
+     * Uses Robot's subsystems (DriveController, Flywheel, AimingSystem/Turret)
+     * instead of directly setting motor powers.
+     */
+    @Test
+    fun testWithRobot() {
+        sim.spawnFieldBalls()
+
+        val server = sigmacorns.sim.viz.SimVizServer(sim)
+        server.start()
+
+        val robot = Robot(sim, blue = true)
+        robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
+
+        val gamepad = Gamepad()
+        val simGamepad = SimGamepad(gamepad)
+
+        println("Robot.kt sim running at http://localhost:8080")
+        println("Use a connected gamepad to drive. Press Ctrl+C to stop.")
+        println("Controls: sticks=drive, right_trigger=intake, left_bumper=flywheel, right_bumper=shoot")
+
+        var frameCount = 0
+        while (true) {
+            simGamepad.tick()
+
+            // Use Robot's drive controller for drivetrain
+            robot.drive.update(gamepad, sim)
+
+            // Intake control
+            sim.intake = gamepad.right_trigger.toDouble()
+
+            // Flywheel via Robot's subsystem
+            if (gamepad.left_bumper) {
+                robot.flywheel.target = 400.0 // rad/s target
+            } else {
+                robot.flywheel.target = 0.0
+            }
+            robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
+
+            // Shoot
+            if (gamepad.right_bumper) sim.shootBall()
+
+            // Run Robot's update loop (turret PID, aiming, dispatcher)
+            robot.update()
+
+            sim.update()
+            frameCount++
+            if (frameCount % 4 == 0) {
+                server.broadcastState()
+            }
+            Thread.sleep(5)
+        }
+    }
+
+    /**
+     * WASD-driven sim using the full Robot.kt control stack.
+     */
+    @Test
+    fun testWithRobotWasd() {
+        sim.spawnFieldBalls()
+
+        val server = sigmacorns.sim.viz.SimVizServer(sim)
+        server.start()
+
+        val robot = Robot(sim, blue = true)
+        robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
+
+        println("Robot.kt WASD sim running at http://localhost:8080")
+        println("Use WASD keys in the browser to drive. Press Ctrl+C to stop.")
+
+        var frameCount = 0
+        while (true) {
+            val wasd = server.wasdState
+            val vx = if (wasd.w) 1.0 else if (wasd.s) -1.0 else 0.0
+            val vy = if (wasd.a) -1.0 else if (wasd.d) 1.0 else 0.0
+            val omega = if (wasd.q) -1.0 else if (wasd.e) 1.0 else 0.0
+
+            // Use Robot's drive controller
+            robot.drive.drive(Pose2d(vx, vy, omega), sim)
+
+            // Run Robot's update loop (turret PID, aiming, dispatcher)
+            robot.update()
 
             sim.update()
             frameCount++
