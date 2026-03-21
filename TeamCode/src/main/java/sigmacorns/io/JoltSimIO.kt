@@ -179,12 +179,10 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Start at the shooter position on the robot (offset along robot heading)
         val shooterX = robotX + SHOOTER_FORWARD_OFFSET * cos(robotTheta)
         val shooterY = robotY + SHOOTER_FORWARD_OFFSET * sin(robotTheta)
-        val shooterZ = ROBOT_HEIGHT + SHOOTER_HEIGHT / 2.0
+        val shooterZ = ROBOT_HEIGHT + SHOOTER_HEIGHT
 
-        // Then project forward along the launch heading to clear the robot body
-        val clearance = SHOOTER_LENGTH / 2.0 + 0.05
-        val spawnX = shooterX + clearance * cos(launchHeading)
-        val spawnY = shooterY + clearance * sin(launchHeading)
+        val spawnX = shooterX
+        val spawnY = shooterY
         val spawnZ = shooterZ
 
         JoltNative.nativeSpawnBall(handle,

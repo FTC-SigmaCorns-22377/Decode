@@ -75,7 +75,7 @@ robotMesh.add(arrowMesh);
 // Shooter turret (~1/4 robot volume, sits on top of robot)
 const SHOOTER_WIDTH = 0.2;
 const SHOOTER_LENGTH = 0.2;
-const SHOOTER_HEIGHT = 0.15;
+const SHOOTER_HEIGHT = 0.075;
 // Centered 2/3 back from front: front is +Z = ROBOT_SIZE/2, offset = 0.2 - 2/3*0.4 = -0.067
 const SHOOTER_Z_OFFSET = ROBOT_SIZE / 2 - (2 / 3) * ROBOT_SIZE;
 
@@ -137,10 +137,13 @@ const hoodGroup = new THREE.Group();
 hoodGroup.position.set(0, 0, SHOOTER_LENGTH / 2);
 shooterGroup.add(hoodGroup);
 
-const hoodMat = new THREE.MeshStandardMaterial({ color: 0xcc6633, transparent: true, opacity: 0.7 });
-const hoodGeo = new THREE.BoxGeometry(SHOOTER_WIDTH * 0.9, 0.01, SHOOTER_LENGTH * 0.6);
+const HOOD_RADIUS = FLYWHEEL_RADIUS * 4.2;
+const HOOD_ARC = (40 / 180) * Math.PI; // 40-degree arc
+const HOOD_OFFSET = (120 / 180) * Math.PI; // rotate 120 degrees backward
+const hoodMat = new THREE.MeshStandardMaterial({ color: 0xcc6633, side: THREE.DoubleSide });
+const hoodGeo = new THREE.CylinderGeometry(HOOD_RADIUS, HOOD_RADIUS, SHOOTER_WIDTH * 0.8, 16, 1, false, -HOOD_ARC / 2 + HOOD_OFFSET, HOOD_ARC);
+hoodGeo.rotateZ(Math.PI / 2); // align along X like flywheel
 const hoodMesh = new THREE.Mesh(hoodGeo, hoodMat);
-hoodMesh.position.set(0, FLYWHEEL_RADIUS, -SHOOTER_LENGTH * 0.3);
 hoodGroup.add(hoodMesh);
 
 // ---- Goal structures (DECODE game-accurate) ----
