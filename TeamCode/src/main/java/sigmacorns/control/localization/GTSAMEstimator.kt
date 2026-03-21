@@ -60,10 +60,13 @@ class GTSAMEstimator(
                 System.loadLibrary("decode_estimator_jni")
                 logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (System.loadLibrary)")
             }
-        } catch (e: Exception) {
-            logger.log(LogLevel.ERROR, "Failed to load decode_estimator library: ${e.message}")
-        } catch (e: UnsatisfiedLinkError) {
-            logger.log(LogLevel.ERROR, "Failed to load decode_estimator library: ${e.message}")
+        } catch (_: Throwable) {
+            // FTC Android path failed (e.g. running in host test environment), fall back
+            try {
+                System.loadLibrary("decode_estimator_jni")
+            } catch (e: UnsatisfiedLinkError) {
+                logger.log(LogLevel.ERROR, "Failed to load decode_estimator library: ${e.message}")
+            }
         }
     }
 
