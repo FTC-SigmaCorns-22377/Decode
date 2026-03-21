@@ -40,7 +40,7 @@ function applyFrame(state) {
     if (!state) return;
     updateRobot(state.robot.x, state.robot.y, state.robot.theta,
         state.robot.turretAngle, state.robot.intakeAngle,
-        state.robot.hoodAngle, state.robot.flywheelRPM);
+        state.robot.hoodAngle, state.robot.flywheelRPM, state.robot.intakeRollerRPM);
     updateBalls(state.balls || []);
     updateGoals(state.goals);
     timeDisplay.textContent = state.t.toFixed(3) + 's';
@@ -71,7 +71,8 @@ scrubber.addEventListener('input', () => {
 });
 
 // WASD keyboard drive input
-const keys = { w: false, a: false, s: false, d: false, q: false, e: false };
+const keys = { w: false, a: false, s: false, d: false, q: false, e: false, r: false, f: false };
+const toggleKeys = { r: false }; // r is a toggle, not hold
 
 function sendKeys() {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -81,7 +82,13 @@ function sendKeys() {
 
 document.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
-    if (key in keys && !keys[key]) {
+    if (key in toggleKeys) {
+        if (!e.repeat) {
+            toggleKeys[key] = !toggleKeys[key];
+            keys[key] = toggleKeys[key];
+            sendKeys();
+        }
+    } else if (key in keys && !keys[key]) {
         keys[key] = true;
         sendKeys();
     }
@@ -89,6 +96,7 @@ document.addEventListener('keydown', (e) => {
 
 document.addEventListener('keyup', (e) => {
     const key = e.key.toLowerCase();
+    if (key in toggleKeys) return; // toggle keys don't respond to keyup
     if (key in keys) {
         keys[key] = false;
         sendKeys();

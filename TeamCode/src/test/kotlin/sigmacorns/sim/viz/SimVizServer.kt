@@ -6,7 +6,7 @@ import io.javalin.websocket.WsContext
 import sigmacorns.io.JoltSimIO
 import java.util.concurrent.ConcurrentHashMap
 
-data class WasdState(val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false, val q: Boolean = false, val e: Boolean = false)
+data class WasdState(val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false, val q: Boolean = false, val e: Boolean = false, val r: Boolean = false, val f: Boolean = false)
 
 class SimVizServer(
     private val simIO: JoltSimIO,

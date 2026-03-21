@@ -385,7 +385,7 @@ const greenMat = new THREE.MeshStandardMaterial({ color: 0x00cc44 });
 const purpleMat = new THREE.MeshStandardMaterial({ color: 0x9933ff });
 const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 16, 12);
 
-function updateRobot(x, y, theta, turretAngle, intakeAngle, hoodAngle, flywheelRPM) {
+function updateRobot(x, y, theta, turretAngle, intakeAngle, hoodAngle, flywheelRPM, intakeRollerRPM) {
     // sim (x=forward, y=left) -> Three.js (x=-y, z=x), sim theta -> rotation about -Y
     robotMesh.position.set(-y, ROBOT_HEIGHT / 2, x);
     robotMesh.rotation.y = -theta;
@@ -395,7 +395,7 @@ function updateRobot(x, y, theta, turretAngle, intakeAngle, hoodAngle, flywheelR
     }
     // Intake pivots around X axis
     if (intakeAngle !== undefined) {
-        intakeGroup.rotation.x = intakeAngle;
+        intakeGroup.rotation.x = -intakeAngle;
     }
     // Hood pivots around X axis (negative = tilts upward)
     if (hoodAngle !== undefined) {
@@ -405,6 +405,9 @@ function updateRobot(x, y, theta, turretAngle, intakeAngle, hoodAngle, flywheelR
     if (flywheelRPM !== undefined && flywheelRPM !== 0) {
         flywheelMesh.rotation.x += (flywheelRPM / 60) * 2 * Math.PI * 0.016; // ~60fps
     }
+    // Cone color indicators: green = active, default = inactive
+    shooterArrowMat.color.set(Math.abs(flywheelRPM || 0) > 10 ? 0x00ff00 : 0xff3333);
+    arrowMat.color.set(Math.abs(intakeRollerRPM || 0) > 10 ? 0x00ff00 : 0xffcc00);
 }
 
 function updateBalls(balls) {
