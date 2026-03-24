@@ -6,6 +6,7 @@ let isPaused = false;
 
 const scrubber = document.getElementById('scrubber');
 const timeDisplay = document.getElementById('time-display');
+const posDisplay = document.getElementById('pos-display');
 const playPauseBtn = document.getElementById('play-pause');
 const liveBtn = document.getElementById('live-btn');
 
@@ -44,6 +45,7 @@ function applyFrame(state) {
     updateBalls(state.balls || []);
     updateGoals(state.goals);
     timeDisplay.textContent = state.t.toFixed(3) + 's';
+    posDisplay.innerHTML = `X: ${state.robot.x.toFixed(3)}<br>Y: ${state.robot.y.toFixed(3)}`;
 }
 
 // Controls
@@ -73,6 +75,7 @@ scrubber.addEventListener('input', () => {
 // Keyboard input — driver (WASD) and operator (number keys, space, shift)
 const keys = {
     w: false, a: false, s: false, d: false, q: false, e: false, r: false, f: false,
+    o: false, p: false,
     n1: false, n2: false, n3: false, n4: false,
     space: false, shift: false,
 };

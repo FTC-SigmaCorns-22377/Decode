@@ -438,6 +438,7 @@ class JoltVisualizerTest {
         println("  WASD           = drive forward/left/back/right")
         println("  Q / E          = rotate left / right")
         println("=== SUBSYSTEMS (Keyboard) ===")
+        println("  O / P          = turret yaw left / right")
         println("  R              = intake + flywheel (toggle)")
         println("  F              = shoot")
         println("  1              = auto-aim toggle")
@@ -450,14 +451,23 @@ class JoltVisualizerTest {
         var prevN3 = false
         var flywheelSpinup = false
 
+        val dtSeconds = JoltSimIO.SIM_UPDATE_TIME.toDouble(kotlin.time.DurationUnit.SECONDS)
+
         var frameCount = 0
         while (true) {
             val kb = server.wasdState
             val vx = if (kb.w) 1.0 else if (kb.s) -1.0 else 0.0
             val vy = if (kb.a) -1.0 else if (kb.d) 1.0 else 0.0
-            val omega = if (kb.q) -1.0 else if (kb.e) 1.0 else 0.0
+            val omega = if (kb.q) -0.3 else if (kb.e) 0.3 else 0.0
 
             robot.drive.drive(Pose2d(vx, vy, omega), sim)
+
+            // Turret yaw - O/P (directly set robot-relative target)
+            val yawInput = if (kb.o) 1.0 else if (kb.p) -1.0 else 0.0
+            if (kotlin.math.abs(yawInput) > 0.1) {
+                robot.aim.turret.fieldRelativeMode = false
+                robot.aim.turret.targetAngle += yawInput * Math.toRadians(60.0) * dtSeconds
+            }
 
             // Intake + flywheel combo - R (toggle)
             if (kb.r) {

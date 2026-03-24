@@ -110,13 +110,15 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Send roller omega to C++ for contact surface velocity
         JoltNative.nativeSetIntakeRollerOmega(handle, intakeRollerState.omega.toFloat())
 
-        // Integrate turret (servo position model)
-        // turret power 0..1 maps to -SERVO_TURRET_RANGE/2..+SERVO_TURRET_RANGE/2
-        val turretTarget = (turret - 0.5) * SERVO_TURRET_RANGE
-        val turretError = turretTarget - turretAngleRad
-        val turretVel = (SERVO_K * turretError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
-        turretAngleRad += turretVel * dtSeconds
-        turretAngleRad = turretAngleRad.coerceIn(-SERVO_TURRET_RANGE / 2.0, SERVO_TURRET_RANGE / 2.0)
+        // Integrate turret (DC motor model matching Turret.kt PID output)
+        val turretTorque = TURRET_MOTOR.torque(turret, turretVelocityRad)
+        val turretDamping = TURRET_DAMPING * turretVelocityRad
+        val turretAlpha = if (TURRET_INERTIA > 0.0) (turretTorque - turretDamping) / TURRET_INERTIA else 0.0
+        turretVelocityRad += turretAlpha * dtSeconds
+        turretAngleRad += turretVelocityRad * dtSeconds
+        // Clamp to turret limits and zero velocity at limits
+        if (turretAngleRad > TURRET_ANGLE_LIMIT) { turretAngleRad = TURRET_ANGLE_LIMIT; turretVelocityRad = 0.0 }
+        if (turretAngleRad < -TURRET_ANGLE_LIMIT) { turretAngleRad = -TURRET_ANGLE_LIMIT; turretVelocityRad = 0.0 }
 
         // Integrate hood servo
         val hoodTarget = hood.coerceIn(0.0, 1.0) * HOOD_RANGE
@@ -311,7 +313,7 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         )
         const val TURRET_INERTIA = 0.005 // kg·m^2, turret assembly inertia
         const val TURRET_DAMPING = 0.5 // viscous damping coefficient
-        val TURRET_ANGLE_LIMIT = Math.PI / 2.0 // ±90° range matching turretRange limits
+        val TURRET_ANGLE_LIMIT = Math.PI // ±180° range matching turretRange limits
 
         // Default hood angle
         const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0

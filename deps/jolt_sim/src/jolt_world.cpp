@@ -377,18 +377,26 @@ void JoltWorld::checkGoalScoring() {
             float deltaX = bp.GetX() + HALF_FIELD;
             float deltaZ = HALF_FIELD - zs * bp.GetZ() - CRAMP_WIDTH;
 
-            // Height check: ball is inside the goal (below lip, above ground)
-            bool insideTriangle = deltaX >= 0.0f && deltaX <= GOAL_LEG
-                               && deltaZ >= 0.0f && deltaZ <= GOAL_LEG
-                               && (deltaX + deltaZ) <= GOAL_LEG;
-            bool insideHeight = bp.GetY() > BALL_RADIUS && bp.GetY() < GOAL_LIP_HEIGHT;
+            // Height check: ball is inside the goal (below lip, at or above ground)
+            // Expand detection by BALL_RADIUS to catch balls resting against walls
+            bool insideTriangle = deltaX >= -BALL_RADIUS && deltaX <= GOAL_LEG + BALL_RADIUS
+                               && deltaZ >= -BALL_RADIUS && deltaZ <= GOAL_LEG + BALL_RADIUS
+                               && (deltaX + deltaZ) <= GOAL_LEG + BALL_RADIUS;
+            bool insideHeight = bp.GetY() >= 0.0f && bp.GetY() < GOAL_LIP_HEIGHT;
 
             if (insideTriangle && insideHeight) {
                 goal->scoredBalls++;
-                bodyInterface.RemoveBody(balls_[i].bodyId);
-                bodyInterface.DestroyBody(balls_[i].bodyId);
-                balls_[i] = balls_.back();
-                balls_.pop_back();
+
+                // Respawn ball at the top of the classifier ramp
+                float cornerX = -HALF_FIELD;
+                float cornerZ = zs * HALF_FIELD;
+                float rampStartX = cornerX + GOAL_LEG;
+                float rampZ = cornerZ - zs * CRAMP_WIDTH / 2.0f;
+                // Place at ramp input end, slightly above the surface
+                JPH::Vec3 rampPos(rampStartX + 0.05f, CRAMP_START_H + BALL_RADIUS + 0.01f, rampZ);
+                bodyInterface.SetPosition(balls_[i].bodyId, rampPos, JPH::EActivation::Activate);
+                bodyInterface.SetLinearVelocity(balls_[i].bodyId, JPH::Vec3::sZero());
+                bodyInterface.SetAngularVelocity(balls_[i].bodyId, JPH::Vec3::sZero());
             }
         }
     }

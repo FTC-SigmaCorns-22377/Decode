@@ -154,7 +154,12 @@ class GTSAMEstimator(
         updateVision(visionResult, turretAngle)
 
         fusionWorker.tick()
-        fusedPoseInternal = fusionWorker.fusedPose
+        if (fusionWorker.isInitialized) {
+            fusedPoseInternal = fusionWorker.fusedPose
+        } else {
+            // Fall back to raw odometry when GTSAM is not available
+            fusedPoseInternal = robotPose
+        }
         fusedPose = fusedPoseInternal
         
         debugLogger?.logFusedPose(fusedPose)

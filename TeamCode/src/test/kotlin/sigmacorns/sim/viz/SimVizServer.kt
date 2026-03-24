@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 data class WasdState(
     val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false,
     val q: Boolean = false, val e: Boolean = false, val r: Boolean = false, val f: Boolean = false,
+    val o: Boolean = false, val p: Boolean = false,
     val n1: Boolean = false, val n2: Boolean = false, val n3: Boolean = false, val n4: Boolean = false,
     val space: Boolean = false, val shift: Boolean = false,
 )
@@ -58,7 +59,7 @@ class SimVizServer(
                 "x" to robotState[0],
                 "y" to robotState[1],
                 "theta" to robotState[2],
-                "turretAngle" to simIO.turretPosition(),
+                "turretAngle" to simIO.turretPosition() / sigmacorns.constants.turretTicksPerRad,
                 "intakeAngle" to simIO.intakeAngle(),
                 "intakeRollerRPM" to simIO.intakeRollerVelocity() * 60.0 / (2.0 * Math.PI),
                 "hoodAngle" to simIO.hoodPosition(),

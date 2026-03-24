@@ -3,6 +3,7 @@ package sigmacorns.subsystem
 import org.joml.Vector2d
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.turretRange
+import sigmacorns.control.aim.TurretTargeting
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.control.aim.tune.AdaptiveTuner
@@ -34,6 +35,7 @@ class AimingSystem(
         private set
 
     var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
+    private val targeting = TurretTargeting(goalPosition)
 
     var positionOverride: Double? = null
 
@@ -83,6 +85,11 @@ class AimingSystem(
      * Optionally skipped if the opmode wants full manual control of turret target.
      */
     fun applyAutoAimTarget() {
+        if (!autoAim.enabled) return
+        val angles = targeting.computeAngles(autoAim.fusedPose)
+        turret.fieldRelativeMode = true
+        turret.fieldTargetAngle = angles.fieldAngle
+        targetDistance = angles.distance
     }
 
     /**

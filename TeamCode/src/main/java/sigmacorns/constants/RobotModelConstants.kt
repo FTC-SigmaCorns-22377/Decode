@@ -70,7 +70,7 @@ const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0
 
 val turretTicksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2*PI) * 76 / 19
 val turretRange = MotorRangeMapper(
-    limits = -PI/2.0..PI/2.0,           // turret can rotate +/- 190 degrees
-    limitsTick = -PI/2.0*turretTicksPerRad..PI/2.0*turretTicksPerRad,           // turret can rotate +/- 190 degrees
+    limits = -PI..PI,           // turret can rotate +/- 180 degrees
+    limitsTick = -PI*turretTicksPerRad..PI*turretTicksPerRad,
     slowdownDist = 0.3           // slow down within 0.3 rad of limits
 )
