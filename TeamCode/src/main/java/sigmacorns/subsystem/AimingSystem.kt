@@ -35,7 +35,7 @@ class AimingSystem(
         private set
 
     var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
-    private val targeting = TurretTargeting(goalPosition)
+    val targeting = TurretTargeting(goalPosition)
 
     var positionOverride: Double? = null
 

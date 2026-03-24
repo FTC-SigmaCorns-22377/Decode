@@ -277,6 +277,9 @@ class JoltVisualizerTest {
 
         val robot = Robot(sim, blue = true)
         robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
+        // Sim X axis is negated relative to real field — flip goal X for aiming
+        robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
+        robot.aim.targeting.goalPosition = robot.aim.goalPosition
 
         val gamepad = Gamepad()
         val simGamepad = SimGamepad(gamepad)
@@ -432,6 +435,8 @@ class JoltVisualizerTest {
 
         val robot = Robot(sim, blue = true)
         robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
+        robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
+        robot.aim.targeting.goalPosition = robot.aim.goalPosition
 
         println("Robot.kt WASD sim running at http://localhost:8080")
         println("=== DRIVER (Keyboard) ===")

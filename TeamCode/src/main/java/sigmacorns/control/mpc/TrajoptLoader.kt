@@ -88,6 +88,7 @@ object TrajoptLoader {
             samples = samples,
             totalTime = data.totalTime,
             waypointTimes = data.waypoint_times!!,
+            waypointTypes = entry.waypoints?.map { it.type } ?: emptyList(),
             eventMarkers = entry.eventMarkers ?: emptyList(),
             controls = data.controls,
         )

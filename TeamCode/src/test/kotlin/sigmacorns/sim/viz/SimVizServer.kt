@@ -5,6 +5,7 @@ import io.javalin.Javalin
 import io.javalin.websocket.WsContext
 import sigmacorns.io.JoltSimIO
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 
 data class WasdState(
     val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false,
@@ -23,6 +24,7 @@ class SimVizServer(
     }
     private val clients = ConcurrentHashMap.newKeySet<WsContext>()
     private val gson = Gson()
+    private val firstClientLatch = CountDownLatch(1)
 
     @Volatile var wasdState: WasdState = WasdState()
         private set
@@ -32,11 +34,18 @@ class SimVizServer(
             ws.onConnect { ctx -> clients.add(ctx) }
             ws.onClose { ctx -> clients.remove(ctx) }
             ws.onMessage { ctx ->
-                try { wasdState = gson.fromJson(ctx.message(), WasdState::class.java) } catch (_: Exception) {}
+                try {
+                    firstClientLatch.countDown()
+                    wasdState = gson.fromJson(ctx.message(), WasdState::class.java)
+                } catch (_: Exception) {}
             }
         }
         app.start(port)
         return this
+    }
+
+    fun awaitClient() {
+        firstClientLatch.await()
     }
 
     fun stop() {

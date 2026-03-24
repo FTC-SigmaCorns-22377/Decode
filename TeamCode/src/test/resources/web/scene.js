@@ -366,8 +366,8 @@ function createGoalStructure(zSign, color) {
     return { group, gateMesh, leverMesh, scoreCanvas, scoreCtx, scoreTex, scoreSprite };
 }
 
-const redGoal = createGoalStructure(1, 0xcc3333);
-const blueGoal = createGoalStructure(-1, 0x3333cc);
+const redGoal = createGoalStructure(1, 0x3333cc);
+const blueGoal = createGoalStructure(-1, 0xcc3333);
 
 function updateScoreSprite(goal, label, score, bgColor) {
     const { scoreCanvas, scoreCtx, scoreTex } = goal;
@@ -464,8 +464,8 @@ function updateGoals(goals) {
     }
 
     // Update score displays
-    updateScoreSprite(redGoal, 'RED', goals.redScore || 0, 'rgba(180,40,40,0.8)');
-    updateScoreSprite(blueGoal, 'BLUE', goals.blueScore || 0, 'rgba(40,40,180,0.8)');
+    updateScoreSprite(redGoal, 'BLUE', goals.redScore || 0, 'rgba(40,40,180,0.8)');
+    updateScoreSprite(blueGoal, 'RED', goals.blueScore || 0, 'rgba(180,40,40,0.8)');
 }
 
 export { updateRobot, updateBalls, updateGoals };
