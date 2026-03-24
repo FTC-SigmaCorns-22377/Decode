@@ -280,7 +280,6 @@ class JoltVisualizerTest {
         // Sim X axis is negated relative to real field — flip goal X for aiming
         robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
         robot.aim.targeting.goalPosition = robot.aim.goalPosition
-
         val gamepad = Gamepad()
         val simGamepad = SimGamepad(gamepad)
 

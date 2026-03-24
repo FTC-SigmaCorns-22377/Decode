@@ -272,12 +272,12 @@ private:
     // Gate (push-to-open, gravity-closed)
     static constexpr float GATE_CLOSED_H      = 0.14f;    // 5.5" contact area when closed
     static constexpr float GATE_OPEN_H        = 0.076f;   // 3" when open
-    static constexpr float GATE_TRAVEL        = 0.051f;   // 2" horizontal displacement
+    static constexpr float GATE_TRAVEL        = 0.15f;    // enough clearance for ball diameter
     static constexpr float GATE_WIDTH         = 0.16f;    // matches ramp width
     static constexpr float GATE_THICK         = 0.02f;
 
     // Lever (gate actuator arm at ramp output end)
-    static constexpr float LEVER_LENGTH       = 0.15f;   // arm extension toward field (~6")
+    static constexpr float LEVER_LENGTH       = 0.25f;   // arm extension toward field (~10")
     static constexpr float LEVER_WIDTH        = 0.04f;   // narrow handle width
     static constexpr float LEVER_THICKNESS    = 0.02f;
 };

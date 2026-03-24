@@ -411,15 +411,18 @@ void JoltWorld::updateGates(float dt) {
         JPH::Vec3 gatePos = bodyInterface.GetPosition(goal->gateId);
         JPH::Vec3 robotPos = bodyInterface.GetPosition(robotBodyId_);
 
-        // Check if robot is near the gate and pushing it
+        // Gate opens when the lever is pushed (lever lifts inner end, releasing the gate)
+        bool leverActivated = goal->leverAngle > 0.1f;
+
+        // Also open if robot is directly pushing the gate
         float dist = (robotPos - gatePos).Length();
         bool robotPushing = dist < (ROBOT_WIDTH / 2.0f + GATE_THICK + 0.05f);
 
-        if (robotPushing && goal->gateOpenAmount < GATE_TRAVEL) {
+        if ((leverActivated || robotPushing) && goal->gateOpenAmount < GATE_TRAVEL) {
             // Open the gate
-            goal->gateOpenAmount += dt * 0.1f; // opens over ~0.5s
+            goal->gateOpenAmount += dt * 0.3f; // opens over ~0.5s
             goal->gateOpenAmount = std::min(goal->gateOpenAmount, GATE_TRAVEL);
-        } else if (!robotPushing && goal->gateOpenAmount > 0.0f) {
+        } else if (!leverActivated && !robotPushing && goal->gateOpenAmount > 0.0f) {
             // Gravity closes the gate
             goal->gateOpenAmount -= dt * 0.08f;
             goal->gateOpenAmount = std::max(goal->gateOpenAmount, 0.0f);
@@ -451,7 +454,7 @@ void JoltWorld::updateLevers(float dt) {
         float targetAngle = 0.0f;
         if (robotPushing) {
             // Robot pushes outer end down → lever tilts so inner end goes up
-            targetAngle = 0.35f;
+            targetAngle = 0.7f;
         }
 
         float angleDiff = targetAngle - goal->leverAngle;

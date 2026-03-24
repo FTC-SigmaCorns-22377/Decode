@@ -45,8 +45,8 @@ data class AxisMapping(
 
         val PLAYSTATION = AxisMapping(
             leftStickX = 0, leftStickY = 1,
-            rightStickX = 2, rightStickY = 5,
-            leftTrigger = 3, rightTrigger = 4,
+            rightStickX = 3, rightStickY = 4,
+            leftTrigger = 2, rightTrigger = 5,
             triggerRange = TriggerRange.MINUS_ONE_TO_ONE,
         )
 
@@ -163,7 +163,7 @@ class SimGamepad(private val gamepad: Gamepad) {
 
     private fun scanForJoystick() {
         for (id in GLFW.GLFW_JOYSTICK_1..GLFW.GLFW_JOYSTICK_LAST) {
-            if (GLFW.glfwJoystickPresent(id)) {
+            if (GLFW.glfwJoystickPresent(id) && GLFW.glfwJoystickIsGamepad(id)) {
                 if (id != jid) {
                     val name = GLFW.glfwGetJoystickName(id)
                     val controllerType = ControllerType.fromJoystickName(name)
