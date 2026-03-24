@@ -134,10 +134,10 @@ class SimGamepad(private val gamepad: Gamepad) {
         val am = axisMapping
         val bm = buttonMapping
 
-        gamepad.left_stick_x  = -axes.get(am.leftStickX)
-        gamepad.left_stick_y  = axes.get(am.leftStickY)
-        gamepad.right_stick_x = -axes.get(am.rightStickX)
-        gamepad.right_stick_y = axes.get(am.rightStickY)
+        gamepad.left_stick_x  = applyDeadzone(-axes.get(am.leftStickX))
+        gamepad.left_stick_y  = applyDeadzone(axes.get(am.leftStickY))
+        gamepad.right_stick_x = applyDeadzone(-axes.get(am.rightStickX))
+        gamepad.right_stick_y = applyDeadzone(axes.get(am.rightStickY))
         gamepad.left_trigger  = am.normalizeTrigger(axes.get(am.leftTrigger))
         gamepad.right_trigger = am.normalizeTrigger(axes.get(am.rightTrigger))
 
@@ -180,5 +180,12 @@ class SimGamepad(private val gamepad: Gamepad) {
 
     companion object {
         private var glfwInitialized = false
+        private const val STICK_DEADZONE = 0.1f
+
+        private fun applyDeadzone(value: Float): Float {
+            if (kotlin.math.abs(value) < STICK_DEADZONE) return 0f
+            val sign = if (value > 0) 1f else -1f
+            return sign * (kotlin.math.abs(value) - STICK_DEADZONE) / (1f - STICK_DEADZONE)
+        }
     }
 }

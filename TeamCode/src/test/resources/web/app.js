@@ -70,9 +70,25 @@ scrubber.addEventListener('input', () => {
     }
 });
 
-// WASD keyboard drive input
-const keys = { w: false, a: false, s: false, d: false, q: false, e: false, r: false, f: false };
-const toggleKeys = { r: false }; // r is a toggle, not hold
+// Keyboard input — driver (WASD) and operator (number keys, space, shift)
+const keys = {
+    w: false, a: false, s: false, d: false, q: false, e: false, r: false, f: false,
+    n1: false, n2: false, n3: false, n4: false,
+    space: false, shift: false,
+};
+const toggleKeys = { r: false, n1: false, n2: false }; // toggles, not hold
+
+// Map browser key names to our key state names
+function mapKey(e) {
+    const k = e.key.toLowerCase();
+    if (k === '1') return 'n1';
+    if (k === '2') return 'n2';
+    if (k === '3') return 'n3';
+    if (k === '4') return 'n4';
+    if (k === ' ') return 'space';
+    if (k === 'shift' || e.shiftKey && e.key === 'Shift') return 'shift';
+    return k;
+}
 
 function sendKeys() {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -81,7 +97,7 @@ function sendKeys() {
 }
 
 document.addEventListener('keydown', (e) => {
-    const key = e.key.toLowerCase();
+    const key = mapKey(e);
     if (key in toggleKeys) {
         if (!e.repeat) {
             toggleKeys[key] = !toggleKeys[key];
@@ -95,8 +111,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keyup', (e) => {
-    const key = e.key.toLowerCase();
-    if (key in toggleKeys) return; // toggle keys don't respond to keyup
+    const key = mapKey(e);
+    if (key in toggleKeys) return;
     if (key in keys) {
         keys[key] = false;
         sendKeys();

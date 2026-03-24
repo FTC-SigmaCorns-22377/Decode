@@ -265,8 +265,8 @@ class JoltVisualizerTest {
 
     /**
      * Runs the full Robot.kt control stack on the Jolt sim.
-     * Uses Robot's subsystems (DriveController, Flywheel, AimingSystem/Turret)
-     * instead of directly setting motor powers.
+     * Driver controls via gamepad (matching TeleopBase gm1 layout).
+     * Operator controls via browser keyboard (matching TeleopBase gm2 layout).
      */
     @Test
     fun testWithRobot() {
@@ -282,29 +282,130 @@ class JoltVisualizerTest {
         val simGamepad = SimGamepad(gamepad)
 
         println("Robot.kt sim running at http://localhost:8080")
-        println("Use a connected gamepad to drive. Press Ctrl+C to stop.")
-        println("Controls: sticks=drive, right_trigger=intake, left_bumper=flywheel, right_bumper=shoot")
+        println("=== DRIVER (Gamepad) ===")
+        println("  Sticks        = drive (dpad up/down = speed mode)")
+        println("  Left trigger   = intake")
+        println("  Right trigger  = shoot")
+        println("  A              = emergency stop")
+        println("  B              = force intake")
+        println("  Left bumper    = flywheel spinup toggle")
+        println("=== OPERATOR (Keyboard in browser) ===")
+        println("  Q / E          = turret yaw left / right")
+        println("  W / S          = manual flywheel power up / down")
+        println("  1              = auto-aim toggle")
+        println("  2              = flywheel spinup toggle")
+        println("  3              = reset position")
+        println("  R              = intake + flywheel (toggle)")
+        println("  F              = shoot")
+
+        // Edge detection state
+        var wasShooting = false
+        var wasLeftBumper = false
+        var prevF = false
+        var prevN1 = false
+        var prevN2 = false
+        var prevN3 = false
+
+        // Operator state
+        var flywheelSpinup = false
+        var manualFlywheelPower = 0.0
 
         var frameCount = 0
+        val dtSeconds = JoltSimIO.SIM_UPDATE_TIME.toDouble(kotlin.time.DurationUnit.SECONDS)
+
         while (true) {
             simGamepad.tick()
+            val kb = server.wasdState
 
-            // Use Robot's drive controller for drivetrain
+            // === DRIVER (Gamepad - matching TeleopBase gm1) ===
+
+            // Drivetrain (sticks + dpad speed mode handled by DriveController)
             robot.drive.update(gamepad, sim)
 
-            // Intake control
-            sim.intake = gamepad.right_trigger.toDouble()
+            // Intake - left trigger (matching TeleopBase)
+            sim.intake = gamepad.left_trigger.toDouble()
 
-            // Flywheel via Robot's subsystem
-            if (gamepad.left_bumper) {
-                robot.flywheel.target = 400.0 // rad/s target
+            // Force intake - B button
+            if (gamepad.b) sim.intake = 1.0
+
+            // Shoot - right trigger with edge detection (matching TeleopBase)
+            val isShooting = gamepad.right_trigger > 0.5
+            if (isShooting && !wasShooting) sim.shootBall()
+            wasShooting = isShooting
+
+            // Flywheel spinup toggle - left bumper
+            if (gamepad.left_bumper && !wasLeftBumper) flywheelSpinup = !flywheelSpinup
+            wasLeftBumper = gamepad.left_bumper
+
+            // Emergency stop - A button (matching TeleopBase)
+            if (gamepad.a) {
+                sim.driveFL = 0.0; sim.driveBL = 0.0
+                sim.driveFR = 0.0; sim.driveBR = 0.0
+                sim.intake = 0.0; sim.flywheel = 0.0
+                flywheelSpinup = false
+                manualFlywheelPower = 0.0
+            }
+
+            // === OPERATOR (Keyboard - matching TeleopBase gm2) ===
+
+            // Turret yaw - Q/E (matching gm2 left_stick_x)
+            val yawInput = if (kb.q) 1.0 else if (kb.e) -1.0 else 0.0
+            if (kotlin.math.abs(yawInput) > 0.1) {
+                robot.aim.positionOverride = (robot.aim.positionOverride ?: 0.0) +
+                    yawInput * Math.toRadians(60.0) * dtSeconds
+            } else if (!kb.q && !kb.e) {
+                // Clear override when no input (let auto-aim take over if enabled)
+            }
+
+            // Manual flywheel power - W/S (matching gm2 right_stick_y)
+            if (kb.w) manualFlywheelPower = (manualFlywheelPower + 2.0 * dtSeconds).coerceAtMost(1.0)
+            if (kb.s) manualFlywheelPower = (manualFlywheelPower - 2.0 * dtSeconds).coerceAtLeast(0.0)
+
+            // Auto-aim toggle - 1 key (matching gm2 back)
+            if (kb.n1 && !prevN1) {
+                robot.aim.autoAim.enabled = !robot.aim.autoAim.enabled
+                if (!robot.aim.autoAim.enabled) {
+                    robot.aim.turret.fieldRelativeMode = true
+                }
+                println("Auto-aim: ${if (robot.aim.autoAim.enabled) "ON" else "OFF"}")
+            }
+            prevN1 = kb.n1
+
+            // Flywheel spinup toggle - 2 key (matching gm2 left_bumper)
+            if (kb.n2 && !prevN2) {
+                flywheelSpinup = !flywheelSpinup
+                println("Flywheel spinup: ${if (flywheelSpinup) "ON" else "OFF"}")
+            }
+            prevN2 = kb.n2
+
+            // Reset position - 3 key (matching gm2 Y)
+            if (kb.n3 && !prevN3) {
+                sim.setPosition(Pose2d(0.0, 0.0, 0.0))
+                println("Position reset")
+            }
+            prevN3 = kb.n3
+
+            // Keyboard intake + flywheel combo - R (toggle)
+            if (kb.r) {
+                sim.intake = 1.0
+                flywheelSpinup = true
+            }
+
+            // Keyboard shoot - F
+            if (kb.f && !prevF) sim.shootBall()
+            prevF = kb.f
+
+            // === Flywheel subsystem update ===
+            if (flywheelSpinup) {
+                robot.flywheel.target = 400.0
+            } else if (manualFlywheelPower > 0.01) {
+                sim.flywheel = manualFlywheelPower
             } else {
                 robot.flywheel.target = 0.0
             }
-            robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
-
-            // Shoot
-            if (gamepad.right_bumper) sim.shootBall()
+            if (flywheelSpinup || manualFlywheelPower <= 0.01) {
+                robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
+            }
 
             // Run Robot's update loop (turret PID, aiming, dispatcher)
             robot.update()
@@ -320,6 +421,7 @@ class JoltVisualizerTest {
 
     /**
      * WASD-driven sim using the full Robot.kt control stack.
+     * WASD+QE for driving, number keys and R/F for subsystems.
      */
     @Test
     fun testWithRobotWasd() {
@@ -332,19 +434,71 @@ class JoltVisualizerTest {
         robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
 
         println("Robot.kt WASD sim running at http://localhost:8080")
-        println("Use WASD keys in the browser to drive. Press Ctrl+C to stop.")
+        println("=== DRIVER (Keyboard) ===")
+        println("  WASD           = drive forward/left/back/right")
+        println("  Q / E          = rotate left / right")
+        println("=== SUBSYSTEMS (Keyboard) ===")
+        println("  R              = intake + flywheel (toggle)")
+        println("  F              = shoot")
+        println("  1              = auto-aim toggle")
+        println("  2              = flywheel spinup toggle")
+        println("  3              = reset position")
+
+        var prevF = false
+        var prevN1 = false
+        var prevN2 = false
+        var prevN3 = false
+        var flywheelSpinup = false
 
         var frameCount = 0
         while (true) {
-            val wasd = server.wasdState
-            val vx = if (wasd.w) 1.0 else if (wasd.s) -1.0 else 0.0
-            val vy = if (wasd.a) -1.0 else if (wasd.d) 1.0 else 0.0
-            val omega = if (wasd.q) -1.0 else if (wasd.e) 1.0 else 0.0
+            val kb = server.wasdState
+            val vx = if (kb.w) 1.0 else if (kb.s) -1.0 else 0.0
+            val vy = if (kb.a) -1.0 else if (kb.d) 1.0 else 0.0
+            val omega = if (kb.q) -1.0 else if (kb.e) 1.0 else 0.0
 
-            // Use Robot's drive controller
             robot.drive.drive(Pose2d(vx, vy, omega), sim)
 
-            // Run Robot's update loop (turret PID, aiming, dispatcher)
+            // Intake + flywheel combo - R (toggle)
+            if (kb.r) {
+                sim.intake = 1.0
+                flywheelSpinup = true
+            } else {
+                sim.intake = 0.0
+            }
+
+            // Shoot - F
+            if (kb.f && !prevF) sim.shootBall()
+            prevF = kb.f
+
+            // Auto-aim toggle - 1
+            if (kb.n1 && !prevN1) {
+                robot.aim.autoAim.enabled = !robot.aim.autoAim.enabled
+                if (!robot.aim.autoAim.enabled) {
+                    robot.aim.turret.fieldRelativeMode = true
+                }
+                println("Auto-aim: ${if (robot.aim.autoAim.enabled) "ON" else "OFF"}")
+            }
+            prevN1 = kb.n1
+
+            // Flywheel spinup toggle - 2
+            if (kb.n2 && !prevN2) {
+                flywheelSpinup = !flywheelSpinup
+                println("Flywheel spinup: ${if (flywheelSpinup) "ON" else "OFF"}")
+            }
+            prevN2 = kb.n2
+
+            // Reset position - 3
+            if (kb.n3 && !prevN3) {
+                sim.setPosition(Pose2d(0.0, 0.0, 0.0))
+                println("Position reset")
+            }
+            prevN3 = kb.n3
+
+            // Flywheel subsystem
+            robot.flywheel.target = if (flywheelSpinup) 400.0 else 0.0
+            robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
+
             robot.update()
 
             sim.update()
