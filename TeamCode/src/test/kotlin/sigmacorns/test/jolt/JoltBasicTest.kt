@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import sigmacorns.Robot
 import sigmacorns.io.BallColor
 import sigmacorns.io.JoltSimIO
 import kotlin.math.abs
@@ -175,20 +176,22 @@ class JoltBasicTest {
 
     @Test
     fun testTurretRotation() {
-        // Servo turret: 0..1 maps to -π..+π target position
-        // Setting turret=1.0 targets +π (full right)
+        // DC motor turret: power -1..1 drives turret, turretPosition() returns encoder ticks
+        // Setting turret=1.0 applies full positive power
         sim.turret = 1.0
         repeat(100) { sim.update() } // 500ms
 
-        val angle = sim.turretPosition()
-        println("Turret after 500ms at servo=1.0: ${Math.toDegrees(angle)}°")
-        assertTrue(angle > 0.1, "Turret should have rotated positively, got $angle rad")
+        val ticks = sim.turretPosition()
+        println("Turret after 500ms at power=1.0: $ticks ticks")
+        assertTrue(ticks > 0.1, "Turret should have rotated positively, got $ticks ticks")
 
-        // Turret should clamp to ±π (SERVO_TURRET_RANGE/2)
+        // Turret should clamp to ±90° (TURRET_ANGLE_LIMIT)
         repeat(400) { sim.update() } // 2 more seconds
-        val clampedAngle = sim.turretPosition()
-        assertTrue(clampedAngle <= Math.PI + 0.001,
-            "Turret should clamp to π, got $clampedAngle rad")
+        sim.turret = 0.0 // stop
+        val maxTicks = sim.turretPosition()
+        val maxAngle = maxTicks / sigmacorns.constants.turretTicksPerRad
+        assertTrue(maxAngle <= Math.PI / 2.0 + 0.01,
+            "Turret should clamp to π/2, got ${Math.toDegrees(maxAngle)}°")
     }
 
     @Test
@@ -223,15 +226,15 @@ class JoltBasicTest {
 
     @Test
     fun testShooterTurretDirection() {
-        // Rotate turret 90° left, shoot, verify ball goes in +y direction
-        // servo=0.75 targets +π/2 (90° left)
-        sim.turret = 0.75
-        repeat(200) { sim.update() } // let turret settle
-        sim.turret = 0.75 // hold position
+        // Rotate turret left using motor power, then shoot and verify ball goes in +y direction
+        sim.turret = 1.0
+        repeat(200) { sim.update() } // apply positive power to rotate
+        sim.turret = 0.0 // stop
 
-        val turretAngle = sim.turretPosition()
+        val turretTicks = sim.turretPosition()
+        val turretAngle = turretTicks / sigmacorns.constants.turretTicksPerRad
         println("Turret angle: ${Math.toDegrees(turretAngle)}°")
-        assertTrue(turretAngle > 0.5, "Turret should have rotated")
+        assertTrue(turretAngle > 0.3, "Turret should have rotated")
 
         // Spin up and shoot
         sim.heldBalls.add(BallColor.PURPLE)

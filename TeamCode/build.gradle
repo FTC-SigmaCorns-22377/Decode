@@ -190,6 +190,71 @@ tasks.register("buildJoltJni", Exec) {
     commandLine "bash", "build-host.sh"
 }
 
+tasks.register("buildDecodeEstimatorHost") {
+    group = "build"
+    description = "Builds decode_estimator for the host machine and copies the JNI library into src/test/jniLibs"
+
+    doLast {
+        def repoRoot = file("${rootProject.projectDir}/deps/decode_estimator")
+        def buildDir = file("${repoRoot}/build-host")
+
+        exec {
+            workingDir repoRoot
+            commandLine "bash", "scripts/build.sh",
+                "--build-dir", buildDir.absolutePath
+        }
+
+        def libName = org.gradle.internal.os.OperatingSystem.current().isMacOsX()
+            ? "libdecode_estimator_jni.dylib"
+            : "libdecode_estimator_jni.so"
+
+        def builtLib = file("${buildDir}/${libName}")
+        if (!builtLib.exists()) {
+            throw new GradleException("Expected host JNI library not found at ${builtLib.path}")
+        }
+
+        def testJniLibsDir = file("${projectDir}/src/test/jniLibs")
+        testJniLibsDir.mkdirs()
+        copy {
+            from builtLib
+            into testJniLibsDir
+        }
+
+        logger.lifecycle("Copied ${builtLib.name} to ${testJniLibsDir}")
+    }
+}
+
+tasks.register("buildDecodeEstimator") {
+    group = "build"
+    description = "Builds decode_estimator for Android arm64-v8a and copies libdecode_estimator_jni.so into jniLibs"
+
+    doLast {
+        def repoRoot = file("${rootProject.projectDir}/deps/decode_estimator")
+        def ndkDir = project(':TeamCode').android.ndkDirectory
+        def buildDir = file("${repoRoot}/build-android")
+
+        exec {
+            workingDir repoRoot
+            commandLine "bash", "scripts/build.sh",
+                "--android",
+                "--cortex-a53",
+                "--android-ndk", ndkDir.absolutePath,
+                "--build-dir", buildDir.absolutePath
+        }
+
+        def builtLib = fileTree(buildDir).matching { include '**/libdecode_estimator_jni.so' }.singleFile
+
+        def jniLibsDir = file("${projectDir}/src/main/jniLibs/arm64-v8a")
+        jniLibsDir.mkdirs()
+        copy {
+            from builtLib
+            into jniLibsDir
+        }
+
+        logger.lifecycle("Copied libdecode_estimator_jni.so to ${jniLibsDir}")
+    }
+}
+
 tasks.register("syncTrajopt") {
     group = "deployment"
     description = "Syncs TeamCode/trajopt contents to /sdcard/FIRST/trajopt when the remote directory exists"
