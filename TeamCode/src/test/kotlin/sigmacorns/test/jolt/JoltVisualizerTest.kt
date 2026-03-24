@@ -206,6 +206,7 @@ class JoltVisualizerTest {
         println("Use WASD keys in the browser to drive. Press Ctrl+C to stop.")
 
         var frameCount = 0
+        var prevF = false
         while (true) {
             val wasd = server.wasdState
             val vx = if (wasd.w) 1.0 else if (wasd.s) -1.0 else 0.0
@@ -213,6 +214,12 @@ class JoltVisualizerTest {
             val omega = if (wasd.q) -1.0 else if (wasd.e) 1.0 else 0.0
             driveController.drive(Pose2d(vx, vy, omega), sim)
             sim.turret = 0.5
+
+            // R = intake + flywheel, F = shoot one ball per press
+            sim.intake = if (wasd.r) 1.0 else 0.0
+            sim.flywheel = if (wasd.r) 1.0 else 0.0
+            if (wasd.f && !prevF) sim.shootBall()
+            prevF = wasd.f
 
             sim.update()
             frameCount++

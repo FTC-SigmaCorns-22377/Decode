@@ -6,7 +6,7 @@ import io.javalin.websocket.WsContext
 import sigmacorns.io.JoltSimIO
 import java.util.concurrent.ConcurrentHashMap
 
-data class WasdState(val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false, val q: Boolean = false, val e: Boolean = false)
+data class WasdState(val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false, val q: Boolean = false, val e: Boolean = false, val r: Boolean = false, val f: Boolean = false)
 
 class SimVizServer(
     private val simIO: JoltSimIO,
@@ -54,7 +54,9 @@ class SimVizServer(
                 "y" to robotState[1],
                 "theta" to robotState[2],
                 "turretAngle" to simIO.turretPosition(),
-                "hoodAngle" to simIO.hoodAngle,
+                "intakeAngle" to simIO.intakeAngle(),
+                "intakeRollerRPM" to simIO.intakeRollerVelocity() * 60.0 / (2.0 * Math.PI),
+                "hoodAngle" to simIO.hoodPosition(),
                 "flywheelRPM" to simIO.flywheelVelocity() * 60.0 / (2.0 * Math.PI)
             ),
             "balls" to balls.map { b ->

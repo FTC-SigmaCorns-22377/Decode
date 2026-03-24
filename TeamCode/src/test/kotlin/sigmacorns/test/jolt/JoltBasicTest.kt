@@ -106,17 +106,18 @@ class JoltBasicTest {
 
     @Test
     fun testIntakePickup() {
-        // Place a ball right at the intake sensor area
-        sim.spawnBall(0.0f, 0.2f, 0.0635f, BallColor.GREEN)
+        // Place a ball in front of the roller (robot faces +x, intake at +Z in Jolt)
+        // Ball must be close enough to the chassis front face for physics pickup
+        sim.spawnBall(0.32f, 0.0f, 0.0635f, BallColor.GREEN)
         assertEquals(1, sim.getBallCount())
 
-        // Turn on intake and step
+        // Turn on intake (needs time for roller to spin up past threshold)
         sim.intake = 1.0
-        repeat(10) { sim.update() }
+        repeat(200) { sim.update() }
 
-        // Ball should be picked up
+        // Ball should be picked up by physics-based intake
         assertTrue(sim.heldBalls.size > 0 || sim.getBallCount() == 0,
-            "Ball should be picked up by intake or still in field")
+            "Ball should be picked up by intake, held=${sim.heldBalls.size}, balls=${sim.getBallCount()}")
     }
 
     @Test
@@ -146,13 +147,13 @@ class JoltBasicTest {
 
     @Test
     fun testMaxHeldBalls() {
-        // Spawn 5 balls near intake
+        // Spawn 5 balls in front of the robot's intake roller area
         for (i in 0 until 5) {
-            sim.spawnBall(0.0f, 0.15f + i * 0.01f, 0.0635f, BallColor.GREEN)
+            sim.spawnBall(0.30f + i * 0.05f, (i - 2) * 0.03f, 0.0635f, BallColor.GREEN)
         }
 
         sim.intake = 1.0
-        repeat(200) { sim.update() }
+        repeat(400) { sim.update() }
 
         assertTrue(sim.heldBalls.size <= 3, "Should hold at most 3 balls, held=${sim.heldBalls.size}")
     }
@@ -200,8 +201,9 @@ class JoltBasicTest {
         sim.heldBalls.add(BallColor.GREEN)
         assertEquals(1, sim.heldBalls.size)
 
-        // Spin up flywheel
+        // Spin up flywheel, keep turret centered (0.5 = forward)
         sim.flywheel = 1.0
+        sim.turret = 0.5
         repeat(400) { sim.update() } // 2 seconds to spin up
         assertTrue(sim.flywheelVelocity() > 200.0, "Flywheel should be spun up")
 
