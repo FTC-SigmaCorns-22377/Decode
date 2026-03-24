@@ -6,6 +6,7 @@ import com.qualcomm.hardware.lynx.LynxModule
 import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.DcMotorEx
 import com.qualcomm.robotcore.hardware.DcMotorSimple
+import com.qualcomm.robotcore.hardware.DigitalChannel
 import com.qualcomm.robotcore.hardware.HardwareMap
 import com.qualcomm.robotcore.hardware.Servo
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit
@@ -39,6 +40,21 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //turret
     private val turretMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"turret")
 
+    // turret servos (dual-servo geared turret)
+    private val turretLeftServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretLeft")
+    private val turretRightServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretRight")
+
+    // hood servo
+    private val hoodServo: Servo? = hardwareMap.tryGet(Servo::class.java, "hood")
+
+    // blocker servo
+    private val blockerServo: Servo? = hardwareMap.tryGet(Servo::class.java, "blocker")
+
+    // beam break sensors
+    private val beamBreak1Sensor: DigitalChannel? = hardwareMap.tryGet(DigitalChannel::class.java, "beamBreak1")
+    private val beamBreak2Sensor: DigitalChannel? = hardwareMap.tryGet(DigitalChannel::class.java, "beamBreak2")
+    private val beamBreak3Sensor: DigitalChannel? = hardwareMap.tryGet(DigitalChannel::class.java, "beamBreak3")
+
     //sensors
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
 
@@ -58,6 +74,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var flywheel: Double = 0.0
     override var intake: Double = 0.0
     override var turret: Double = 0.0
+    override var turretLeft: Double = 0.5
+    override var turretRight: Double = 0.5
+    override var hood: Double = 0.5
+    override var blocker: Double = 0.0
 
     private var savedVoltage: Double = 12.0
 
@@ -67,6 +87,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private var cachedFlywheelVelocity: Double = 0.0
     private var cachedTurretPosition: Double = 0.0
 
+    // Cached beam break values (true = beam broken = ball present)
+    private var cachedBeamBreak1: Boolean = false
+    private var cachedBeamBreak2: Boolean = false
+    private var cachedBeamBreak3: Boolean = false
+
     // Last sent values for threshold checking
     private var lastDriveFL: Double = Double.NaN
     private var lastDriveFR: Double = Double.NaN
@@ -75,6 +100,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private var lastFlywheel: Double = Double.NaN
     private var lastIntake: Double = Double.NaN
     private var lastTurret: Double = Double.NaN
+    private var lastTurretLeft: Double = Double.NaN
+    private var lastTurretRight: Double = Double.NaN
+    private var lastHood: Double = Double.NaN
+    private var lastBlocker: Double = Double.NaN
 
     companion object {
         const val UPDATE_THRESHOLD = 0.001
@@ -105,6 +134,11 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
             pinpoint!!.getHeadingVelocity(UnnormalizedAngleUnit.RADIANS)
         )
     }
+
+    // beam broken = !state (digital channel reads false when beam is broken)
+    override fun beamBreak1(): Boolean = cachedBeamBreak1
+    override fun beamBreak2(): Boolean = cachedBeamBreak2
+    override fun beamBreak3(): Boolean = cachedBeamBreak3
 
     override fun flywheelVelocity(): Double {
         return cachedFlywheelVelocity
@@ -163,6 +197,27 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
             turretMotor?.power = turret
             lastTurret = turret
         }
+        if (shouldUpdate(turretLeft, lastTurretLeft)) {
+            turretLeftServo?.position = turretLeft
+            lastTurretLeft = turretLeft
+        }
+        if (shouldUpdate(turretRight, lastTurretRight)) {
+            turretRightServo?.position = turretRight
+            lastTurretRight = turretRight
+        }
+        if (shouldUpdate(hood, lastHood)) {
+            hoodServo?.position = hood
+            lastHood = hood
+        }
+        if (shouldUpdate(blocker, lastBlocker)) {
+            blockerServo?.position = blocker
+            lastBlocker = blocker
+        }
+
+        // Read beam break sensors (digital channel reads false when beam is broken)
+        cachedBeamBreak1 = beamBreak1Sensor?.state?.not() ?: false
+        cachedBeamBreak2 = beamBreak2Sensor?.state?.not() ?: false
+        cachedBeamBreak3 = beamBreak3Sensor?.state?.not() ?: false
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
@@ -231,6 +286,17 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flywheelMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+
+        // Turret servos: left = FORWARD, right = REVERSE (mirrored mounting, geared together)
+        // Both servos receive the same position value; reversing the right servo
+        // makes both physical shafts rotate the same direction.
+        turretLeftServo?.direction = Servo.Direction.FORWARD
+        turretRightServo?.direction = Servo.Direction.REVERSE
+
+        // configure beam break sensors as inputs
+        beamBreak1Sensor?.mode = DigitalChannel.Mode.INPUT
+        beamBreak2Sensor?.mode = DigitalChannel.Mode.INPUT
+        beamBreak3Sensor?.mode = DigitalChannel.Mode.INPUT
 
         // configuring pinpoint
         configurePinpoint()

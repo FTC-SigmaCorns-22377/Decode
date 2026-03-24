@@ -14,8 +14,21 @@ interface SigmaIO {
     var flywheel: Double
     //intake
     var intake: Double
-    //turret power
+    //turret motor power (legacy, used by tuning opmodes)
     var turret: Double
+    // turret servos (dual-servo geared turret)
+    var turretLeft: Double
+    var turretRight: Double
+    // hood servo position (controls launch angle)
+    var hood: Double
+    // blocker servo position (0.0 = engaged/blocking, 1.0 = disengaged/open)
+    var blocker: Double
+
+    // beam break sensors (true = beam broken = ball present)
+    fun beamBreak1(): Boolean
+    fun beamBreak2(): Boolean
+    fun beamBreak3(): Boolean
+
     fun position(): Pose2d
     fun velocity(): Pose2d
     fun flywheelVelocity(): Double

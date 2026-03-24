@@ -6,7 +6,6 @@ import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.flywheelParameters
-import sigmacorns.constants.turretRange
 import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.control.mpc.MPCClient
@@ -19,6 +18,8 @@ import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
+import sigmacorns.subsystem.BeamBreak
+import sigmacorns.subsystem.Hood
 import sigmacorns.subsystem.Intake
 import sigmacorns.subsystem.Transfer
 import sigmacorns.subsystem.Turret
@@ -30,9 +31,11 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     val aim = AimingSystem(this, blue)
     val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
     val drive = DriveController()
+    val beamBreak = BeamBreak(this)
     val intake = Intake(this)
     val transfer = Transfer(this)
-    val turret = Turret(turretRange, io)
+    val turret = Turret(this)
+    val hood = Hood(this)
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
@@ -150,6 +153,20 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
             turret.targetAngle = 0.0
         }
 
+        // Update subsystems
+        beamBreak.update()
+        intake.update(dt)
+        transfer.update(dt)
+
+        // Update flywheel controller
+        if (aimFlywheel) {
+            flywheel.update(io.flywheelVelocity(), dt)
+        }
+
+        // Update hood (continuously adjusts launch angle)
+        hood.update(dt)
+
+        // Update aiming system (vision + turret)
         aim.update(dt, aimTurret)
     }
 

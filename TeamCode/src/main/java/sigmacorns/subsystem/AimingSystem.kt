@@ -4,13 +4,11 @@ import org.joml.Vector2d
 import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.ShootWhileMoveConstants
-import sigmacorns.constants.turretRange
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.control.aim.tune.AdaptiveTuner
 import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.io.HardwareIO
-import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -113,10 +111,17 @@ class AimingSystem(
     }
 
     /**
-     * Apply auto-aim turret targeting if enabled and a target is visible.
-     * Optionally skipped if the opmode wants full manual control of turret target.
+     * Apply auto-aim turret targeting: point turret toward the goal using fused pose.
+     * Sets the turret to field-relative mode and targets the goal direction.
      */
     fun applyAutoAimTarget() {
+        val fusedPose = autoAim.fusedPose
+        val dx = goalPosition.x - fusedPose.v.x
+        val dy = goalPosition.y - fusedPose.v.y
+        val fieldAngle = atan2(dy, dx)
+
+        robot.turret.fieldRelativeMode = true
+        robot.turret.fieldTargetAngle = fieldAngle
     }
 
     /**

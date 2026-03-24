@@ -47,6 +47,10 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     override var flywheel: Double = 0.0
     override var intake: Double = 0.0
     override var turret: Double = 0.0
+    override var turretLeft: Double = 0.5
+    override var turretRight: Double = 0.5
+    override var hood: Double = 0.5
+    override var blocker: Double = 0.0
 
     override fun position(): Pose2d {
         JoltNative.nativeGetRobotState(handle, robotState)
@@ -57,6 +61,11 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         JoltNative.nativeGetRobotState(handle, robotState)
         return Pose2d(robotState[3].toDouble(), robotState[4].toDouble(), robotState[5].toDouble())
     }
+
+    // Sim beam breaks based on held ball count
+    override fun beamBreak1(): Boolean = heldBalls.size >= 1
+    override fun beamBreak2(): Boolean = heldBalls.size >= 2
+    override fun beamBreak3(): Boolean = heldBalls.size >= 3
 
     override fun flywheelVelocity(): Double = flywheelState.omega
 
