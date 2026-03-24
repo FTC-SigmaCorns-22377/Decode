@@ -8,4 +8,5 @@
 	branch = main
 [submodule "deps/decode_estimator"]
 	path = deps/decode_estimator
-	url = git@github.com:Veratay/decode-estimator.git
+	url = https://github.com/FTC-SigmaCorns-22377/decode-estimator.git
+	branch = main
