@@ -3,6 +3,7 @@ package sigmacorns.io
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.intakeMotor
+import sigmacorns.constants.turretTicksPerRad
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
 import sigmacorns.math.Pose2d
@@ -322,6 +323,11 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Intake roller dynamics (reuses FlywheelDynamics with different parameters)
         const val INTAKE_ROLLER_INERTIA = 0.0005 // kg·m^2
         val INTAKE_ROLLER_PARAMS = FlywheelParameters(intakeMotor, INTAKE_ROLLER_INERTIA, 0.0001)
+
+        // Servo model constants
+        const val SERVO_TURRET_RANGE = 2 * Math.PI // rad, full range of servo
+        const val SERVO_K = 10.0 // proportional gain (1/s)
+        const val SERVO_MAX_SPEED = Math.PI // rad/s, max angular velocity
 
         // Hood servo (controls launch angle)
         val HOOD_RANGE = Math.toRadians(70.0)  // 0 to 70 degrees
