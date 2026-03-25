@@ -318,8 +318,8 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Default hood angle
         const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0
 
-        // Sim-specific flywheel inertia (small wheel, not the full hardware assembly)
-        const val SIM_FLYWHEEL_INERTIA = 0.001 // kg·m^2
+        // Flywheel inertia: ½mr² = 0.5 * 0.38709252 kg * (0.046 m)²
+        const val SIM_FLYWHEEL_INERTIA = 0.000410 // kg·m^2
         val SIM_FLYWHEEL_PARAMS = FlywheelParameters(flywheelMotor, SIM_FLYWHEEL_INERTIA, 0.0001)
 
         // Intake roller dynamics (reuses FlywheelDynamics with different parameters)

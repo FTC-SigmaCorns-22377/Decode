@@ -49,7 +49,7 @@ function applyFrame(state) {
     updateBalls(state.balls || []);
     updateGoals(state.goals);
     timeDisplay.textContent = state.t.toFixed(3) + 's';
-    posDisplay.innerHTML = `X: ${(-state.robot.x).toFixed(3)}<br>Y: ${state.robot.y.toFixed(3)}`;
+    posDisplay.innerHTML = `X: ${(-state.robot.x).toFixed(3)}<br>Y: ${state.robot.y.toFixed(3)}<br>Flywheel: ${Math.round(state.robot.flywheelRPM)} RPM`;
 }
 
 // Controls

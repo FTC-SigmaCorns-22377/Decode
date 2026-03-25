@@ -45,8 +45,8 @@ data class AxisMapping(
 
         val PLAYSTATION = AxisMapping(
             leftStickX = 0, leftStickY = 1,
-            rightStickX = 3, rightStickY = 4,
-            leftTrigger = 2, rightTrigger = 5,
+            rightStickX = 2, rightStickY = 3,
+            leftTrigger = 5, rightTrigger = 4,
             triggerRange = TriggerRange.MINUS_ONE_TO_ONE,
         )
 
@@ -108,6 +108,7 @@ class SimGamepad(private val gamepad: Gamepad) {
     private var jid: Int = -1
     private var axisMapping: AxisMapping = AxisMapping.XBOX
     private var buttonMapping: ButtonMapping = ButtonMapping.XBOX
+    private var axisBaseline: FloatArray = FloatArray(0)
 
     init {
         if (!glfwInitialized) {
@@ -134,10 +135,16 @@ class SimGamepad(private val gamepad: Gamepad) {
         val am = axisMapping
         val bm = buttonMapping
 
-        gamepad.left_stick_x  = applyDeadzone(-axes.get(am.leftStickX))
-        gamepad.left_stick_y  = applyDeadzone(axes.get(am.leftStickY))
-        gamepad.right_stick_x = applyDeadzone(-axes.get(am.rightStickX))
-        gamepad.right_stick_y = applyDeadzone(axes.get(am.rightStickY))
+        fun stick(index: Int): Float {
+            val raw = axes.get(index)
+            val offset = if (index < axisBaseline.size) axisBaseline[index] else 0f
+            return raw - offset
+        }
+
+        gamepad.left_stick_x  = applyDeadzone(-stick(am.leftStickX))
+        gamepad.left_stick_y  = applyDeadzone(stick(am.leftStickY))
+        gamepad.right_stick_x = applyDeadzone(-stick(am.rightStickX))
+        gamepad.right_stick_y = applyDeadzone(stick(am.rightStickY))
         gamepad.left_trigger  = am.normalizeTrigger(axes.get(am.leftTrigger))
         gamepad.right_trigger = am.normalizeTrigger(axes.get(am.rightTrigger))
 
@@ -169,6 +176,17 @@ class SimGamepad(private val gamepad: Gamepad) {
                     val controllerType = ControllerType.fromJoystickName(name)
                     axisMapping = AxisMapping.forController(controllerType)
                     buttonMapping = ButtonMapping.forController(controllerType)
+
+                    // Capture current axis values as baseline to compensate for stick drift
+                    val axes = GLFW.glfwGetJoystickAxes(id)
+                    axisBaseline = if (axes != null) {
+                        FloatArray(axes.limit()) { axes.get(it) }.also { baseline ->
+                            println("Joystick $id baseline: ${baseline.map { "%.3f".format(it) }}")
+                        }
+                    } else {
+                        FloatArray(0)
+                    }
+
                     println("Joystick $id connected: $name (detected: $controllerType)")
                 }
                 jid = id
