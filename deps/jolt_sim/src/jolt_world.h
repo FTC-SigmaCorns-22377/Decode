@@ -230,7 +230,7 @@ private:
     static constexpr float ROBOT_MASS     = 15.0f;
 
     static constexpr float BALL_RADIUS    = 0.0635f;
-    static constexpr float BALL_MASS      = 0.5f;
+    static constexpr float BALL_MASS      = 0.0748f; // 0.165 lbs
     static constexpr float BALL_FRICTION  = 0.8f;
 
     // Intake sensor (legacy, kept for reference)

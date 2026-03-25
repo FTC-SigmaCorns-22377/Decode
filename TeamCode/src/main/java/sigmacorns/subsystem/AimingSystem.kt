@@ -23,7 +23,8 @@ import kotlin.time.Duration
  */
 class AimingSystem(
     private val io: SigmaIO,
-    private val blue: Boolean
+    private val blue: Boolean,
+    private val shotDataPath: String? = null
 ) {
     lateinit var autoAim: GTSAMEstimator
         private set
@@ -61,7 +62,7 @@ class AimingSystem(
         )
 
         // Initialize adaptive tuner for flywheel velocity
-        val dataStore = ShotDataStore()
+        val dataStore = if (shotDataPath != null) ShotDataStore(shotDataPath) else ShotDataStore()
         dataStore.load()
         adaptiveTuner = AdaptiveTuner(dataStore)
 

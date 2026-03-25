@@ -275,8 +275,11 @@ class JoltVisualizerTest {
         val server = sigmacorns.sim.viz.SimVizServer(sim)
         server.start()
 
-        val robot = Robot(sim, blue = true)
+        val shotDataPath = javaClass.getResource("/shot_tuning_data.json")?.path
+            ?: error("shot_tuning_data.json not found in test resources")
+        val robot = Robot(sim, blue = true, shotDataPath = shotDataPath)
         robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
+        robot.aimFlywheel = false
         // Sim X axis is negated relative to real field — flip goal X for aiming
         robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
         robot.aim.targeting.goalPosition = robot.aim.goalPosition
@@ -309,7 +312,6 @@ class JoltVisualizerTest {
         var prevN3 = false
 
         // Operator state
-        var flywheelSpinup = false
         var manualFlywheelPower = 0.0
 
         var frameCount = 0
@@ -336,7 +338,10 @@ class JoltVisualizerTest {
             wasShooting = isShooting
 
             // Flywheel spinup toggle - left bumper
-            if (gamepad.left_bumper && !wasLeftBumper) flywheelSpinup = !flywheelSpinup
+            if (gamepad.left_bumper && !wasLeftBumper) {
+                robot.aimFlywheel = !robot.aimFlywheel
+                println("Flywheel aim: ${if (robot.aimFlywheel) "ON" else "OFF"}")
+            }
             wasLeftBumper = gamepad.left_bumper
 
             // Emergency stop - A button (matching TeleopBase)
@@ -344,7 +349,7 @@ class JoltVisualizerTest {
                 sim.driveFL = 0.0; sim.driveBL = 0.0
                 sim.driveFR = 0.0; sim.driveBR = 0.0
                 sim.intake = 0.0; sim.flywheel = 0.0
-                flywheelSpinup = false
+                robot.aimFlywheel = false
                 manualFlywheelPower = 0.0
             }
 
@@ -375,8 +380,8 @@ class JoltVisualizerTest {
 
             // Flywheel spinup toggle - 2 key (matching gm2 left_bumper)
             if (kb.n2 && !prevN2) {
-                flywheelSpinup = !flywheelSpinup
-                println("Flywheel spinup: ${if (flywheelSpinup) "ON" else "OFF"}")
+                robot.aimFlywheel = !robot.aimFlywheel
+                println("Flywheel aim: ${if (robot.aimFlywheel) "ON" else "OFF"}")
             }
             prevN2 = kb.n2
 
@@ -390,23 +395,17 @@ class JoltVisualizerTest {
             // Keyboard intake + flywheel combo - R (toggle)
             if (kb.r) {
                 sim.intake = 1.0
-                flywheelSpinup = true
+                robot.aimFlywheel = true
             }
 
             // Keyboard shoot - F
             if (kb.f && !prevF) sim.shootBall()
             prevF = kb.f
 
-            // === Flywheel subsystem update ===
-            if (flywheelSpinup) {
-                robot.flywheel.target = 400.0
-            } else if (manualFlywheelPower > 0.01) {
+            // Manual flywheel power override (W/S keys)
+            if (manualFlywheelPower > 0.01) {
+                robot.aimFlywheel = false
                 sim.flywheel = manualFlywheelPower
-            } else {
-                robot.flywheel.target = 0.0
-            }
-            if (flywheelSpinup || manualFlywheelPower <= 0.01) {
-                robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
             }
 
             // Run Robot's update loop (turret PID, aiming, dispatcher)
@@ -432,8 +431,11 @@ class JoltVisualizerTest {
         val server = sigmacorns.sim.viz.SimVizServer(sim)
         server.start()
 
-        val robot = Robot(sim, blue = true)
+        val shotDataPath = javaClass.getResource("/shot_tuning_data.json")?.path
+            ?: error("shot_tuning_data.json not found in test resources")
+        val robot = Robot(sim, blue = true, shotDataPath = shotDataPath)
         robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
+        robot.aimFlywheel = false
         robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
         robot.aim.targeting.goalPosition = robot.aim.goalPosition
 
@@ -453,8 +455,6 @@ class JoltVisualizerTest {
         var prevN1 = false
         var prevN2 = false
         var prevN3 = false
-        var flywheelSpinup = false
-
         val dtSeconds = JoltSimIO.SIM_UPDATE_TIME.toDouble(kotlin.time.DurationUnit.SECONDS)
 
         var frameCount = 0
@@ -476,7 +476,7 @@ class JoltVisualizerTest {
             // Intake + flywheel combo - R (toggle)
             if (kb.r) {
                 sim.intake = 1.0
-                flywheelSpinup = true
+                robot.aimFlywheel = true
             } else {
                 sim.intake = 0.0
             }
@@ -497,8 +497,8 @@ class JoltVisualizerTest {
 
             // Flywheel spinup toggle - 2
             if (kb.n2 && !prevN2) {
-                flywheelSpinup = !flywheelSpinup
-                println("Flywheel spinup: ${if (flywheelSpinup) "ON" else "OFF"}")
+                robot.aimFlywheel = !robot.aimFlywheel
+                println("Flywheel aim: ${if (robot.aimFlywheel) "ON" else "OFF"}")
             }
             prevN2 = kb.n2
 
@@ -508,10 +508,6 @@ class JoltVisualizerTest {
                 println("Position reset")
             }
             prevN3 = kb.n3
-
-            // Flywheel subsystem
-            robot.flywheel.target = if (flywheelSpinup) 400.0 else 0.0
-            robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
 
             robot.update()
 

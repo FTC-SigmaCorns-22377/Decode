@@ -19,11 +19,12 @@ import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
 import java.lang.AutoCloseable
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
-    val aim = AimingSystem(io, blue)
+class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoCloseable {
+    val aim = AimingSystem(io, blue, shotDataPath)
     val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
     val drive = DriveController()
 
@@ -144,6 +145,14 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         }
 
         aim.update(dt, aimTurret)
+
+        if (aimFlywheel) {
+            val recommended = aim.getRecommendedFlywheelVelocity()
+            flywheel.target = recommended ?: 0.0
+        }
+        if (dt > Duration.ZERO) {
+            flywheel.update(io.flywheelVelocity(), dt)
+        }
     }
 
     override fun close() {

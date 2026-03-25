@@ -182,7 +182,9 @@ class JoltAutoTest {
         sim.spawnFieldBalls()
         sim.setPosition(initialSample.pos)
 
-        val robot = Robot(sim, blue = true)
+        val shotDataPath = javaClass.getResource("/shot_tuning_data.json")?.path
+            ?: error("shot_tuning_data.json not found in test resources")
+        val robot = Robot(sim, blue = true, shotDataPath = shotDataPath)
         robot.init(initialSample.pos, apriltagTracking = false)
         // Sim X axis is negated relative to real field — flip goal X for aiming
         robot.aim.goalPosition = Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
@@ -224,9 +226,8 @@ class JoltAutoTest {
 
             // Phase 2: Spin up flywheel
             println("Spinning up flywheel...")
-            robot.flywheel.target = 400.0
+            robot.aimFlywheel = true
             simLoop(server, robot, state) { t ->
-                robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
                 t <= 1.0 // spin up for 1s
             }
 
@@ -238,7 +239,6 @@ class JoltAutoTest {
                 println("  Shot ${i + 1}/$ballCount")
                 // Wait between shots for flywheel recovery
                 simLoop(server, robot, state) { t ->
-                    robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
                     t <= 0.5
                 }
             }
@@ -269,7 +269,9 @@ class JoltAutoTest {
         sim.spawnFieldBalls()
         sim.setPosition(initialSample.pos)
 
-        val robot = Robot(sim, blue = false)
+        val shotDataPath = javaClass.getResource("/shot_tuning_data.json")?.path
+            ?: error("shot_tuning_data.json not found in test resources")
+        val robot = Robot(sim, blue = false, shotDataPath = shotDataPath)
         robot.init(initialSample.pos, apriltagTracking = false)
         robot.aim.goalPosition = Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
         robot.aim.targeting.goalPosition = robot.aim.goalPosition
@@ -310,9 +312,8 @@ class JoltAutoTest {
 
             // Phase 2: Spin up flywheel
             println("Spinning up flywheel...")
-            robot.flywheel.target = 400.0
+            robot.aimFlywheel = true
             simLoop(server, robot, state) { t ->
-                robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
                 t <= 1.0
             }
 
@@ -323,7 +324,6 @@ class JoltAutoTest {
                 sim.shootBall()
                 println("  Shot ${i + 1}/$ballCount")
                 simLoop(server, robot, state) { t ->
-                    robot.flywheel.update(sim.flywheelVelocity(), JoltSimIO.SIM_UPDATE_TIME)
                     t <= 0.5
                 }
             }
