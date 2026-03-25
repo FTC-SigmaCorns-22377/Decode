@@ -139,6 +139,15 @@ Java_sigmacorns_sim_JoltNative_nativeSpawnBall(JNIEnv* env, jclass, jlong handle
     return from_handle(handle)->spawnBall(x, y, z, vx, vy, vz, color);
 }
 
+JNIEXPORT jint JNICALL
+Java_sigmacorns_sim_JoltNative_nativeSpawnShotBall(JNIEnv* env, jclass, jlong handle,
+                                                    jfloat x, jfloat y, jfloat z,
+                                                    jfloat vx, jfloat vy, jfloat vz,
+                                                    jint color) {
+    if (!check_handle(env, handle)) return -1;
+    return from_handle(handle)->spawnShotBall(x, y, z, vx, vy, vz, color);
+}
+
 JNIEXPORT void JNICALL
 Java_sigmacorns_sim_JoltNative_nativeRemoveBall(JNIEnv* env, jclass, jlong handle, jint index) {
     if (!check_handle(env, handle)) return;
@@ -192,6 +201,15 @@ Java_sigmacorns_sim_JoltNative_nativeGetPendingPickups(JNIEnv* env, jclass, jlon
     ScopedIntArray arr(env, out, 0);
     if (!arr.valid()) return 0;
     return from_handle(handle)->getPendingPickups(arr.data(), max);
+}
+
+JNIEXPORT jint JNICALL
+Java_sigmacorns_sim_JoltNative_nativeCollectPickups(JNIEnv* env, jclass, jlong handle,
+                                                     jintArray out, jint max) {
+    if (!check_handle(env, handle)) return 0;
+    ScopedIntArray arr(env, out, 0);
+    if (!arr.valid()) return 0;
+    return from_handle(handle)->collectPickups(arr.data(), max);
 }
 
 JNIEXPORT void JNICALL

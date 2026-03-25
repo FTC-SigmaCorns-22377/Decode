@@ -549,9 +549,38 @@ void JoltWorld::createIntakeRoller() {
         Layers::MOVING
     );
     bodySettings.mFriction = INTAKE_ROLLER_FRICTION;
+    bodySettings.mCollisionGroup.SetGroupFilter(robotRollerGroupFilter_);
+    bodySettings.mCollisionGroup.SetGroupID(0);
+    bodySettings.mCollisionGroup.SetSubGroupID(1);
 
     intake_.rollerBodyId = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::Activate);
     intake_.hingeAngle = INTAKE_REST_ANGLE;
+}
+
+void JoltWorld::respawnOutOfBoundsBalls() {
+    auto& bodyInterface = physicsSystem_->GetBodyInterface();
+    float margin = HALF_FIELD + BALL_RADIUS * 2;
+    float minY = -0.5f; // below the field floor
+
+    // Non-goal corners are at (+X, +Z) and (+X, -Z)
+    // In Jolt coords: +X is right, +Z is forward
+    float spawnX = HALF_FIELD - 0.3f;
+    float spawnY = BALL_RADIUS + 0.05f;
+
+    for (auto& ball : balls_) {
+        JPH::Vec3 pos = bodyInterface.GetPosition(ball.bodyId);
+        bool outX = pos.GetX() > margin || pos.GetX() < -margin;
+        bool outZ = pos.GetZ() > margin || pos.GetZ() < -margin;
+        bool fallen = pos.GetY() < minY;
+
+        if (outX || outZ || fallen) {
+            // Pick nearest non-goal corner: +Z or -Z side
+            float spawnZ = (pos.GetZ() >= 0) ? (HALF_FIELD - 0.3f) : -(HALF_FIELD - 0.3f);
+            bodyInterface.SetPosition(ball.bodyId, JPH::Vec3(spawnX, spawnY, spawnZ), JPH::EActivation::Activate);
+            bodyInterface.SetLinearVelocity(ball.bodyId, JPH::Vec3::sZero());
+            bodyInterface.SetAngularVelocity(ball.bodyId, JPH::Vec3::sZero());
+        }
+    }
 }
 
 void JoltWorld::step(float dt) {
@@ -559,9 +588,8 @@ void JoltWorld::step(float dt) {
 
     // Apply queued force and torque to robot
     if (queuedFx_ != 0.0f || queuedFy_ != 0.0f) {
-        // Sim frame: x=forward, y=left, z=up
-        // Jolt frame: X=right, Y=up, Z=forward (robot faces +Z, intake along +Z)
-        // Mapping: sim x -> Jolt +Z, sim y -> Jolt -X
+        // computeForces() returns field-frame forces: sim x=forward, sim y=left
+        // Map sim field frame to Jolt world frame: sim x -> Jolt +Z, sim y -> Jolt -X
         bodyInterface.AddForce(robotBodyId_, JPH::Vec3(-queuedFy_, 0, queuedFx_));
     }
     if (queuedTz_ != 0.0f) {
@@ -572,11 +600,19 @@ void JoltWorld::step(float dt) {
     // Step physics
     physicsSystem_->Update(dt, 1, tempAllocator_, jobSystem_);
 
+    // Tick down shot immunity timers
+    for (auto& entry : shotImmunity_) entry.second -= dt;
+    shotImmunity_.erase(
+        std::remove_if(shotImmunity_.begin(), shotImmunity_.end(),
+                        [](const auto& e) { return e.second <= 0.0f; }),
+        shotImmunity_.end());
+
     // Post-step: check pickups, scoring, and mechanisms
     updateIntake(dt);
     checkGoalScoring();
     updateGates(dt);
     updateLevers(dt);
+    respawnOutOfBoundsBalls();
 }
 
 void JoltWorld::applyRobotForce(float fx, float fy, float tz) {
@@ -646,6 +682,14 @@ int JoltWorld::spawnBall(float x, float y, float z, float vx, float vy, float vz
     int index = static_cast<int>(balls_.size());
     balls_.push_back({ballId, color});
     return index;
+}
+
+int JoltWorld::spawnShotBall(float x, float y, float z, float vx, float vy, float vz, int color) {
+    int idx = spawnBall(x, y, z, vx, vy, vz, color);
+    if (idx >= 0) {
+        shotImmunity_.push_back({balls_[idx].bodyId, 0.5f}); // 0.5s immunity
+    }
+    return idx;
 }
 
 void JoltWorld::removeBall(int index) {
@@ -747,21 +791,31 @@ void JoltWorld::updateIntake(float dt) {
     if (std::abs(intake_.rollerOmega) < INTAKE_OMEGA_THRESHOLD) return;
 
     for (int i = static_cast<int>(balls_.size()) - 1; i >= 0; i--) {
+        // Skip recently shot balls
+        bool immune = false;
+        for (const auto& entry : shotImmunity_) {
+            if (entry.first == balls_[i].bodyId) { immune = true; break; }
+        }
+        if (immune) continue;
+
         JPH::Vec3 ballPos = bodyInterface.GetPosition(balls_[i].bodyId);
         JPH::Vec3 localBall = robotRot.Conjugated() * (ballPos - robotPos);
 
-        // Check if ball is near the front face of the chassis
-        bool nearFrontFace = localBall.GetZ() > (ROBOT_LENGTH / 2.0f - BALL_RADIUS) &&
-                             localBall.GetZ() < (ROBOT_LENGTH / 2.0f + INTAKE_BAR_LENGTH + BALL_RADIUS);
         bool withinWidth = std::abs(localBall.GetX()) < (INTAKE_WIDTH / 2.0f + BALL_RADIUS);
-        bool withinHeight = localBall.GetY() > -BALL_RADIUS && localBall.GetY() < (ROBOT_HEIGHT + BALL_RADIUS * 2);
+        bool withinHeight = localBall.GetY() > -BALL_RADIUS && localBall.GetY() < (ROBOT_HEIGHT + BALL_RADIUS * 3);
 
+        // Pick up if ball is near front face — either at roller height or pushed against chassis
+        bool nearFrontFace = localBall.GetZ() > (ROBOT_LENGTH / 2.0f - BALL_RADIUS * 2) &&
+                             localBall.GetZ() < (ROBOT_LENGTH / 2.0f + INTAKE_BAR_LENGTH + BALL_RADIUS * 2);
         if (nearFrontFace && withinWidth && withinHeight) {
-            pendingPickups_.push_back(i);
+            // Avoid duplicate entries for the same ball across physics steps
+            if (std::find(pendingPickups_.begin(), pendingPickups_.end(), i) == pendingPickups_.end()) {
+                pendingPickups_.push_back(i);
+            }
         }
     }
 
-    // Sort descending so swap-and-pop removal works correctly
+    // Sort descending so removal from highest index first keeps lower indices valid
     std::sort(pendingPickups_.begin(), pendingPickups_.end(), std::greater<int>());
 }
 
@@ -772,6 +826,19 @@ int JoltWorld::getPendingPickups(int* out, int max) {
     }
     pendingPickups_.clear();
     return count;
+}
+
+int JoltWorld::collectPickups(int* colorsOut, int max) {
+    // Indices are sorted descending — safe to remove highest first
+    int collected = 0;
+    for (int idx : pendingPickups_) {
+        if (collected >= max) break;
+        if (idx < 0 || idx >= static_cast<int>(balls_.size())) continue;
+        colorsOut[collected++] = balls_[idx].color;
+        removeBall(idx);
+    }
+    pendingPickups_.clear();
+    return collected;
 }
 
 // --- Contact listener: conveyor belt effect ---
@@ -811,7 +878,6 @@ void IntakeContactListener::applyIntakeEffect(const JPH::Body& body1, const JPH:
     }
     if (!isBall) return;
 
-    // Compute conveyor belt direction: from roller toward chassis (in -Z local direction)
     // Must use NoLock interface since we're inside a physics callback
     auto& bodyInterface = world_->physicsSystem_->GetBodyInterfaceNoLock();
     JPH::Quat robotRot = bodyInterface.GetRotation(world_->robotBodyId_);
@@ -819,9 +885,14 @@ void IntakeContactListener::applyIntakeEffect(const JPH::Body& body1, const JPH:
     // Robot forward is +Z in Jolt, so "toward chassis" is -Z in robot frame
     JPH::Vec3 pullDirection = robotRot * JPH::Vec3(0, 0, -1.0f);
 
-    float surfaceSpeed = std::abs(world_->intake_.rollerOmega) * JoltWorld::INTAKE_ROLLER_RADIUS;
+    float rollerSpeed = std::abs(world_->intake_.rollerOmega);
+    float surfaceSpeed = rollerSpeed * JoltWorld::INTAKE_ROLLER_RADIUS;
 
-    // Set relative surface velocity to create conveyor belt effect
-    // This pulls the ball toward the chassis
+    // Conveyor belt effect pulls the ball toward the chassis
     settings.mRelativeLinearSurfaceVelocity = pullDirection * surfaceSpeed;
+
+    // Apply direct suction force on contact to pull ball into the bot
+    JPH::Vec3 suctionDir = pullDirection + JPH::Vec3(0, -0.2f, 0); // slightly downward
+    float suctionForce = rollerSpeed * 0.005f;
+    bodyInterface.AddForce(otherBody.GetID(), suctionDir * suctionForce);
 }

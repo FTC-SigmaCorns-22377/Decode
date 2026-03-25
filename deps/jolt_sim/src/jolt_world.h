@@ -155,6 +155,7 @@ public:
     void getRobotState(float out[6]); // [x, y, theta, vx, vy, omega]
 
     int  spawnBall(float x, float y, float z, float vx, float vy, float vz, int color);
+    int  spawnShotBall(float x, float y, float z, float vx, float vy, float vz, int color);
     void removeBall(int index);
     int  getBallCount() const;
     void getBallStates(float* out) const;  // [x,y,z] * count
@@ -163,7 +164,8 @@ public:
     // Intake API
     void setIntakeRollerOmega(float omega);
     void getIntakeState(float* out) const;  // [hingeAngle, rollerOmega]
-    int  getPendingPickups(int* out, int max);
+    int  getPendingPickups(int* out, int max);  // legacy
+    int  collectPickups(int* colorsOut, int max); // removes balls and returns their colors
 
     // Goal API
     // [redScore, blueScore, redGateOpen, blueGateOpen, redLeverAngle, blueLeverAngle]
@@ -177,6 +179,7 @@ private:
     void createIntakeRoller();
     void updateIntake(float dt);
     void checkGoalScoring();
+    void respawnOutOfBoundsBalls();
     void updateGates(float dt);
     void updateLevers(float dt);
     JPH::BodyID createStaticBox(JPH::Vec3 halfExtent, JPH::Vec3 position, float friction);
@@ -205,6 +208,9 @@ private:
 
     // Pending pickups (ball indices to be picked up by Kotlin)
     std::vector<int> pendingPickups_;
+
+    // Recently shot ball IDs — immune to pickup for a short time
+    std::vector<std::pair<JPH::BodyID, float>> shotImmunity_; // (bodyId, remaining time)
 
     // Goals
     GoalInfo redGoal_;
@@ -235,7 +241,7 @@ private:
 
     // Intake sensor (legacy, kept for reference)
     static constexpr float INTAKE_OFFSET  = 0.2f; // offset in front of robot center = ROBOT_LENGTH/2
-    static constexpr float INTAKE_WIDTH   = 0.3f;
+    static constexpr float INTAKE_WIDTH   = ROBOT_WIDTH;
     static constexpr float INTAKE_DEPTH   = 0.1f;
     static constexpr float INTAKE_HEIGHT  = 0.1f;
 

@@ -127,20 +127,20 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         hoodAngleRad += hoodVel * dtSeconds
         hoodAngleRad = hoodAngleRad.coerceIn(0.0, HOOD_RANGE)
 
-        // Physics-based intake: check for pending pickups from C++
-        if (heldBalls.size < 3) {
-            val pickupBuf = IntArray(10)
-            val count = JoltNative.nativeGetPendingPickups(handle, pickupBuf, 10)
+        // Physics-based intake: C++ removes balls and returns their colors
+        val maxPickup = (3 - heldBalls.size).coerceAtLeast(0)
+        if (maxPickup > 0) {
+            val colorBuf = IntArray(maxPickup)
+            val count = JoltNative.nativeCollectPickups(handle, colorBuf, maxPickup)
             for (i in 0 until count) {
-                if (heldBalls.size >= 3) break
-                val ballIdx = pickupBuf[i]
-                val colors = IntArray(JoltNative.nativeGetBallCount(handle))
-                JoltNative.nativeGetBallColors(handle, colors)
-                if (ballIdx < colors.size) {
-                    heldBalls.add(BallColor.fromJoltId(colors[ballIdx]))
-                    JoltNative.nativeRemoveBall(handle, ballIdx)
-                }
+                val color = BallColor.fromJoltId(colorBuf[i])
+                heldBalls.add(color)
+                println("intake: picked up $color, held=${heldBalls.size}")
             }
+        } else {
+            // Drain pending pickups so they don't accumulate
+            val drain = IntArray(10)
+            JoltNative.nativeGetPendingPickups(handle, drain, 10)
         }
 
         t += SIM_UPDATE_TIME
@@ -156,12 +156,19 @@ class JoltSimIO : SigmaIO, AutoCloseable {
      * The turret angle determines the horizontal launch direction relative to the robot.
      */
     fun shootBall() {
-        if (heldBalls.isEmpty()) return
+        if (heldBalls.isEmpty()) {
+            println("shootBall: no balls held")
+            return
+        }
 
         val exitSpeed = abs(flywheelState.omega) * FLYWHEEL_WHEEL_RADIUS * LAUNCH_EFFICIENCY
-        if (exitSpeed < 0.1) return // flywheel not spinning fast enough
+        if (exitSpeed < 0.1) {
+            println("shootBall: flywheel too slow (${abs(flywheelState.omega).toInt()} rad/s)")
+            return
+        }
 
         val color = heldBalls.removeAt(0)
+        println("shootBall: shot $color, held=${heldBalls.size}, exitSpeed=${"%.1f".format(exitSpeed)} m/s")
 
         JoltNative.nativeGetRobotState(handle, robotState)
         val robotX = robotState[0].toDouble()
@@ -188,7 +195,7 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         val spawnY = shooterY
         val spawnZ = shooterZ
 
-        JoltNative.nativeSpawnBall(handle,
+        JoltNative.nativeSpawnShotBall(handle,
             spawnX.toFloat(), spawnY.toFloat(), spawnZ.toFloat(),
             vx.toFloat(), vy.toFloat(), vz.toFloat(),
             color.joltId)
