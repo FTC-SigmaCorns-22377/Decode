@@ -60,9 +60,13 @@ class GTSAMEstimator(
                 System.loadLibrary("decode_estimator_jni")
                 logger.log(LogLevel.INFO, "Loaded decode_estimator_jni (System.loadLibrary)")
             }
-        } catch (e: UnsatisfiedLinkError) {
-            logger.log(LogLevel.ERROR, "Failed to load decode_estimator library: ${e.message}")
-            logger.log(LogLevel.ERROR, "JNI load failed: classLoader=${javaClass.classLoader}")
+        } catch (_: Throwable) {
+            // FTC Android path failed (e.g. running in host test environment), fall back
+            try {
+                System.loadLibrary("decode_estimator_jni")
+            } catch (e: UnsatisfiedLinkError) {
+                logger.log(LogLevel.ERROR, "Failed to load decode_estimator library: ${e.message}")
+            }
         }
     }
 
@@ -150,7 +154,12 @@ class GTSAMEstimator(
         updateVision(visionResult, turretAngle)
 
         fusionWorker.tick()
-        fusedPoseInternal = fusionWorker.fusedPose
+        if (fusionWorker.isInitialized) {
+            fusedPoseInternal = fusionWorker.fusedPose
+        } else {
+            // Fall back to raw odometry when GTSAM is not available
+            fusedPoseInternal = robotPose
+        }
         fusedPose = fusedPoseInternal
         
         debugLogger?.logFusedPose(fusedPose)

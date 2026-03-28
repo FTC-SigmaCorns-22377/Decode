@@ -4,6 +4,8 @@ import org.joml.Vector2d
 import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.ShootWhileMoveConstants
+import sigmacorns.constants.turretRange
+import sigmacorns.control.aim.TurretTargeting
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.control.aim.tune.AdaptiveTuner
@@ -23,8 +25,10 @@ import kotlin.time.Duration
  */
 class AimingSystem(
     private val robot: Robot,
-    private val blue: Boolean
+    private val blue: Boolean,
+    private val shotDataPath: String? = null
 ) {
+    val turret get() = robot.turret
     lateinit var autoAim: GTSAMEstimator
         private set
     var visionTracker: VisionTracker? = null
@@ -33,6 +37,7 @@ class AimingSystem(
         private set
 
     var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
+    val targeting = TurretTargeting(goalPosition)
 
     var positionOverride: Double? = null
 
@@ -91,7 +96,7 @@ class AimingSystem(
         )
 
         // Initialize adaptive tuner for flywheel velocity
-        val dataStore = ShotDataStore()
+        val dataStore = if (shotDataPath != null) ShotDataStore(shotDataPath) else ShotDataStore()
         dataStore.load()
         adaptiveTuner = AdaptiveTuner(dataStore)
 
@@ -115,13 +120,11 @@ class AimingSystem(
      * Sets the turret to field-relative mode and targets the goal direction.
      */
     fun applyAutoAimTarget() {
-        val fusedPose = autoAim.fusedPose
-        val dx = goalPosition.x - fusedPose.v.x
-        val dy = goalPosition.y - fusedPose.v.y
-        val fieldAngle = atan2(dy, dx)
-
-        robot.turret.fieldRelativeMode = true
-        robot.turret.fieldTargetAngle = fieldAngle
+        if (!autoAim.enabled) return
+        val angles = targeting.computeAngles(autoAim.fusedPose)
+        turret.fieldRelativeMode = true
+        turret.fieldTargetAngle = angles.fieldAngle
+        targetDistance = angles.distance
     }
 
     /**

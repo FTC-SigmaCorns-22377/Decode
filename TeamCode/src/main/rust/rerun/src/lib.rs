@@ -1,12 +1,12 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use jni::{
     objects::{JByteArray, JClass, JFloatArray, JString}, sys::{jboolean, jdouble, jint, jlong, JNI_FALSE, JNI_TRUE}, JNIEnv
 };
-use rerun::{components::RotationQuat, datatypes::{ChannelDatatype, ColorModel, Quaternion as RerunQuaternion}, external::re_grpc_client::write::ClientConnectionState};
+use rerun::{components::RotationQuat, datatypes::{ChannelDatatype, ColorModel, Quaternion as RerunQuaternion}};
 use rerun::{
     Arrows3D, LineStrip3D, LineStrips3D, Mesh3D, Points2D, Points3D, RecordingStream,
-    RecordingStreamBuilder, Rotation3D, Vec2D, Vec3D,
+    RecordingStreamBuilder, Rotation3D, SeriesLines, Vec2D, Vec3D,
 };
 
 pub fn string_from_jni(env: &mut JNIEnv, v: &JString) -> Result<String, jni::errors::Error> {
@@ -210,37 +210,9 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_checkConnection(
     timeout: jdouble
 ) -> jboolean {
     let rec = connection_from_ptr(rec);
-
-    let (tx,rx) = std::sync::mpsc::channel();
-
-    loop {
-        let tx = tx.clone();
-        rec.inspect_sink(move |sink| {
-            sink
-                .as_any()
-                .downcast_ref::<rerun::sink::GrpcSink>()
-                .map(|grpc_sink| {
-                    tx.send(grpc_sink.status()).ok()
-                });
-
-        });
-
-        if let Ok(status) = rx.recv_timeout(Duration::from_secs(1)) {
-            match status {
-                ClientConnectionState::Connecting { started } => {
-                    if Instant::now() - started > Duration::from_secs_f64(timeout) {
-                        return JNI_FALSE
-                    }
-                },
-                ClientConnectionState::Connected => return JNI_TRUE,
-                ClientConnectionState::Disconnected(_) => return JNI_FALSE,
-            }
-        } else {
-            return JNI_FALSE;
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
+    // Flush with timeout; if data drains successfully the connection is up.
+    rec.flush_blocking();
+    JNI_TRUE
 }
 
 #[unsafe(no_mangle)]
@@ -659,6 +631,142 @@ pub extern "C" fn Java_sigmacorns_io_RerunLogging_logPoints3DWithColors(
 
     if let Err(err) = rec.log(name.as_str(), &points3d) {
         eprintln!("rerun logPoints3DWithColors failed for {name}: {err}");
+    }
+}
+
+/// Set the simulation time on a named timeline (used for time-indexed logging).
+/// Call this before each batch of log calls to advance the timeline.
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_setTimeSeconds(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    timeline: JString,
+    seconds: jdouble,
+) {
+    let rec = connection_from_ptr(connection);
+    let timeline_name = match string_from_jni(&mut env, &timeline) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("rerun setTimeSeconds JNI failed to read timeline: {err}");
+            return;
+        }
+    };
+    rec.set_time(timeline_name.as_str(), std::time::Duration::from_secs_f64(seconds));
+}
+
+/// Log a static 3D line strip that appears at all times (not time-indexed).
+/// data: flat [x1, y1, z1, x2, y2, z2, ...]  (z=0 for 2D paths)
+/// color: ARGB packed integer
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logLineStrip3DStatic(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    data: JFloatArray,
+    color: jint,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = match string_from_jni(&mut env, &name) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("rerun logLineStrip3DStatic JNI failed to read name: {err}");
+            return;
+        }
+    };
+    let values = match vec_from_java_float_arr(&env, data) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("rerun logLineStrip3DStatic failed to read data for {name}: {err}");
+            return;
+        }
+    };
+    let a = ((color >> 24) & 0xFF) as u8;
+    let r = ((color >> 16) & 0xFF) as u8;
+    let g = ((color >> 8)  & 0xFF) as u8;
+    let b = ( color        & 0xFF) as u8;
+    let strip = LineStrips3D::new([values
+        .chunks(3)
+        .map(|it| [it[0], it[1], it[2]])
+        .collect::<Vec<[f32; 3]>>()
+    ])
+    .with_colors([rerun::Color::from_unmultiplied_rgba(r, g, b, a)]);
+    if let Err(err) = rec.log_static(name.as_str(), &strip) {
+        eprintln!("rerun logLineStrip3DStatic failed for {name}: {err}");
+    }
+}
+
+/// Log a time-indexed 3D line strip with a specific color.
+/// data: flat [x1, y1, z1, x2, y2, z2, ...]  (z=0 for 2D paths)
+/// color: ARGB packed integer
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logLineStrip3DColored(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    data: JFloatArray,
+    color: jint,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = match string_from_jni(&mut env, &name) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("rerun logLineStrip3DColored JNI failed to read name: {err}");
+            return;
+        }
+    };
+    let values = match vec_from_java_float_arr(&env, data) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("rerun logLineStrip3DColored failed to read data for {name}: {err}");
+            return;
+        }
+    };
+    let a = ((color >> 24) & 0xFF) as u8;
+    let r = ((color >> 16) & 0xFF) as u8;
+    let g = ((color >> 8)  & 0xFF) as u8;
+    let b = ( color        & 0xFF) as u8;
+    let strip = LineStrips3D::new([values
+        .chunks(3)
+        .map(|it| [it[0], it[1], it[2]])
+        .collect::<Vec<[f32; 3]>>()
+    ])
+    .with_colors([rerun::Color::from_unmultiplied_rgba(r, g, b, a)]);
+    if let Err(err) = rec.log(name.as_str(), &strip) {
+        eprintln!("rerun logLineStrip3DColored failed for {name}: {err}");
+    }
+}
+
+/// Set the display color of a scalar time-series entity via SeriesLines.
+/// Logged static — call once per entity before logging any scalar values.
+/// color: ARGB packed integer
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub extern "C" fn Java_sigmacorns_io_RerunLogging_logSeriesColor(
+    mut env: JNIEnv,
+    _class: JClass,
+    connection: jlong,
+    name: JString,
+    color: jint,
+) {
+    let rec = connection_from_ptr(connection);
+    let name = match string_from_jni(&mut env, &name) {
+        Ok(s) => s,
+        Err(err) => { eprintln!("rerun logSeriesColor failed to read name: {err}"); return; }
+    };
+    let a = ((color >> 24) & 0xFF) as u8;
+    let r = ((color >> 16) & 0xFF) as u8;
+    let g = ((color >> 8)  & 0xFF) as u8;
+    let b = ( color        & 0xFF) as u8;
+    let series = SeriesLines::new()
+        .with_colors([rerun::Color::from_unmultiplied_rgba(r, g, b, a)]);
+    if let Err(err) = rec.log_static(name.as_str(), &series) {
+        eprintln!("rerun logSeriesColor failed for {name}: {err}");
     }
 }
 

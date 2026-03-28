@@ -22,10 +22,15 @@ data class TrajoptRobotParams(
     val t_max: Double,
 )
 
+data class TrajoptWaypoint(
+    val type: String = "constrained",
+)
+
 data class TrajoptTrajectoryEntry(
     val id: String,
     val name: String,
     val trajectory: TrajoptTrajectoryData?,
+    val waypoints: List<TrajoptWaypoint>? = null,
     val followsTrajectoryId: String? = null,
     val eventMarkers: List<TrajoptEventMarker>? = null,
 )
@@ -72,10 +77,27 @@ class TrajoptTrajectory(
     val samples: List<TrajoptSample>,
     val totalTime: Double,
     val waypointTimes: List<Double> = emptyList(),
+    val waypointTypes: List<String> = emptyList(),
     val eventMarkers: List<TrajoptEventMarker> = emptyList(),
+    /** Feedforward controls per timestep: each inner list is [drive, strafe, turn]. */
+    val controls: List<List<Double>> = emptyList(),
 ) {
     fun getInitialSample(): TrajoptSample? = samples.firstOrNull()
     fun getFinalSample(): TrajoptSample? = samples.lastOrNull()
+
+    /**
+     * Check if the robot is in an intake zone at the given time.
+     * Returns true if the time falls between two waypoints where at least one is type "intake".
+     */
+    fun isIntakeZone(time: Double): Boolean {
+        if (waypointTimes.size != waypointTypes.size) return false
+        for (i in 0 until waypointTimes.size - 1) {
+            if (time >= waypointTimes[i] && time <= waypointTimes[i + 1]) {
+                return waypointTypes[i] == "intake" || waypointTypes[i + 1] == "intake"
+            }
+        }
+        return false
+    }
 
     /**
      * Sample the trajectory at an arbitrary time using linear interpolation.

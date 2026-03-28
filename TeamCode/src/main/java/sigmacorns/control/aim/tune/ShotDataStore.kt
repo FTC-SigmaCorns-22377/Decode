@@ -8,9 +8,9 @@ import java.io.File
  * Stores distance-to-speed data points and persists to JSON.
  * Simple sorted list of (distance, speed) points used for linear interpolation.
  */
-class ShotDataStore {
+class ShotDataStore(private val dataFile: String = DEFAULT_DATA_FILE) {
     companion object {
-        private const val DATA_FILE = "/sdcard/FIRST/shot_tuning_data.json"
+        private const val DEFAULT_DATA_FILE = "/sdcard/FIRST/shot_tuning_data.json"
     }
 
     private val points = mutableListOf<SpeedPoint>()
@@ -50,7 +50,7 @@ class ShotDataStore {
     fun save() {
         try {
             val json = gson.toJson(points.toList())
-            File(DATA_FILE).writeText(json)
+            File(dataFile).writeText(json)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -59,7 +59,7 @@ class ShotDataStore {
     @Synchronized
     fun load() {
         try {
-            val file = File(DATA_FILE)
+            val file = File(dataFile)
             if (!file.exists()) return
 
             val json = file.readText()

@@ -39,3 +39,79 @@ allprojects {
 repositories {
     mavenCentral()
 }
+
+tasks.register('runTrajopt', Exec) {
+    description = 'Starts the trajopt server with TeamCode/trajopt/ as the project directory'
+    group = 'setup'
+
+    workingDir "${projectDir}/deps/mecanum_trajopt"
+    commandLine 'scripts/host.sh', '--project-dir', "${projectDir}/TeamCode/trajopt"
+}
+
+tasks.register('setupDeps') {
+    description = 'Initializes all git submodules recursively, runs trajopt setup script, and builds mecanum_LTV_OCP'
+    group = 'setup'
+
+    doLast {
+        println "Initializing and updating git submodules..."
+        exec {
+            commandLine 'git', 'submodule', 'update', '--init', '--recursive'
+        }
+
+        println "Checking out main branch in submodules..."
+        exec {
+            commandLine 'git', 'submodule', 'foreach', '--recursive',
+                'git checkout $(git symbolic-ref refs/remotes/origin/HEAD | sed \'s@^refs/remotes/origin/@@\')'
+        }
+
+        println "Pulling Git LFS objects..."
+        exec {
+            commandLine 'git', 'lfs', 'pull'
+        }
+        exec {
+            commandLine 'git', 'submodule', 'foreach', '--recursive', 'git lfs pull'
+        }
+
+        println "Running trajopt setup script..."
+        exec {
+            workingDir "${projectDir}/deps/mecanum_trajopt"
+            commandLine 'bash', 'scripts/setup.sh'
+        }
+
+        println "Building mecanum_LTV_OCP for host and Android arm64..."
+        def mecanumRepo = file("${projectDir}/deps/mecanum_LTV_OCP")
+
+        // Host build
+        def hostBuildDir = file("${mecanumRepo}/build-host-jni")
+        exec {
+            workingDir mecanumRepo
+            commandLine 'bash', 'scripts/build_host_jni.sh',
+                '--build-dir', hostBuildDir.absolutePath
+        }
+        def hostLibName = org.gradle.internal.os.OperatingSystem.current().isMacOsX()
+            ? 'libmecanum_ltv_jni.dylib'
+            : 'libmecanum_ltv_jni.so'
+        def hostLib = file("${hostBuildDir}/${hostLibName}")
+        def testJniLibsDir = file("${projectDir}/TeamCode/src/test/jniLibs")
+        testJniLibsDir.mkdirs()
+        copy { from hostLib; into testJniLibsDir }
+        println "Copied ${hostLibName} to ${testJniLibsDir}"
+
+        // Android arm64 build
+        def ndkDir = project(':TeamCode').android.ndkDirectory
+        def androidBuildDir = file("${mecanumRepo}/build-android-a53")
+        exec {
+            workingDir mecanumRepo
+            commandLine 'bash', 'scripts/build_android_cortex_a53.sh',
+                '--ndk', ndkDir.absolutePath,
+                '--build-dir', androidBuildDir.absolutePath
+        }
+        def androidLib = fileTree(androidBuildDir).matching { include '**/libmecanum_ltv_jni.so' }.singleFile
+        def jniLibsDir = file("${projectDir}/TeamCode/src/main/jniLibs/arm64-v8a")
+        jniLibsDir.mkdirs()
+        copy { from androidLib; into jniLibsDir }
+        println "Copied libmecanum_ltv_jni.so to ${jniLibsDir}"
+
+        println "setupDeps complete."
+    }
+}

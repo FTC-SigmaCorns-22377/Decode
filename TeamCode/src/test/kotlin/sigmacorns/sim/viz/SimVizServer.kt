@@ -5,6 +5,15 @@ import io.javalin.Javalin
 import io.javalin.websocket.WsContext
 import sigmacorns.io.JoltSimIO
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+
+data class WasdState(
+    val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false,
+    val q: Boolean = false, val e: Boolean = false, val r: Boolean = false, val f: Boolean = false,
+    val o: Boolean = false, val p: Boolean = false,
+    val n1: Boolean = false, val n2: Boolean = false, val n3: Boolean = false, val n4: Boolean = false,
+    val space: Boolean = false, val shift: Boolean = false,
+)
 
 class SimVizServer(
     private val simIO: JoltSimIO,
@@ -15,14 +24,28 @@ class SimVizServer(
     }
     private val clients = ConcurrentHashMap.newKeySet<WsContext>()
     private val gson = Gson()
+    private val firstClientLatch = CountDownLatch(1)
+
+    @Volatile var wasdState: WasdState = WasdState()
+        private set
 
     fun start(): SimVizServer {
         app.ws("/sim") { ws ->
             ws.onConnect { ctx -> clients.add(ctx) }
             ws.onClose { ctx -> clients.remove(ctx) }
+            ws.onMessage { ctx ->
+                try {
+                    firstClientLatch.countDown()
+                    wasdState = gson.fromJson(ctx.message(), WasdState::class.java)
+                } catch (_: Exception) {}
+            }
         }
         app.start(port)
         return this
+    }
+
+    fun awaitClient() {
+        firstClientLatch.await()
     }
 
     fun stop() {
@@ -37,20 +60,32 @@ class SimVizServer(
 
         val balls = simIO.getBallStates()
 
+        val goalState = simIO.getGoalState()
+
         val state = mapOf(
             "t" to simIO.time().inWholeMilliseconds / 1000.0,
             "robot" to mapOf(
                 "x" to robotState[0],
                 "y" to robotState[1],
                 "theta" to robotState[2],
-                "turretAngle" to simIO.turretPosition(),
-                "hoodAngle" to simIO.hoodAngle,
+                "turretAngle" to simIO.turretPosition() / sigmacorns.constants.turretTicksPerRad,
+                "intakeAngle" to simIO.intakeAngle(),
+                "intakeRollerRPM" to simIO.intakeRollerVelocity() * 60.0 / (2.0 * Math.PI),
+                "hoodAngle" to simIO.hoodPosition(),
                 "flywheelRPM" to simIO.flywheelVelocity() * 60.0 / (2.0 * Math.PI)
             ),
             "balls" to balls.map { b ->
                 mapOf("x" to b.x, "y" to b.y, "z" to b.z, "color" to b.color.name.lowercase())
             },
-            "heldBalls" to simIO.heldBalls.map { it.name.lowercase() }
+            "heldBalls" to simIO.heldBalls.map { it.name.lowercase() },
+            "goals" to mapOf(
+                "redScore" to goalState.redScore,
+                "blueScore" to goalState.blueScore,
+                "redGateOpen" to goalState.redGateOpen,
+                "blueGateOpen" to goalState.blueGateOpen,
+                "redLeverAngle" to goalState.redLeverAngle,
+                "blueLeverAngle" to goalState.blueLeverAngle
+            )
         )
 
         val json = gson.toJson(state)

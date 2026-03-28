@@ -1,2 +1,7 @@
 TeamCode/src/main/jniLibs/arm64-v8a/libdecode_estimator_jni.so filter=lfs diff=lfs merge=lfs -text
 TeamCode/src/main/jniLibs/arm64-v8a/librerun.so filter=lfs diff=lfs merge=lfs -text
+TeamCode/src/main/jniLibs/arm64-v8a/libmecanum_ltv_jni.so filter=lfs diff=lfs merge=lfs -text
+**/librerun.so filter=lfs diff=lfs merge=lfs -text
+**/libmecanum_ltv_jni.so filter=lfs diff=lfs merge=lfs -text
+TeamCode/trajopt/*.bin filter=lfs diff=lfs merge=lfs -text
+*.so filter=lfs diff=lfs merge=lfs -text

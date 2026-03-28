@@ -139,6 +139,15 @@ Java_sigmacorns_sim_JoltNative_nativeSpawnBall(JNIEnv* env, jclass, jlong handle
     return from_handle(handle)->spawnBall(x, y, z, vx, vy, vz, color);
 }
 
+JNIEXPORT jint JNICALL
+Java_sigmacorns_sim_JoltNative_nativeSpawnShotBall(JNIEnv* env, jclass, jlong handle,
+                                                    jfloat x, jfloat y, jfloat z,
+                                                    jfloat vx, jfloat vy, jfloat vz,
+                                                    jint color) {
+    if (!check_handle(env, handle)) return -1;
+    return from_handle(handle)->spawnShotBall(x, y, z, vx, vy, vz, color);
+}
+
 JNIEXPORT void JNICALL
 Java_sigmacorns_sim_JoltNative_nativeRemoveBall(JNIEnv* env, jclass, jlong handle, jint index) {
     if (!check_handle(env, handle)) return;
@@ -169,13 +178,47 @@ Java_sigmacorns_sim_JoltNative_nativeGetBallColors(JNIEnv* env, jclass, jlong ha
     from_handle(handle)->getBallColors(arr.data());
 }
 
+JNIEXPORT void JNICALL
+Java_sigmacorns_sim_JoltNative_nativeSetIntakeRollerOmega(JNIEnv* env, jclass, jlong handle,
+                                                           jfloat omega) {
+    if (!check_handle(env, handle)) return;
+    from_handle(handle)->setIntakeRollerOmega(omega);
+}
+
+JNIEXPORT void JNICALL
+Java_sigmacorns_sim_JoltNative_nativeGetIntakeState(JNIEnv* env, jclass, jlong handle,
+                                                     jfloatArray out) {
+    if (!check_handle(env, handle)) return;
+    ScopedFloatArray arr(env, out, 0);
+    if (!arr.valid()) return;
+    from_handle(handle)->getIntakeState(arr.data());
+}
+
 JNIEXPORT jint JNICALL
-Java_sigmacorns_sim_JoltNative_nativeGetIntakeOverlaps(JNIEnv* env, jclass, jlong handle,
+Java_sigmacorns_sim_JoltNative_nativeGetPendingPickups(JNIEnv* env, jclass, jlong handle,
                                                         jintArray out, jint max) {
     if (!check_handle(env, handle)) return 0;
     ScopedIntArray arr(env, out, 0);
     if (!arr.valid()) return 0;
-    return from_handle(handle)->getIntakeOverlaps(arr.data(), max);
+    return from_handle(handle)->getPendingPickups(arr.data(), max);
+}
+
+JNIEXPORT jint JNICALL
+Java_sigmacorns_sim_JoltNative_nativeCollectPickups(JNIEnv* env, jclass, jlong handle,
+                                                     jintArray out, jint max) {
+    if (!check_handle(env, handle)) return 0;
+    ScopedIntArray arr(env, out, 0);
+    if (!arr.valid()) return 0;
+    return from_handle(handle)->collectPickups(arr.data(), max);
+}
+
+JNIEXPORT void JNICALL
+Java_sigmacorns_sim_JoltNative_nativeGetGoalStates(JNIEnv* env, jclass, jlong handle,
+                                                    jfloatArray out) {
+    if (!check_handle(env, handle)) return;
+    ScopedFloatArray arr(env, out, 0);
+    if (!arr.valid()) return;
+    from_handle(handle)->getGoalStates(arr.data());
 }
 
 } // extern "C"

@@ -8,24 +8,23 @@ import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
 import kotlin.math.PI
 
-// specs of a goBilda motor without a gearbox (Modern Robotics 12v DC motor)
-// from https://motors.vex.com/other-motors/modern-robotics-12vdc
+// goBILDA 5203 series bare motor (RS-555) specs at 12V
+// from https://www.gobilda.com/5203-series-yellow-jacket-motor-1-1-ratio-24mm-length-8mm-rex-shaft-6000-rpm-3-3-5v-encoder/
 
 /**
- * Modern Robotics 12v DC motor top speed in rad/s
+ * RS-555 bare motor free speed in rad/s (6000 RPM)
  */
-val bareMotorTopSpeed = 617.84
+val bareMotorTopSpeed = 628.32
 
 
 /**
- * Modern Robotics 12v DC motor stall torque in N*m
+ * RS-555 bare motor stall torque in N·m (1.47 kg·cm)
  */
-val bareMotorStallTorque = 0.187
+val bareMotorStallTorque = 0.14416
 
 
 /**
- * Gear ratio used with a Modern Robotics 12v DC motor.
- * See goBilda website for values
+ * goBILDA 5203 planetary gearbox ratio for drive motors (13.7:1 variant)
  */
 val driveGearRatio = 13.7
 
@@ -39,8 +38,8 @@ val drivetrainParameters = MecanumParameters(
     0.2,
     0.2,
     0.048,
-    15.0,
-    1.3,
+    14.1,
+    0.5,
     0.1,
     0.05
 )
@@ -49,7 +48,11 @@ val drivetrainParameters = MecanumParameters(
 val drivetrainCenter = Vector2d(0.03996203, 0.0)
 
 val flywheelGearRatio = 1.0
-val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio,bareMotorStallTorque*flywheelGearRatio)
+// Two motors geared 1:1 to flywheel — double the torque
+val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio, 2*bareMotorStallTorque*flywheelGearRatio)
+
+val intakeGearRatio = 3.0
+val intakeMotor = LinearDcMotor(bareMotorTopSpeed/intakeGearRatio, bareMotorStallTorque*intakeGearRatio)
 
 /**
  * Parameters of the dual-motor flywheel used in the simulator
@@ -67,7 +70,7 @@ const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0
 
 val turretTicksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2*PI) * 76 / 19
 val turretRange = MotorRangeMapper(
-    limits = -PI/2.0..PI/2.0,           // turret can rotate +/- 190 degrees
-    limitsTick = -PI/2.0*turretTicksPerRad..PI/2.0*turretTicksPerRad,           // turret can rotate +/- 190 degrees
+    limits = -PI..PI,           // turret can rotate +/- 180 degrees
+    limitsTick = -PI*turretTicksPerRad..PI*turretTicksPerRad,
     slowdownDist = 0.3           // slow down within 0.3 rad of limits
 )

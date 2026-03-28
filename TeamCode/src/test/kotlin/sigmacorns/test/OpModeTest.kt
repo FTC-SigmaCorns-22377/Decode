@@ -5,6 +5,8 @@ import sigmacorns.io.SigmaIO
 import sigmacorns.io.SimIO
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.opmode.test.DrivetrainModelValidationTest
+import sigmacorns.opmode.test.LTVSimple
+import sigmacorns.opmode.test.LTVTest
 import sigmacorns.opmode.test.MPCForward
 import sigmacorns.opmode.test.MPCReturn
 
@@ -14,7 +16,7 @@ class OpModeTest {
     fun opModeTest() {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
-        val opmode = DrivetrainModelValidationTest()
+        val opmode = LTVSimple()
 
         opmode.runOpMode()
     }

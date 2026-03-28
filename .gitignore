@@ -9,6 +9,7 @@
 # Local jniLibs
 TeamCode/src/test/jniLibs
 TeamCode/lets-plot-images
+*.rrd
 
 # Files for the ART/Dalvik VM
 *.dex

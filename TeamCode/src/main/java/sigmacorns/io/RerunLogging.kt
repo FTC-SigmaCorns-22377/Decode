@@ -4,17 +4,22 @@ import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.State
+import sigmacorns.opmode.SigmaOpMode.Companion.SIM
 
 class RerunLogging private constructor(
     val name: String,
 ): AutoCloseable {
     init {
         try {
-            val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("rerun")
-            if (resolvedPath != null) {
-                System.load(resolvedPath)
+            if(SIM) {
+                System.loadLibrary("rerun");
             } else {
-                System.loadLibrary("rerun")
+                val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("rerun")
+                if (resolvedPath != null) {
+                    System.load(resolvedPath)
+                } else {
+                    System.loadLibrary("rerun")
+                }
             }
         } catch (e: UnsatisfiedLinkError) {
             System.err.println("RerunLogging: failed to load native library 'rerun': ${e.message}")
@@ -83,6 +88,11 @@ class RerunLogging private constructor(
         name: String,
         value: Double,
     )
+
+    private external fun setTimeSeconds(connection: Long, timeline: String, seconds: Double)
+    private external fun logLineStrip3DStatic(connection: Long, name: String, data: FloatArray, color: Int)
+    private external fun logLineStrip3DColored(connection: Long, name: String, data: FloatArray, color: Int)
+    private external fun logSeriesColor(connection: Long, name: String, color: Int)
 
     private var ptr: Long = 0
     private var connectionWarningLogged = false
@@ -155,6 +165,56 @@ class RerunLogging private constructor(
         withConnection { handle ->
             logScalar(handle, name, value.toDouble())
         }
+    }
+
+    /** Set the current time on a named timeline. Call before each batch of log calls. */
+    fun setSimTime(seconds: Double) {
+        withConnection { handle -> setTimeSeconds(handle, "sim_time", seconds) }
+    }
+
+    /**
+     * Log a static 2D line strip (appears at all times, not time-indexed).
+     * Use for reference trajectories that should always be visible.
+     * color: ARGB packed integer (e.g. 0xFF6464FF.toInt() for blue)
+     */
+    fun logLineStripStatic(name: String, points: List<Vector2d>, color: Int = 0xFF6464FF.toInt()) {
+        if (points.isEmpty()) return
+        val payload = FloatArray(points.size * 3) {
+            val i = it / 3
+            when (it % 3) {
+                0 -> points[i].x.toFloat()
+                1 -> points[i].y.toFloat()
+                else -> 0f
+            }
+        }
+        withConnection { handle -> logLineStrip3DStatic(handle, name, payload, color) }
+    }
+
+    /**
+     * Set the display color of a scalar time-series entity via SeriesLines.
+     * Call once per entity (logged static, applies at all times).
+     * color: ARGB packed integer
+     */
+    fun logSeriesColor(name: String, color: Int) {
+        withConnection { handle -> logSeriesColor(handle, name, color) }
+    }
+
+    /**
+     * Log a time-indexed 2D line strip with a specific color.
+     * Use for growing actual trajectories (call each step with accumulated points).
+     * color: ARGB packed integer
+     */
+    fun logLineStripColored(name: String, points: List<Vector2d>, color: Int) {
+        if (points.isEmpty()) return
+        val payload = FloatArray(points.size * 3) {
+            val i = it / 3
+            when (it % 3) {
+                0 -> points[i].x.toFloat()
+                1 -> points[i].y.toFloat()
+                else -> 0f
+            }
+        }
+        withConnection { handle -> logLineStrip3DColored(handle, name, payload, color) }
     }
 
     fun logPoints2D(name: String, points: List<Vector2d>, color: Int = 0xFF00FF00.toInt(), radius: Float = 5f) {
