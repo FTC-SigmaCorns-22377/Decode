@@ -15,7 +15,7 @@ import kotlin.time.Duration.Companion.milliseconds
 @Configurable
 object FlywheelDeadbeatConfig {
     /** Flywheel inertia in kg*m^2 */
-    @JvmField var inertia = 0.7 // recalculte this bc the flywheels add 0.8 kg of weight
+    @JvmField var inertia = 0.000410 // ½mr² = 0.5 * 0.38709252 kg * (0.046 m)²
 
     /** Expected sensor-to-actuator lag in milliseconds */
     @JvmField var lagMs = 10.0

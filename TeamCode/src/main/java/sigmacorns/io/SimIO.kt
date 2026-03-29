@@ -20,6 +20,14 @@ class SimIO : SigmaIO {
     override var flywheel: Double = 0.0
     override var intake: Double = 0.0
     override var turret: Double = 0.0
+    override var turretLeft: Double = 0.5
+    override var turretRight: Double = 0.5
+    override var hood: Double = 0.5
+    override var blocker: Double = 0.0
+
+    override fun beamBreak1(): Boolean = false
+    override fun beamBreak2(): Boolean = false
+    override fun beamBreak3(): Boolean = false
 
     override fun position(): Pose2d = robot.drivetrainState.pos
 

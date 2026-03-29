@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jolt Sim Visualizer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #1a1a2e; color: #eee; font-family: monospace; overflow: hidden; }
+        #canvas-container { width: 100vw; height: calc(100vh - 40px); }
+        #controls {
+            height: 40px; display: flex; align-items: center; gap: 12px;
+            padding: 0 16px; background: #16213e; border-top: 1px solid #333;
+        }
+        button {
+            background: #0f3460; color: #eee; border: 1px solid #555;
+            padding: 4px 12px; cursor: pointer; font-family: monospace;
+        }
+        button:hover { background: #1a4a7a; }
+        button.active { background: #e94560; }
+        #scrubber { flex: 1; }
+        #time-display { min-width: 80px; text-align: right; }
+        #pos-display {
+            position: fixed; top: 12px; right: 12px;
+            background: rgba(15, 52, 96, 0.85); border: 1px solid #555;
+            padding: 8px 14px; font-size: 14px; line-height: 1.6;
+            pointer-events: none; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="pos-display">X: 0.000<br>Y: 0.000</div>
+    <div id="canvas-container"></div>
+    <div id="controls">
+        <button id="play-pause">Pause</button>
+        <input id="scrubber" type="range" min="0" max="0" value="0" step="1">
+        <button id="live-btn" class="active">LIVE</button>
+        <span id="time-display">0.000s</span>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.154.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.154.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="scene.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

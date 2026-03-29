@@ -74,7 +74,7 @@ class TuningWebServer(
     private fun handleAddPoint(session: IHTTPSession): Response {
         val body = readBody(session)
         val point = gson.fromJson(body, SpeedPoint::class.java)
-        tuner.addPoint(point.distance, point.speed)
+        tuner.addPoint(point.distance, point.speed, point.hoodAngle)
         dataStore.save()
         return jsonOk("""{"success":true}""")
     }
@@ -84,7 +84,7 @@ class TuningWebServer(
             ?: return jsonError("Invalid index")
         val body = readBody(session)
         val point = gson.fromJson(body, SpeedPoint::class.java)
-        tuner.updatePoint(index, point.distance, point.speed)
+        tuner.updatePoint(index, point.distance, point.speed, point.hoodAngle)
         dataStore.save()
         return jsonOk("""{"success":true}""")
     }
@@ -128,7 +128,9 @@ class TuningWebServer(
         val step = (maxDist - minDist) / 50
         val curve = (0..50).mapNotNull { i ->
             val d = minDist + i * step
-            tuner.getRecommendedSpeed(d)?.let { SpeedPoint(d, it) }
+            tuner.getRecommendedSpeed(d)?.let { speed ->
+                SpeedPoint(d, speed, tuner.getRecommendedHoodAngle(d) ?: 45.0)
+            }
         }
         return newFixedLengthResponse(Response.Status.OK, "application/json", gson.toJson(curve))
     }
