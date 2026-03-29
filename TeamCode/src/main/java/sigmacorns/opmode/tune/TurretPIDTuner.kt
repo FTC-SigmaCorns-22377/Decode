@@ -3,9 +3,9 @@ package sigmacorns.opmode.tune
 import com.bylazar.configurables.annotations.Configurable
 import com.bylazar.telemetry.PanelsTelemetry
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import sigmacorns.constants.bareMotorTopSpeed
-import sigmacorns.control.MotorRangeMapper
-import sigmacorns.subsystem.Turret
+import sigmacorns.Robot
+import sigmacorns.math.Pose2d
+import sigmacorns.subsystem.TurretServoConfig
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.math.PI
 
@@ -14,93 +14,64 @@ object TurretPIDConfig {
     @JvmField var kP = 1.5
     @JvmField var kD = 0.08
     @JvmField var kI = 0.0
-    @JvmField var kVRobot = 1.0 / (bareMotorTopSpeed * (1150.0/6000.0) * 19.0 / 76.0) * 0.9
+    @JvmField var kVRobot = 0.0
     @JvmField var maxTargetLead = 1.0
     @JvmField var slewRate = 60000.0
     @JvmField var outputSlewRate = 4000.0
 }
 
-@TeleOp(name = "Turret PID Tuner", group = "Tune")
+/**
+ * Turret servo tuner. Tests the dual-servo turret system.
+ * Adjusts slew rate and angle limits via Panels dashboard.
+ */
+@TeleOp(name = "Turret Servo Tuner", group = "Tune")
 class TurretPIDTuner : SigmaOpMode() {
 
-    private val ticksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2*PI) * 76 / 19
-
-    private val turretRange = MotorRangeMapper(
-        limits = -PI/2.0..PI/2.0,           // turret can rotate +/- 190 degrees
-        limitsTick = -PI/2.0*ticksPerRad..PI/2.0*ticksPerRad,           // turret can rotate +/- 190 degrees
-        slowdownDist = 0.3           // slow down within 0.3 rad of limits
-    )
-
-    private lateinit var turret: Turret
-
-    // Tuning state
     private var targetAngle = 0.0
-    private val discreteStep = PI / 4 // 45 degrees
     private val continuousRate = 1.0 // rad/s
 
     override fun runOpMode() {
-        turret = Turret(turretRange, io)
-        turret.fieldRelativeMode = false
+        val robot = Robot(io, blue = false)
+        robot.init(Pose2d(), apriltagTracking = false)
+        robot.aimTurret = false
 
-        telemetry.addLine("Turret PID Tuner (Direct)")
-        telemetry.addLine("Use Panels dashboard to adjust kP, kD, kI, etc.")
-        telemetry.addLine("Use gamepad to control target")
+        telemetry.addLine("Turret Servo Tuner")
+        telemetry.addLine("Right Stick X: Move turret")
+        telemetry.addLine("A: Center turret")
         telemetry.update()
 
         waitForStart()
 
         ioLoop { state, dt ->
-            // Update inputs
-            
             // Continuous adjustment
-            targetAngle += -gamepad1.right_stick_y * continuousRate * dt.inWholeMilliseconds / 1000.0
-            
-            // Discrete steps
-            if (gamepad1.dpad_up) {
-                targetAngle += discreteStep
-                while (gamepad1.dpad_up && opModeIsActive()) { idle() }
-            }
-            if (gamepad1.dpad_down) {
-                targetAngle -= discreteStep
-                while (gamepad1.dpad_down && opModeIsActive()) { idle() }
-            }
-            
+            targetAngle += -gamepad1.right_stick_x * continuousRate * dt.inWholeMilliseconds / 1000.0
+            targetAngle = targetAngle.coerceIn(TurretServoConfig.minAngle, TurretServoConfig.maxAngle)
+
             // Reset
             if (gamepad1.a) {
                 targetAngle = 0.0
                 while (gamepad1.a && opModeIsActive()) { idle() }
             }
-            
-            // Update Turret
-            // Set robot velocity to 0 or actual if available (for static tuning it's 0 usually)
-            // But if we want to tune kVRobot we might want to simulate it or drive around.
-            // Let's read from io if available.
-            turret.robotHeading = io.position().rot
-            turret.robotAngularVelocity = io.velocity().rot
-            
-            // For simple tuning, we might want to test field relative mode if the user requested it.
-            // But let's stick to robot relative for consistent tuning unless toggled.
-            // Actually, if PID logic changes to rely on field relative logic, we verify it works.
-            turret.targetAngle = targetAngle
-            turret.update(dt)
 
-            // Telemetry
+            robot.turret.fieldRelativeMode = false
+            robot.turret.targetAngle = targetAngle
+            robot.turret.update(dt)
+
+            io.update()
+
             val tel = PanelsTelemetry.telemetry
-            tel.addLine("=== Turret PID Tuner ===")
-            tel.addData("Target (rad)", targetAngle)
+            tel.addLine("=== Turret Servo Tuner ===")
             tel.addData("Target (deg)", Math.toDegrees(targetAngle))
-            tel.addData("Current (rad)", turret.pos)
-            tel.addData("Current (deg)", Math.toDegrees(turret.pos))
-            tel.addData("Error (rad)", turret.effectiveTargetAngle - turret.pos)
-            tel.addData("Motor Power", io.turret) // Turret class sets io.turret
-            
-            tel.addLine("")
-            tel.addLine("Config:")
-            tel.addData("kP", TurretPIDConfig.kP)
-            
+            tel.addData("Position (deg)", Math.toDegrees(robot.turret.pos))
+            tel.addData("Servo Position", robot.turret.currentServoPosition)
+            tel.addData("Servo L", io.turretLeft)
+            tel.addData("Servo R", io.turretRight)
+            tel.addData("Slew Rate", TurretServoConfig.slewRate)
             tel.update()
 
-            false // continue loop
+            false
         }
+
+        robot.close()
     }
 }

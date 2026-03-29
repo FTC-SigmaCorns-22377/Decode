@@ -45,7 +45,7 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     val heldBalls = mutableListOf<BallColor>()
 
     /** Hood servo input: 0.0 = horizontal, 1.0 = 70 degrees */
-    var hood: Double = DEFAULT_BALL_LAUNCH_ANGLE_DEGREES / 70.0
+    var hoodInput: Double = DEFAULT_BALL_LAUNCH_ANGLE_DEGREES / 70.0
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -54,6 +54,11 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     override var flywheel: Double = 0.0
     override var intake: Double = 0.0
     override var turret: Double = 0.0
+    override var turretLeft: Double = 0.5
+    override var turretRight: Double = 0.5
+    override var hood: Double = 0.5
+        set(value) { field = value; hoodInput = value }
+    override var blocker: Double = 0.0
 
     override fun position(): Pose2d {
         JoltNative.nativeGetRobotState(handle, robotState)
@@ -64,6 +69,11 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         JoltNative.nativeGetRobotState(handle, robotState)
         return Pose2d(robotState[3].toDouble(), robotState[4].toDouble(), robotState[5].toDouble())
     }
+
+    // Sim beam breaks based on held ball count
+    override fun beamBreak1(): Boolean = heldBalls.size >= 1
+    override fun beamBreak2(): Boolean = heldBalls.size >= 2
+    override fun beamBreak3(): Boolean = heldBalls.size >= 3
 
     override fun flywheelVelocity(): Double = flywheelState.omega
 
@@ -121,7 +131,7 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         if (turretAngleRad < -TURRET_ANGLE_LIMIT) { turretAngleRad = -TURRET_ANGLE_LIMIT; turretVelocityRad = 0.0 }
 
         // Integrate hood servo
-        val hoodTarget = hood.coerceIn(0.0, 1.0) * HOOD_RANGE
+        val hoodTarget = hoodInput.coerceIn(0.0, 1.0) * HOOD_RANGE
         val hoodError = hoodTarget - hoodAngleRad
         val hoodVel = (SERVO_K * hoodError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
         hoodAngleRad += hoodVel * dtSeconds

@@ -18,15 +18,25 @@ import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
+import sigmacorns.subsystem.BeamBreak
+import sigmacorns.subsystem.Hood
+import sigmacorns.subsystem.Intake
+import sigmacorns.subsystem.Transfer
+import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoCloseable {
-    val aim = AimingSystem(io, blue, shotDataPath)
+    val aim = AimingSystem(this, blue, shotDataPath)
     val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
     val drive = DriveController()
+    val beamBreak = BeamBreak(this)
+    val intake = Intake(this)
+    val transfer = Transfer(this)
+    val turret = Turret(this)
+    val hood = Hood(this)
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
@@ -140,10 +150,24 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
 
         if(zero) {
             aimTurret = false
-            aim.turret.fieldRelativeMode = false
-            aim.turret.targetAngle = 0.0
+            turret.fieldRelativeMode = false
+            turret.targetAngle = 0.0
         }
 
+        // Update subsystems
+        beamBreak.update()
+        intake.update(dt)
+        transfer.update(dt)
+
+        // Update flywheel controller
+        if (aimFlywheel) {
+            flywheel.update(io.flywheelVelocity(), dt)
+        }
+
+        // Update hood (continuously adjusts launch angle)
+        hood.update(dt)
+
+        // Update aiming system (vision + turret)
         aim.update(dt, aimTurret)
 
         if (aimFlywheel) {
