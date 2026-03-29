@@ -1,5 +1,6 @@
 package sigmacorns
 
+import com.qualcomm.robotcore.hardware.Gamepad
 import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
 import sigmacorns.constants.Network
@@ -135,20 +136,21 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
 
         dispatcher.update()
 
-        if(prewarm) {
+        if (prewarm) {
             startTime = t
         }
 
-        if(!prewarm) {
+        if (!prewarm) {
             runner?.updateState(
                 MecanumState(
                     io.velocity(),
                     io.position()
-                ), 12.0, t-startTime)
+                ), 12.0, t - startTime
+            )
             runner?.driveWithMPC(io, io.voltage())
         }
 
-        if(zero) {
+        if (zero) {
             aimTurret = false
             turret.fieldRelativeMode = false
             turret.targetAngle = 0.0

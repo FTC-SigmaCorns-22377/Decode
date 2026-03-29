@@ -34,11 +34,12 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
 
     //shooter
-    private val flywheelMotor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter")
+    private val flywheel1: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter1")
+    private val flywheel2: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter2")
     //intake
-    private val intakeMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intakeMotor")
-    //turret
-    private val turretMotor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"turret")
+    private val intake1Motor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intake1")
+    //intake
+    private val intake2Motor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intake2")
 
     // turret servos (dual-servo geared turret)
     private val turretLeftServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretLeft")
@@ -186,16 +187,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         }
 
         if (shouldUpdate(flywheel, lastFlywheel)) {
-            flywheelMotor?.power = flywheel
+            flywheel1?.power = flywheel
+            flywheel2?.power = flywheel
             lastFlywheel = flywheel
         }
         if (shouldUpdate(intake, lastIntake)) {
-            intakeMotor?.power = intake
+            intake1Motor?.power = intake
+            intake2Motor?.power = intake
             lastIntake = intake
-        }
-        if (shouldUpdate(turret, lastTurret)) {
-            turretMotor?.power = turret
-            lastTurret = turret
         }
         if (shouldUpdate(turretLeft, lastTurretLeft)) {
             turretLeftServo?.position = turretLeft
@@ -221,8 +220,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
-        cachedFlywheelVelocity = (flywheelMotor?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
-        cachedTurretPosition = turretMotor?.currentPosition?.toDouble() ?: 0.0
+        cachedFlywheelVelocity = (flywheel1?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
         allHubs.map { it.clearBulkCache() }
     }
 
@@ -265,9 +263,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBRMotor.direction = DcMotorSimple.Direction.FORWARD
 
         //flywheel and intake motors(auxilery) direction declarations
-        flywheelMotor?.direction = DcMotorSimple.Direction.FORWARD
-        turretMotor?.direction = DcMotorSimple.Direction.FORWARD
-        intakeMotor?.direction = DcMotorSimple.Direction.FORWARD
+        flywheel1?.direction = DcMotorSimple.Direction.FORWARD
+        flywheel2?.direction = DcMotorSimple.Direction.FORWARD
+        intake1Motor?.direction = DcMotorSimple.Direction.FORWARD
+        intake2Motor?.direction = DcMotorSimple.Direction.REVERSE
 
         //declaring driveMode's for drive motors( which will be run without encoder for now)
         val driveMode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
@@ -278,14 +277,16 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         driveBRMotor.mode = driveMode
 
         //stoping and resetting the encoders for the auxilery motors( stop and reset)
-        flywheelMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
-        turretMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
-        intakeMotor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        flywheel1?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        flywheel2?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        intake1Motor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
+        intake2Motor?.mode = DcMotor.RunMode.STOP_AND_RESET_ENCODER
 
         //declaring the driveMode's for auxilery motors(which will be run without encoder for now)
-        flywheelMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
-        turretMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
-        intakeMotor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        flywheel1?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        flywheel2?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        intake1Motor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+        intake2Motor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
 
         // Turret servos: left = FORWARD, right = REVERSE (mirrored mounting, geared together)
         // Both servos receive the same position value; reversing the right servo
