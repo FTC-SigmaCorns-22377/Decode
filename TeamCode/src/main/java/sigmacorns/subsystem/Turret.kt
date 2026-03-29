@@ -186,21 +186,14 @@ class Turret(val robot: Robot) {
         pos = (pos + angleRate * dtSec).coerceIn(angleLimits)
 
         // Convert angle to servo position and write to both servos
-        currentServoPosition = angleToServo(pos)
+        currentServoPosition = normalizeAngle(pos)
         robot.io.turretLeft = currentServoPosition
         robot.io.turretRight = currentServoPosition  // hardware-reversed
     }
 
-    /** Map radians to servo position [0.0, 1.0]. */
-    private fun angleToServo(angle: Double): Double {
-        val range = angleLimits.endInclusive - angleLimits.start
-        return ((angle - angleLimits.start) / range).coerceIn(0.0, 1.0)
-    }
-
-    /** Map servo position [0.0, 1.0] back to radians. */
-    private fun servoToAngle(servo: Double): Double {
-        val range = angleLimits.endInclusive - angleLimits.start
-        return angleLimits.start + servo * range
+    /** Normalize radians to servo position [0.0, 1.0]. 0 rad = 0.5 (forward). */
+    private fun normalizeAngle(angle: Double): Double {
+        return (0.5 + angle / TurretServoConfig.servoTotalRange).coerceIn(0.0, 1.0)
     }
 }
 
@@ -208,6 +201,9 @@ class Turret(val robot: Robot) {
  * Tunable constants for the servo-based turret.
  */
 object TurretServoConfig {
+    /** Total physical rotation of the servo in radians (355 degrees) */
+    @JvmField var servoTotalRange = 355.0 * PI / 180.0
+
     /** Minimum turret angle in radians */
     @JvmField var minAngle = -PI / 2.0
 
