@@ -229,16 +229,18 @@ class MainTeleOp : SigmaOpMode() {
 
             telemetry.addLine("")
             telemetry.addLine("=== SUBSYSTEMS ===")
+            val intake1Vel = io.intake1Velocity()
+            val intake1RPM = intake1Vel * 60.0 / (2.0 * PI)
             telemetry.addData("Intake", when {
                 robot.intake.isReversing -> "REVERSING"
                 robot.intake.isRunning -> "RUNNING"
                 else -> "IDLE"
             })
+            telemetry.addData("Intake1 RPM", "%.0f", intake1RPM)
             telemetry.addData("Transfer", if (robot.transfer.isRunning) "RUNNING" else "IDLE")
             telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
             telemetry.addData("Auto-Shoot", if (robot.transfer.autoShoot) "ON" else "OFF")
             telemetry.addData("Speed Mode", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
-
             telemetry.update()
 
             false // continue loop

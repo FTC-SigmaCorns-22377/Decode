@@ -37,6 +37,10 @@ class SimIO : SigmaIO {
         return robot.flywheelState.omega
     }
 
+    override fun intake1Velocity(): Double {
+        return 0.0
+    }
+
     override fun turretPosition(): Double {
         return 0.0 // Todo: Implement turret simulation
     }

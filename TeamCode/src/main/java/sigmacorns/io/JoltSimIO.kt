@@ -77,6 +77,8 @@ class JoltSimIO : SigmaIO, AutoCloseable {
 
     override fun flywheelVelocity(): Double = flywheelState.omega
 
+    override fun intake1Velocity(): Double = intakeRollerState.omega
+
     override fun turretPosition(): Double = turretAngleRad * turretTicksPerRad + turretOffset
 
     override fun setTurretPosition(offset: Double) {

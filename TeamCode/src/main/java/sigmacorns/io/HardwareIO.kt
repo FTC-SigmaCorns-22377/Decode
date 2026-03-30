@@ -37,7 +37,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private val flywheel1: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter1")
     private val flywheel2: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter2")
     //intake
-    private val intake1Motor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intake1")
+    private val intake1Motor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"intake1")
     //intake
     private val intake2Motor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intake2")
 
@@ -86,6 +86,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     // Cached motor values
     private var cachedFlywheelVelocity: Double = 0.0
+    private var cachedIntake1Velocity: Double = 0.0
     private var cachedTurretPosition: Double = 0.0
 
     // Cached beam break values (true = beam broken = ball present)
@@ -143,6 +144,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     override fun flywheelVelocity(): Double {
         return cachedFlywheelVelocity
+    }
+
+    override fun intake1Velocity(): Double {
+        return cachedIntake1Velocity
     }
 
     override fun turretPosition(): Double {
@@ -221,6 +226,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
         cachedFlywheelVelocity = (flywheel1?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
+        cachedIntake1Velocity = (intake1Motor?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
         allHubs.map { it.clearBulkCache() }
     }
 
