@@ -47,7 +47,7 @@ class AimingSystem(
         private set
 
     /** When true, use the ballistic solver instead of the simple lead-angle approach. */
-    var useBallisticSolver: Boolean = false
+    var useBallisticSolver: Boolean = true
 
     var positionOverride: Double? = null
 
