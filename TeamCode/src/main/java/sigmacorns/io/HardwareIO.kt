@@ -264,7 +264,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         //flywheel and intake motors(auxilery) direction declarations
         flywheel1?.direction = DcMotorSimple.Direction.FORWARD
-        flywheel2?.direction = DcMotorSimple.Direction.FORWARD
+        flywheel2?.direction = DcMotorSimple.Direction.REVERSE
         intake1Motor?.direction = DcMotorSimple.Direction.FORWARD
         intake2Motor?.direction = DcMotorSimple.Direction.REVERSE
 
