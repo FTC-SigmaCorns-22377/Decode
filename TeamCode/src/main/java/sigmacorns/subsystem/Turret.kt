@@ -129,7 +129,7 @@ class Turret(val io: SigmaIO) {
 
     /** Convert radians to servo position [0.0, 1.0]. 0 rad = 0.5 (forward). */
     private fun angleToServo(angle: Double): Double {
-        return (0.5 + ((angle - TurretServoConfig.servoCenterAngle) / TurretServoConfig.servoTotalRange)).coerceIn(0.0, 1.0)
+        return (0.5 + (angle - TurretServoConfig.servoCenterAngle) / TurretServoConfig.servoTotalRange).coerceIn(0.0, 1.0)
     }
 }
 
