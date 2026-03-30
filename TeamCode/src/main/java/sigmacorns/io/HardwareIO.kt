@@ -86,7 +86,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     // Cached motor values
     private var cachedFlywheelVelocity: Double = 0.0
-    private var cachedIntake1Velocity: Double = 0.0
+    private var cachedIntake1RPM: Double = 0.0
     private var cachedTurretPosition: Double = 0.0
 
     // Cached beam break values (true = beam broken = ball present)
@@ -146,8 +146,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         return cachedFlywheelVelocity
     }
 
-    override fun intake1Velocity(): Double {
-        return cachedIntake1Velocity
+    override fun intake1RPM(): Double {
+        return cachedIntake1RPM
     }
 
     override fun turretPosition(): Double {
@@ -226,7 +226,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
         cachedFlywheelVelocity = (flywheel1?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
-        cachedIntake1Velocity = (intake1Motor?.velocity ?: 0.0) / 145.1 * 60
+        cachedIntake1RPM = (intake1Motor?.velocity ?: 0.0) / 145.1 * 60
         allHubs.map { it.clearBulkCache() }
     }
 

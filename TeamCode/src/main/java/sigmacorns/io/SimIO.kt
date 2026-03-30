@@ -37,7 +37,7 @@ class SimIO : SigmaIO {
         return robot.flywheelState.omega
     }
 
-    override fun intake1Velocity(): Double {
+    override fun intake1RPM(): Double {
         return 0.0
     }
 

@@ -32,7 +32,7 @@ interface SigmaIO {
     fun position(): Pose2d
     fun velocity(): Pose2d
     fun flywheelVelocity(): Double
-    fun intake1Velocity(): Double
+    fun intake1RPM(): Double
     fun turretPosition(): Double
     fun setTurretPosition(offset: Double)
     fun setPosition(p: Pose2d)
