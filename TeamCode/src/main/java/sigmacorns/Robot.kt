@@ -161,20 +161,22 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
         intake.update(dt)
         transfer.update(dt)
 
-        // Update flywheel controller
-        if (aimFlywheel) {
-            flywheel.update(io.flywheelVelocity(), dt)
-        }
-
         // Update hood (continuously adjusts launch angle)
         hood.update(dt)
 
         // Update aiming system (vision + turret)
         aim.update(dt, aimTurret)
 
-        if (aimFlywheel) {
+        // Set flywheel and hood targets from ballistic solver or adaptive tuner
+        val ballisticSolution = aim.ballisticController?.currentSolution
+        if (aimFlywheel && aim.useBallisticSolver && ballisticSolution != null) {
+            flywheel.target = ballisticSolution.omega
+            hood.autoAdjust = false
+            hood.manualAngle = ballisticSolution.phi
+        } else if (aimFlywheel) {
             val recommended = aim.getRecommendedFlywheelVelocity()
             flywheel.target = recommended ?: 0.0
+            hood.autoAdjust = true
         }
         if (dt > Duration.ZERO) {
             flywheel.update(io.flywheelVelocity(), dt)

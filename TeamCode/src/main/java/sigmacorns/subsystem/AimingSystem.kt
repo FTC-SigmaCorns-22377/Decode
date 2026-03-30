@@ -6,12 +6,15 @@ import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.ShootWhileMoveConstants
 import sigmacorns.constants.turretRange
 import sigmacorns.control.aim.TurretTargeting
+import sigmacorns.control.aim.ballistic.BallisticAimController
+import sigmacorns.control.aim.ballistic.ShotSolution
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.control.aim.tune.AdaptiveTuner
 import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
+import sigmacorns.subsystem.HoodConfig
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.time.Duration
@@ -38,6 +41,13 @@ class AimingSystem(
 
     var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
     val targeting = TurretTargeting(goalPosition)
+
+    /** Ballistic trajectory solver for optimized shoot-while-move. */
+    var ballisticController: BallisticAimController? = null
+        private set
+
+    /** When true, use the ballistic solver instead of the simple lead-angle approach. */
+    var useBallisticSolver: Boolean = false
 
     var positionOverride: Double? = null
 
@@ -101,6 +111,11 @@ class AimingSystem(
         adaptiveTuner = AdaptiveTuner(dataStore)
 
         autoAim.enabled = true
+
+        // Initialize ballistic solver
+        val goal3d = FieldLandmarks.goalPosition3d(blue, HoodConfig.goalHeight)
+        ballisticController = BallisticAimController(goal3d.x, goal3d.y, goal3d.z)
+        ballisticController?.init()
     }
 
     /**
@@ -152,13 +167,54 @@ class AimingSystem(
     }
 
     /**
+     * Update using the ballistic trajectory solver.
+     *
+     * Computes optimal shot parameters (theta, phi, omega) and sets
+     * turret field target directly. Returns the solution so Robot.update()
+     * can set flywheel and hood targets.
+     */
+    fun updateBallistic(): ShotSolution? {
+        turret.targetAngleOffset = 0.0
+        val controller = ballisticController ?: return null
+        val fusedPose = autoAim.fusedPose
+        val vel = robot.io.velocity()
+
+        val turretFieldAngle = fusedPose.rot + robot.turret.pos
+
+        val solution = controller.update(
+            fusedPose = fusedPose,
+            velocity = vel,
+            hoodAngle = robot.hood.computedAngle,
+            flywheelOmega = robot.io.flywheelVelocity(),
+            turretAngleField = turretFieldAngle
+        )
+
+        if (solution != null) {
+            turret.fieldRelativeMode = true
+            turret.fieldTargetAngle = solution.theta
+            targetDistance = hypot(
+                goalPosition.x - fusedPose.v.x,
+                goalPosition.y - fusedPose.v.y
+            )
+        }
+
+        return solution
+    }
+
+    /**
      * Convenience: full pipeline update (vision → auto-aim → turret).
      * Use this when no manual turret override is needed.
      */
     fun update(dt: Duration, target: Boolean = true) {
         updateVision()
-        updateVelocityComponents()
-        if(target) applyAutoAimTarget()
+
+        if (useBallisticSolver && target) {
+            updateBallistic()
+        } else {
+            updateVelocityComponents()
+            if (target) applyAutoAimTarget()
+        }
+
         updateTurret(dt)
     }
 
