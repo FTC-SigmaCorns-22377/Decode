@@ -1,43 +1,58 @@
 package sigmacorns.subsystem
 
-import kotlinx.coroutines.delay
 import sigmacorns.io.SigmaIO
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Unified intake-transfer subsystem.
+ * Unified intake-transfer subsystem as a state machine.
  *
  * The intake and internal transfer are one continuous mechanical system driven
  * by two motors sharing a single [SigmaIO.intake] power output. A blocker servo
  * at the end of the transfer path gates ball entry into the shooter.
  *
- * Motor priority: TRANSFERRING > REVERSING > INTAKING > IDLE.
+ * All IO writes happen exclusively in [update]. External code (logic layer,
+ * opmodes) may only set [state] or call the transition methods — never write
+ * to IO directly.
+ *
+ * The blocker is fully state-driven:
+ * - Engaged (blocking) in IDLE, INTAKING, REVERSING
+ * - Disengaged (open) in TRANSFERRING, SHOOTING
+ *
+ * When transitioning to TRANSFERRING, the motor waits [BLOCKER_MOVE_DELAY]
+ * for the blocker servo to physically open before driving balls through.
  */
 class IntakeTransfer(val io: SigmaIO) {
 
     enum class State {
+        /** Motor off, blocker engaged. */
         IDLE,
+        /** Motor forward (intake), blocker engaged. */
         INTAKING,
+        /** Motor reverse (eject), blocker engaged. */
         REVERSING,
-        TRANSFERRING
+        /** Motor forward (transfer) after blocker delay, blocker disengaged. */
+        TRANSFERRING,
+        /** Motor off, blocker disengaged. Used by auto-shoot zone detection. */
+        SHOOTING
     }
 
     var state: State = State.IDLE
         set(value) {
-            field = value
-            transferToken++
+            if (field != value) {
+                // When entering a blocker-disengaged state, start the delay timer
+                val wasDisengaged = field == State.TRANSFERRING || field == State.SHOOTING
+                val willDisengage = value == State.TRANSFERRING || value == State.SHOOTING
+                if (willDisengage && !wasDisengaged) {
+                    blockerReady = false
+                    blockerDisengagedAt = lastUpdateTime
+                }
+                field = value
+            }
         }
 
     /** Set by coordinator from BeamBreak state. */
     var isFull: Boolean = false
-
-    /**
-     * Monotonic token incremented on every state change. Used by [startTransfer]
-     * to detect if the state was changed during the blocker delay, preventing
-     * a stale coroutine from transitioning to TRANSFERRING after the operator
-     * has already released the trigger.
-     */
-    private var transferToken: Long = 0
 
     companion object {
         const val INTAKE_POWER = 1.0
@@ -45,8 +60,17 @@ class IntakeTransfer(val io: SigmaIO) {
         const val TRANSFER_POWER = 1.0
         const val BLOCKER_ENGAGED = 0.0
         const val BLOCKER_DISENGAGED = 1.0
-        const val BLOCKER_MOVE_DELAY_MS = 300L
+        val BLOCKER_MOVE_DELAY = 300.milliseconds
     }
+
+    /** Whether the blocker has had enough time to physically open. */
+    var blockerReady: Boolean = true
+        private set
+
+    private var blockerDisengagedAt: Duration = Duration.ZERO
+    private var lastUpdateTime: Duration = Duration.ZERO
+
+    // -- Transition methods (plain functions, no suspend) --
 
     fun startIntake() {
         if (isFull) return
@@ -69,46 +93,47 @@ class IntakeTransfer(val io: SigmaIO) {
         }
     }
 
-    fun engageBlocker() {
-        io.blocker = BLOCKER_ENGAGED
-    }
-
-    fun disengageBlocker() {
-        io.blocker = BLOCKER_DISENGAGED
-    }
-
-    /**
-     * Begin transferring balls to the shooter.
-     * Disengages blocker first and waits for it to physically move.
-     * If the state changes during the delay (e.g. operator releases trigger),
-     * the transfer is aborted and the blocker re-engaged.
-     */
-    suspend fun startTransfer() {
-        val token = transferToken
-        disengageBlocker()
-        delay(BLOCKER_MOVE_DELAY_MS)
-        if (transferToken != token) {
-            // State changed during delay — abort; blocker already handled by new state.
-            return
-        }
+    fun startTransfer() {
         state = State.TRANSFERRING
     }
 
-    /** Stop transferring. Re-engages blocker. */
-    suspend fun stopTransfer() {
+    fun stopTransfer() {
         state = State.IDLE
-        engageBlocker()
     }
 
+    fun startShooting() {
+        state = State.SHOOTING
+    }
+
+    // -- Update (sole owner of IO writes) --
+
     /**
-     * Called every loop. Sets motor power based on state.
+     * Called every loop. Drives blocker servo and motor power from state.
+     * @param time absolute time from [SigmaIO.time], used for blocker delay.
      */
-    fun update(dt: Duration) {
+    fun update(dt: Duration, time: Duration) {
+        lastUpdateTime = time
+
+        // Blocker servo: disengaged only in TRANSFERRING and SHOOTING
+        val blockerDisengaged = state == State.TRANSFERRING || state == State.SHOOTING
+        io.blocker = if (blockerDisengaged) BLOCKER_DISENGAGED else BLOCKER_ENGAGED
+
+        // Track blocker readiness (delay after disengaging)
+        if (blockerDisengaged && !blockerReady) {
+            if (time - blockerDisengagedAt >= BLOCKER_MOVE_DELAY) {
+                blockerReady = true
+            }
+        }
+        if (!blockerDisengaged) {
+            blockerReady = true
+        }
+
+        // Motor power
         io.intake = when (state) {
-            State.TRANSFERRING -> TRANSFER_POWER
+            State.TRANSFERRING -> if (blockerReady) TRANSFER_POWER else 0.0
             State.REVERSING -> OUTTAKE_POWER
             State.INTAKING -> INTAKE_POWER
-            State.IDLE -> 0.0
+            State.IDLE, State.SHOOTING -> 0.0
         }
     }
 }

@@ -1,8 +1,6 @@
 package sigmacorns.opmode
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import sigmacorns.Robot
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.IntakeTransfer
@@ -45,9 +43,6 @@ class MainTeleOp : SigmaOpMode() {
         var autoAimEnabled = true
         var flywheelTargetSpeed = 400.0
         val flywheelSpeedStep = 25.0
-
-        // Coroutine job tracking for async transfer
-        var transferJob: Job? = null
 
         // Toggle debounce flags (GP2)
         var lastA2 = false
@@ -150,26 +145,20 @@ class MainTeleOp : SigmaOpMode() {
 
             // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
             if (gamepad2.right_trigger > 0.1) {
-                // Shooting: spin flywheel + async transfer (with blocker delay)
+                // Shooting: spin flywheel + transfer (blocker delay handled by state machine)
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = true
-                if (transferJob == null || transferJob!!.isCompleted) {
-                    transferJob = robot.scope.launch { robot.intakeTransfer.startTransfer() }
-                }
+                robot.intakeTransfer.startTransfer()
             } else if (gamepad2.left_bumper) {
                 // Spin-up only: flywheel on, blocker stays engaged
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = true
-                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
-                    transferJob = robot.scope.launch { robot.intakeTransfer.stopTransfer() }
-                }
+                robot.intakeTransfer.stopTransfer()
             } else {
                 // Idle: stop flywheel and transfer
                 robot.shooter.flywheelTarget = 0.0
                 robot.aimFlywheel = true
-                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
-                    transferJob = robot.scope.launch { robot.intakeTransfer.stopTransfer() }
-                }
+                robot.intakeTransfer.stopTransfer()
             }
 
             // ============================================================

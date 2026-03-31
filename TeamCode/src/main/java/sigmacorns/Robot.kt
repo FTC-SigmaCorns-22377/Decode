@@ -164,7 +164,7 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
         aim.update(dt, aimTurret)
 
         // 3. Subsystem updates (write IO)
-        intakeTransfer.update(dt)
+        intakeTransfer.update(dt, t)
         shooter.update(dt)
         turret.update(dt)
     }

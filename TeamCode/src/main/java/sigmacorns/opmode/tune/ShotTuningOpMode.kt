@@ -1,7 +1,6 @@
 package sigmacorns.opmode.tune
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import kotlinx.coroutines.launch
 import sigmacorns.Robot
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.control.aim.tune.AdaptiveTuner
@@ -31,6 +30,11 @@ class ShotTuningOpMode : SigmaOpMode() {
     private var flywheelTarget = 400.0
     private var hoodAngleDeg = 45.0
     @Volatile private var shootRequested = false
+
+    companion object {
+        /** How long to run the transfer motor after a shot request. */
+        const val SHOT_DURATION_MS = 1500L
+    }
 
     override fun runOpMode() {
         val robot = Robot(io, blue = false)
@@ -86,6 +90,9 @@ class ShotTuningOpMode : SigmaOpMode() {
 
         waitForStart()
 
+        var shotStartTime = io.time()
+        var shotActive = false
+
         ioLoop { state, dt ->
             // Apply flywheel target (manual, bypassing aim system)
             robot.shooter.flywheelTarget = flywheelTarget
@@ -93,14 +100,16 @@ class ShotTuningOpMode : SigmaOpMode() {
             // Apply hood angle (manual from web UI)
             robot.shooter.manualHoodAngle = Math.toRadians(hoodAngleDeg)
 
-            // Handle shoot request from web UI
+            // Handle shoot request from web UI (timestamp-based, no coroutines)
             if (shootRequested) {
                 shootRequested = false
-                robot.scope.launch {
-                    robot.intakeTransfer.startTransfer()
-                    kotlinx.coroutines.delay(1500)
-                    robot.intakeTransfer.stopTransfer()
-                }
+                robot.intakeTransfer.startTransfer()
+                shotStartTime = io.time()
+                shotActive = true
+            }
+            if (shotActive && (io.time() - shotStartTime).inWholeMilliseconds >= SHOT_DURATION_MS) {
+                robot.intakeTransfer.stopTransfer()
+                shotActive = false
             }
 
             // Update subsystems
