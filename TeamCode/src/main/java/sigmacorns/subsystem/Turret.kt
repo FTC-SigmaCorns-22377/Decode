@@ -1,6 +1,7 @@
 package sigmacorns.subsystem
 
 import sigmacorns.Robot
+import sigmacorns.io.SigmaIO
 import sigmacorns.math.normalizeAngle
 import kotlin.math.PI
 import kotlin.math.abs
@@ -70,7 +71,7 @@ class Turret(val io: SigmaIO) {
 
     fun update(dt: Duration) {
         // Read current position from analog sensor feedback
-        pos = robot.io.turretPosition()
+        pos = io.turretPosition()
 
         // Determine the raw target angle (field-relative or robot-relative)
         val rawTarget = normalizeAngle(
@@ -123,8 +124,8 @@ class Turret(val io: SigmaIO) {
 
         // Convert angle to servo position and write to both servos
         currentServoPosition = angleToServo(effectiveTargetAngle)
-        robot.io.turretLeft = currentServoPosition
-        robot.io.turretRight = 1-currentServoPosition  // hardware-reversed
+        io.turretLeft = currentServoPosition
+        io.turretRight = 1-currentServoPosition  // hardware-reversed
     }
 
     /** Convert radians to servo position [0.0, 1.0]. 0 rad = 0.5 (forward). */
