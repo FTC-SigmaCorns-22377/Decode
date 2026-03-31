@@ -3,10 +3,9 @@ package sigmacorns.opmode.tune
 import com.bylazar.configurables.annotations.Configurable
 import com.bylazar.telemetry.PanelsTelemetry
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import sigmacorns.constants.flywheelMotor
+import sigmacorns.constants.FlywheelPIDConstants
 import sigmacorns.subsystem.Shooter
 import sigmacorns.opmode.SigmaOpMode
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Configurable parameters for the flywheel deadbeat controller.
@@ -14,15 +13,6 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 @Configurable
 object FlywheelDeadbeatConfig {
-    /** Flywheel inertia in kg*m^2 */
-    @JvmField var inertia = 0.000410 // ½mr² = 0.5 * 0.38709252 kg * (0.046 m)²
-
-    /** Expected sensor-to-actuator lag in milliseconds */
-    @JvmField var lagMs = 10.0
-
-    /** Whether to use hold mode (simple feedforward) instead of deadbeat */
-    @JvmField var holdMode = false
-
     /** Step size for target velocity (rad/s) */
     @JvmField var stepSize = 500.0
 }
@@ -55,10 +45,11 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
     override fun runOpMode() {
         // Create the flywheel controller
         shooter = Shooter(
-            motor = flywheelMotor,
-            inertia = FlywheelDeadbeatConfig.inertia,
-            io = io,
-            lag = FlywheelDeadbeatConfig.lagMs.milliseconds
+            FlywheelPIDConstants.kP,
+            FlywheelPIDConstants.kD,
+            FlywheelPIDConstants.kI,
+            FlywheelPIDConstants.maxVelocity,
+            io
         )
 
         telemetry.addLine("Flywheel Deadbeat Tuner")
@@ -68,7 +59,6 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
         telemetry.addLine("  A: Toggle target (0 <-> step)")
         telemetry.addLine("  Right stick Y: Manual adjustment")
         telemetry.addLine("  B: Reset target to 0")
-        telemetry.addLine("  X: Toggle hold mode")
         telemetry.update()
 
         waitForStart()
@@ -76,12 +66,12 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
         ioLoop { state, dt ->
             // Update flywheel controller parameters from configurables
             shooter = Shooter(
-                motor = flywheelMotor,
-                inertia = FlywheelDeadbeatConfig.inertia,
-                io = io,
-                lag = FlywheelDeadbeatConfig.lagMs.milliseconds
+                FlywheelPIDConstants.kP,
+                FlywheelPIDConstants.kD,
+                FlywheelPIDConstants.kI,
+                FlywheelPIDConstants.maxVelocity,
+                io
             )
-            shooter.hold = FlywheelDeadbeatConfig.holdMode
 
             // D-pad: adjust step size
             if (gamepad1.dpad_up) {
@@ -109,12 +99,6 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
                 while (gamepad1.b && opModeIsActive()) { idle() }
             }
 
-            // X button: toggle hold mode
-            if (gamepad1.x) {
-                FlywheelDeadbeatConfig.holdMode = !FlywheelDeadbeatConfig.holdMode
-                while (gamepad1.x && opModeIsActive()) { idle() }
-            }
-
             // Right stick Y: continuous manual adjustment
             target += -gamepad1.right_stick_y * continuousRate * dt.inWholeMilliseconds / 1000.0
 
@@ -140,9 +124,9 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
             tel.addLine("")
 
             tel.addLine("--- Config (adjust in Panels) ---")
-            tel.addData("Inertia (kg*m^2)", FlywheelDeadbeatConfig.inertia)
-            tel.addData("Lag (ms)", FlywheelDeadbeatConfig.lagMs)
-            tel.addData("Hold Mode", FlywheelDeadbeatConfig.holdMode)
+            tel.addData("kP", FlywheelPIDConstants.kP)
+            tel.addData("kD", FlywheelPIDConstants.kD)
+            tel.addData("kI", FlywheelPIDConstants.kI)
             tel.addData("Step Size (rad/s)", FlywheelDeadbeatConfig.stepSize)
             tel.addLine("")
 
@@ -156,8 +140,6 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
             tel.addLine("  A: Toggle 0 <-> step")
             tel.addLine("  Right stick Y: Manual adjust")
             tel.addLine("  B: Reset to 0")
-            tel.addLine("  X: Toggle hold mode")
-
             tel.update()
 
             false // continue loop

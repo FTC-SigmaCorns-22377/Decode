@@ -1,14 +1,10 @@
 package sigmacorns.subsystem
 
+import sigmacorns.control.PIDController
 import sigmacorns.io.SigmaIO
-import sigmacorns.sim.LinearDcMotor
 import kotlin.math.atan2
-import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.sqrt
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.DurationUnit
 
 /**
  * Unified flywheel + hood shooter subsystem.
@@ -17,29 +13,33 @@ import kotlin.time.DurationUnit
  * launch balls, and the hood servo controls the launch angle. Both take `SigmaIO`
  * and write their respective outputs each loop.
  *
- * Flywheel uses a 1st-order deadbeat controller to reach the target velocity
- * in one timestep. Hood computes the optimal launch angle from distance and
- * flywheel velocity, preferring interpolated tuning data over trig fallback.
+ * Flywheel uses a PID controller with feedforward to reach the target velocity.
+ * Hood computes the optimal launch angle from distance and flywheel velocity,
+ * preferring interpolated tuning data over trig fallback.
  *
  * Input properties [targetDistance], [recommendedHoodAngleDeg], and [flywheelTarget]
  * are set by the AimingSystem each loop.
  */
 class Shooter(
-    val motor: LinearDcMotor,
-    var inertia: Double,
+    kP: Double,
+    kD: Double,
+    kI: Double,
+    val maxVelocity: Double,
     val io: SigmaIO,
-    val lag: Duration = 0.seconds
 ) {
 
     // --- Flywheel state ---
 
+    val pid = PIDController(kP, kD, kI, 0.0)
+
     /** Target flywheel velocity in rad/s (set by AimingSystem or opmode). */
     var flywheelTarget: Double = 0.0
-
-    /** Use simple hold mode instead of deadbeat controller. */
-    var hold: Boolean = false
-
-    private var lastU = 0.0
+        set(value) {
+            if (field != value) {
+                field = value
+                pid.setpoint = value
+            }
+        }
 
     // --- Hood state ---
 
@@ -80,56 +80,21 @@ class Shooter(
     }
 
     // ========================================================================
-    // Flywheel
+    // Flywheel (PID + feedforward)
     // ========================================================================
-
-    /*
-    math:
-        dv/dt = u tau_max/inertia (1-v/(u v_max))
-        a = tau_max/inertia
-        dv/dt = u a - a/v_max v
-        v(t)= u v_max + (v_0 - u v_max)e^(-a/v_max t)
-
-        -- need to find u such that v(DT) = v_target
-        (v_target - v_0*e^(-a/v_max DT))/(v_max - v_max*e^(-a/v_max DT)) = u
-     */
-
-    private fun calculateFlywheelPower(v0: Double, dt: Duration): Double {
-        val e = exp(-motor.stallTorque / inertia / motor.freeSpeed * dt.toDouble(DurationUnit.SECONDS))
-        val power = (flywheelTarget - v0 * e) / (motor.freeSpeed * (1.0 - e))
-        return power * motor.vRef
-    }
 
     private fun updateFlywheel(curV: Double, dt: Duration) {
         if (dt <= Duration.ZERO) return
 
-        val V = if (hold) {
-            flywheelTarget / motor.freeSpeed * motor.vRef
-        } else {
-            val v0 = integrateFlywheelVelocity(curV, lastU, lag)
-            calculateFlywheelPower(v0, dt)
-        }
+        val feedforward = flywheelTarget / maxVelocity
+        val pidOutput = pid.update(curV, dt)
+        val power = feedforward + pidOutput
 
-        io.flywheel = (V / io.voltage()).coerceIn(-1.0..1.0)
-        lastU = V.coerceIn(-io.voltage()..io.voltage())
+        io.flywheel = (power / io.voltage() * 12.0).coerceIn(-1.0..1.0)
     }
 
-    fun integrateFlywheelVelocity(v0: Double, u: Double, t: Duration): Double {
-        val a = motor.stallTorque / inertia
-        val s = u * motor.freeSpeed
-        return s + (v0 - s) * exp(-a / motor.freeSpeed * t.toDouble(DurationUnit.SECONDS))
-    }
-
-    fun spinupTime(cur: Double, target: Double, dt: Duration): Duration {
-        /*
-        If the target cannot be reached in DT, this controller will saturate motor limits
-        therefore an upper bound for the spinup time is the time to reach target under full power + DT
-
-        v_target = v_max + (v_0 - v_max)e^(-a/v_max t)
-        ln((v_target - v_max)/(v_0 - v_max))/(-a/v_max) = t
-        */
-        val t = ln((target - motor.freeSpeed) / (cur - motor.freeSpeed)) / (-motor.stallTorque / inertia / motor.freeSpeed)
-        return t.seconds + dt + lag
+    fun resetPID() {
+        pid.reset()
     }
 
     // ========================================================================

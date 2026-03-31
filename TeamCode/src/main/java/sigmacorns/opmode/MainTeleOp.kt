@@ -11,18 +11,15 @@ import kotlin.math.abs
 /**
  * Full-featured competition TeleOp.
  *
- * GAMEPAD 1 (Driver + Debug/Tuning):
+ * GAMEPAD 1 (Driver):
  *   Left stick          - Translate (mecanum drive)
  *   Right stick X       - Rotate
  *   D-pad up/down       - Speed mode toggle (full / precision)
- *   Left bumper         - Decrease flywheel target speed (-25 rad/s)
- *   Right bumper        - Increase flywheel target speed (+25 rad/s)
  *
  * GAMEPAD 2 (Operator - all subsystem controls):
  *   Left trigger         - Hold to intake balls
  *   B                    - Hold to reverse intake (spit balls out)
  *   Right trigger        - Hold to shoot (flywheel + transfer)
- *   Left trigger + RT    - Hold left trigger to spin-up flywheel only (if RT not held)
  *   Left bumper          - Hold to spin up flywheel (without shooting)
  *   A                    - Toggle auto-aim on/off
  *   Right stick X        - Manual turret override (disables auto-aim while held)
@@ -30,6 +27,8 @@ import kotlin.math.abs
  *   X                    - Toggle shoot-while-move
  *   Y                    - Toggle auto-shoot (zone-based)
  *   D-pad up             - Toggle hood auto-adjust
+ *   D-pad left           - Decrease flywheel target speed (-25 rad/s)
+ *   D-pad right          - Increase flywheel target speed (+25 rad/s)
  */
 @TeleOp(name = "Main TeleOp", group = "Competition")
 class MainTeleOp : SigmaOpMode() {
@@ -49,9 +48,8 @@ class MainTeleOp : SigmaOpMode() {
         var lastX2 = false
         var lastY2 = false
         var lastDpadUp2 = false
-        // Debounce flags (GP1 - debug/tuning)
-        var lastLB1 = false
-        var lastRB1 = false
+        var lastDpadLeft2 = false
+        var lastDpadRight2 = false
 
         telemetry.addLine("Main TeleOp initialized. Waiting for start...")
         telemetry.update()
@@ -66,20 +64,20 @@ class MainTeleOp : SigmaOpMode() {
             // Drivetrain: left stick = translate, right stick x = rotate, dpad = speed mode
             robot.drive.update(gamepad1, io)
 
-            // Debug: flywheel speed adjustment (bumpers)
-            if (gamepad1.left_bumper && !lastLB1) {
-                flywheelTargetSpeed = (flywheelTargetSpeed - flywheelSpeedStep).coerceAtLeast(0.0)
-            }
-            lastLB1 = gamepad1.left_bumper
-
-            if (gamepad1.right_bumper && !lastRB1) {
-                flywheelTargetSpeed = (flywheelTargetSpeed + flywheelSpeedStep).coerceAtMost(628.0)
-            }
-            lastRB1 = gamepad1.right_bumper
-
             // ============================================================
             // GAMEPAD 2: Operator (ALL subsystem controls)
             // ============================================================
+
+            // --- Flywheel speed adjustment (D-pad left/right) ---
+            if (gamepad2.dpad_left && !lastDpadLeft2) {
+                flywheelTargetSpeed = (flywheelTargetSpeed - flywheelSpeedStep).coerceAtLeast(0.0)
+            }
+            lastDpadLeft2 = gamepad2.dpad_left
+
+            if (gamepad2.dpad_right && !lastDpadRight2) {
+                flywheelTargetSpeed = (flywheelTargetSpeed + flywheelSpeedStep).coerceAtMost(628.0)
+            }
+            lastDpadRight2 = gamepad2.dpad_right
 
             // --- Intake: hold left trigger ---
             if (gamepad2.left_trigger > 0.1 && gamepad2.right_trigger <= 0.1) {
@@ -199,7 +197,7 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addLine("=== SHOOTER ===")
             telemetry.addData("Flywheel RPM", "%.0f", flywheelRPM)
             telemetry.addData("Flywheel Vel", "%.1f rad/s", flywheelVel)
-            telemetry.addData("Flywheel Target", "%.1f rad/s (GP1 bumpers to adj)", robot.shooter.flywheelTarget)
+            telemetry.addData("Flywheel Target", "%.1f rad/s (GP2 D-pad L/R)", robot.shooter.flywheelTarget)
             telemetry.addData("Hood Angle", "%.1f°", Math.toDegrees(robot.shooter.computedHoodAngle))
             telemetry.addData("Hood", "${if (robot.shooter.autoAdjust) "AUTO" else "MANUAL"} ${if (robot.shooter.usingInterpolatedData) "(data)" else "(trig)"}")
             telemetry.addData("Hood Servo", "%.3f", robot.shooter.hoodServoPosition)

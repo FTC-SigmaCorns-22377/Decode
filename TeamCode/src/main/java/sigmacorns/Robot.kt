@@ -4,8 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.constants.flywheelMotor
-import sigmacorns.constants.flywheelParameters
+import sigmacorns.constants.FlywheelPIDConstants
 import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.control.mpc.MPCClient
@@ -29,7 +28,13 @@ import kotlin.time.Duration.Companion.seconds
 
 class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoCloseable {
     // Subsystems
-    val shooter = Shooter(flywheelMotor, flywheelParameters.inertia, io)
+    val shooter = Shooter(
+        FlywheelPIDConstants.kP,
+        FlywheelPIDConstants.kD,
+        FlywheelPIDConstants.kI,
+        FlywheelPIDConstants.maxVelocity,
+        io
+    )
     val drive = Drivetrain()
     val beamBreak = BeamBreak(io)
     val intakeTransfer = IntakeTransfer(io)
