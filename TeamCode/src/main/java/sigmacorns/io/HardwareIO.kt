@@ -3,6 +3,7 @@ package sigmacorns.io
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.hardware.lynx.LynxModule
+import com.qualcomm.robotcore.hardware.AnalogInput
 import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.DcMotorEx
 import com.qualcomm.robotcore.hardware.DcMotorSimple
@@ -14,6 +15,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.joml.Vector2d
 import sigmacorns.math.Pose2d
+import sigmacorns.subsystem.TurretServoConfig
 import sigmacorns.math.toPose2d
 import kotlin.math.PI
 import kotlin.math.cos
@@ -44,6 +46,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     // turret servos (dual-servo geared turret)
     private val turretLeftServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretLeft")
     private val turretRightServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretRight")
+    private val turretEncoder: AnalogInput? = hardwareMap.tryGet(AnalogInput::class.java, "turretEncoder")
 
     // hood servo
     private val hoodServo: Servo? = hardwareMap.tryGet(Servo::class.java, "hood")
@@ -222,6 +225,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         cachedBeamBreak1 = beamBreak1Sensor?.state?.not() ?: false
         cachedBeamBreak2 = beamBreak2Sensor?.state?.not() ?: false
         cachedBeamBreak3 = beamBreak3Sensor?.state?.not() ?: false
+
+        // update analog reading
+        cachedTurretPosition = (turretEncoder?.voltage ?: 0.0) / 3.3 * TurretServoConfig.servoTotalRange - TurretServoConfig.servoCenterAngle
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
