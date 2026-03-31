@@ -150,18 +150,20 @@ class MainTeleOp : SigmaOpMode() {
             if (gamepad2.right_trigger > 0.1) {
                 // Shooting: spin flywheel + transfer (blocker delay handled by state machine)
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
-                robot.aimFlywheel = true
+                robot.aimFlywheel = false
                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
             } else if (gamepad2.left_bumper) {
                 // Spin-up only: flywheel on, blocker stays engaged
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
-                robot.aimFlywheel = true
+                robot.aimFlywheel = false
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             } else {
-                // Idle: stop flywheel and transfer
+                // Idle: stop flywheel, only reset transfer (not intake/reverse)
                 robot.shooter.flywheelTarget = 0.0
-                robot.aimFlywheel = true
-                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                robot.aimFlywheel = false
+                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
+                    robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                }
             }
 
             // ============================================================
