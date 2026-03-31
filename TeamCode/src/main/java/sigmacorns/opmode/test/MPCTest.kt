@@ -7,7 +7,7 @@ import kotlin.math.hypot
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.subsystem.DriveController
+import sigmacorns.subsystem.Drivetrain
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.math.Pose2d
 import sigmacorns.io.HardwareIO
@@ -109,7 +109,7 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                 val pathPoints = mpc.path?.map { it.lineP } ?: emptyList()
                 rr.logLineStrip("path/pos", pathPoints)
 
-                val driveController = DriveController()
+                val drivetrain = Drivetrain()
 
                 while (opModeIsActive()) {
                     val t = io.time()
@@ -141,9 +141,9 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                     }.toIntArray()
                     rr.logPoints3DWithColors("predictedPath", predictedPoints, predictedColors, 0.02f)
 
-                    // Convert drive, strafe, turn to motor powers using DriveController
+                    // Convert drive, strafe, turn to motor powers using the Drivetrain subsystem
                     val robotPower = Pose2d(drive, strafe, turn)
-                    driveController.drive(robotPower, io)
+                    drivetrain.drive(robotPower, io)
 
                     io.update()
 

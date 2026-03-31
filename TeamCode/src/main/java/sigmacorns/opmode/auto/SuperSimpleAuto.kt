@@ -2,7 +2,7 @@ package sigmacorns.opmode.auto
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import sigmacorns.State
-import sigmacorns.subsystem.DriveController
+import sigmacorns.subsystem.Drivetrain
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.time.Duration
@@ -11,12 +11,12 @@ import kotlin.time.Duration.Companion.seconds
 @Autonomous
 class SuperSimpleAuto: SigmaOpMode() {
     override fun runOpMode() {
-        val driveController = DriveController()
+        val drivetrain = Drivetrain()
         waitForStart()
 
         val startDriveTime = io.time()
         ioLoop { state: State, dt: Duration ->
-            driveController.drive(Pose2d(0.5, 0.0, 0.0),io)
+            drivetrain.drive(Pose2d(0.5, 0.0, 0.0),io)
 
             val res = io.time() - startDriveTime > 0.5.seconds
 

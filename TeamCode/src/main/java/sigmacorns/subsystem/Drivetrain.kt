@@ -8,7 +8,7 @@ import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumDynamics
 
-class DriveController {
+class Drivetrain {
     private val mecanumDynamics = MecanumDynamics(drivetrainParameters)
     private var speedMultiplier = 1.0
 

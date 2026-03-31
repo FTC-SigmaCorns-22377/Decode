@@ -4,7 +4,7 @@ import com.bylazar.configurables.annotations.Configurable
 import com.bylazar.telemetry.PanelsTelemetry
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.constants.flywheelMotor
-import sigmacorns.subsystem.Flywheel
+import sigmacorns.subsystem.Shooter
 import sigmacorns.opmode.SigmaOpMode
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -42,7 +42,7 @@ object FlywheelDeadbeatConfig {
 @TeleOp(name = "Flywheel Deadbeat Tuner", group = "Tune")
 class FlywheelDeadbeatTuner : SigmaOpMode() {
 
-    private lateinit var flywheel: Flywheel
+    private lateinit var shooter: Shooter
 
     // Target state
     private var target = 0.0
@@ -54,7 +54,7 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
 
     override fun runOpMode() {
         // Create the flywheel controller
-        flywheel = Flywheel(
+        shooter = Shooter(
             motor = flywheelMotor,
             inertia = FlywheelDeadbeatConfig.inertia,
             io = io,
@@ -75,13 +75,13 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
 
         ioLoop { state, dt ->
             // Update flywheel controller parameters from configurables
-            flywheel = Flywheel(
+            shooter = Shooter(
                 motor = flywheelMotor,
                 inertia = FlywheelDeadbeatConfig.inertia,
                 io = io,
                 lag = FlywheelDeadbeatConfig.lagMs.milliseconds
             )
-            flywheel.hold = FlywheelDeadbeatConfig.holdMode
+            shooter.hold = FlywheelDeadbeatConfig.holdMode
 
             // D-pad: adjust step size
             if (gamepad1.dpad_up) {
@@ -119,9 +119,9 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
             target += -gamepad1.right_stick_y * continuousRate * dt.inWholeMilliseconds / 1000.0
 
             // Update flywheel controller
-            flywheel.target = target
+            shooter.flywheelTarget = target
             val currentVelocity = io.flywheelVelocity()
-            flywheel.update(currentVelocity, dt)
+            shooter.update(dt)
 
             // Calculate error
             val error = target - currentVelocity

@@ -3,7 +3,7 @@ package sigmacorns.opmode.test
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.joml.Vector2d
 import sigmacorns.constants.drivetrainParameters
-import sigmacorns.subsystem.DriveController
+import sigmacorns.subsystem.Drivetrain
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.MECANUM_DT
@@ -19,7 +19,7 @@ import kotlin.time.DurationUnit
 @TeleOp(name = "Drivetrain Model Validation", group = "test")
 class DrivetrainModelValidationTest : SigmaOpMode() {
     private val dynamics = MecanumDynamics(drivetrainParameters)
-    private val driveController = DriveController()
+    private val drivetrain = Drivetrain()
 
     override fun runOpMode() {
         telemetry.addLine("Drivetrain model validation ready")
@@ -74,7 +74,7 @@ class DrivetrainModelValidationTest : SigmaOpMode() {
 
                 val boundedCommand = clampPose(normalizedCommand, 0.75)
 
-                lastCommand = driveController.drive(boundedCommand, io)
+                lastCommand = drivetrain.drive(boundedCommand, io)
 
                 val poseError = state.driveTrainPosition - modelState.pos
                 val positionErrorNorm = hypot(poseError.v.x, poseError.v.y)

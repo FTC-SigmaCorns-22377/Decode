@@ -3,11 +3,11 @@ package sigmacorns.opmode.test
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.subsystem.DriveController
+import sigmacorns.subsystem.Drivetrain
 
 @TeleOp(group = "test")
 class OdometryTest : SigmaOpMode() {
-    private val driveController = DriveController()
+    private val drivetrain = Drivetrain()
 
     override fun runOpMode() {
         io.configurePinpoint()
@@ -32,7 +32,7 @@ class OdometryTest : SigmaOpMode() {
                 wasResetPressed = resetPressed
 
                 val robotPower = Pose2d(-gamepad1.left_stick_y.toDouble(), -gamepad1.left_stick_x.toDouble(), -gamepad1.right_stick_x.toDouble())
-                driveController.drive(robotPower, io)
+                drivetrain.drive(robotPower, io)
 
                 telemetry.addData(
                     "pose (m, m, rad)",

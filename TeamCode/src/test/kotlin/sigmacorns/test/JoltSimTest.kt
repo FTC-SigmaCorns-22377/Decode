@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test
 import sigmacorns.io.BallColor
 import sigmacorns.io.JoltSimIO
 import sigmacorns.sim.SimGamepad
-import sigmacorns.subsystem.DriveController
+import sigmacorns.subsystem.Drivetrain
 import kotlin.math.abs
 
 class JoltSimTest {
@@ -346,7 +346,7 @@ class JoltSimTest {
 
         val gamepad = Gamepad()
         val simGamepad = SimGamepad(gamepad)
-        val driveController = DriveController()
+        val drivetrain = Drivetrain()
 
         println("Visualizer running at http://localhost:8080")
         println("Use a connected gamepad to drive. Press Ctrl+C to stop.")
@@ -354,7 +354,7 @@ class JoltSimTest {
         var frameCount = 0
         while (true) {
             simGamepad.tick()
-            driveController.update(gamepad, sim)
+            drivetrain.update(gamepad, sim)
 
             // Right trigger = intake, left bumper = flywheel, right bumper = shoot
             sim.intake = gamepad.right_trigger.toDouble()
