@@ -85,14 +85,17 @@ class MainTeleOp : SigmaOpMode() {
             if (gamepad2.left_trigger > 0.1 && gamepad2.right_trigger <= 0.1) {
                 robot.intakeCoordinator.startIntake()
             } else if (!gamepad2.b) {
-                robot.intakeTransfer.stopIntake()
+                if (robot.intakeTransfer.state == IntakeTransfer.State.INTAKING ||
+                    robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
+                    robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                }
             }
 
             // --- Outtake: hold B to reverse intake ---
             if (gamepad2.b) {
-                robot.intakeTransfer.startReverse()
-            } else {
-                robot.intakeTransfer.stopReverse()
+                robot.intakeTransfer.state = IntakeTransfer.State.REVERSING
+            } else if (robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
+                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             }
 
             // --- Toggle: Auto-aim (A button) ---
@@ -148,17 +151,17 @@ class MainTeleOp : SigmaOpMode() {
                 // Shooting: spin flywheel + transfer (blocker delay handled by state machine)
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = true
-                robot.intakeTransfer.startTransfer()
+                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
             } else if (gamepad2.left_bumper) {
                 // Spin-up only: flywheel on, blocker stays engaged
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = true
-                robot.intakeTransfer.stopTransfer()
+                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             } else {
                 // Idle: stop flywheel and transfer
                 robot.shooter.flywheelTarget = 0.0
                 robot.aimFlywheel = true
-                robot.intakeTransfer.stopTransfer()
+                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             }
 
             // ============================================================

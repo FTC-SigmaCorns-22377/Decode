@@ -103,12 +103,12 @@ class ShotTuningOpMode : SigmaOpMode() {
             // Handle shoot request from web UI (timestamp-based, no coroutines)
             if (shootRequested) {
                 shootRequested = false
-                robot.intakeTransfer.startTransfer()
+                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
                 shotStartTime = io.time()
                 shotActive = true
             }
             if (shotActive && (io.time() - shotStartTime).inWholeMilliseconds >= SHOT_DURATION_MS) {
-                robot.intakeTransfer.stopTransfer()
+                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 shotActive = false
             }
 

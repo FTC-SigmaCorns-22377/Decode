@@ -36,7 +36,7 @@ class IntakeCoordinator(val robot: Robot) {
         // Auto-shoot zone detection: open blocker via READY_TO_SHOOT state
         if (autoShootEnabled) {
             if (isRobotInShootingZone()) {
-                robot.intakeTransfer.readyToShoot()
+                robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
             } else if (robot.intakeTransfer.state == IntakeTransfer.State.READY_TO_SHOOT) {
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             }
@@ -48,8 +48,7 @@ class IntakeCoordinator(val robot: Robot) {
      */
     fun startIntake() {
         if (robot.beamBreak.isFull) return
-        robot.intakeTransfer.stopTransfer()
-        robot.intakeTransfer.startIntake()
+        robot.intakeTransfer.state = IntakeTransfer.State.INTAKING
     }
 
     /**

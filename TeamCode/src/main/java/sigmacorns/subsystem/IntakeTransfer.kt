@@ -70,41 +70,6 @@ class IntakeTransfer(val io: SigmaIO) {
     private var blockerDisengagedAt: Duration = Duration.ZERO
     private var lastUpdateTime: Duration = Duration.ZERO
 
-    // -- Transition methods (plain functions, no suspend) --
-
-    fun startIntake() {
-        if (isFull) return
-        state = State.INTAKING
-    }
-
-    fun stopIntake() {
-        if (state == State.INTAKING || state == State.REVERSING) {
-            state = State.IDLE
-        }
-    }
-
-    fun startReverse() {
-        state = State.REVERSING
-    }
-
-    fun stopReverse() {
-        if (state == State.REVERSING) {
-            state = State.IDLE
-        }
-    }
-
-    fun startTransfer() {
-        state = State.TRANSFERRING
-    }
-
-    fun stopTransfer() {
-        state = State.IDLE
-    }
-
-    fun readyToShoot() {
-        state = State.READY_TO_SHOOT
-    }
-
     // -- Update (sole owner of IO writes) --
 
     /**
