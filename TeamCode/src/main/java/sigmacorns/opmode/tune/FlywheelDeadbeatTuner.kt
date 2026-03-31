@@ -3,7 +3,6 @@ package sigmacorns.opmode.tune
 import com.bylazar.configurables.annotations.Configurable
 import com.bylazar.telemetry.PanelsTelemetry
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import sigmacorns.constants.FlywheelPIDConstants
 import sigmacorns.subsystem.Shooter
 import sigmacorns.opmode.SigmaOpMode
 
@@ -44,13 +43,7 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
 
     override fun runOpMode() {
         // Create the flywheel controller
-        shooter = Shooter(
-            FlywheelPIDConstants.kP,
-            FlywheelPIDConstants.kD,
-            FlywheelPIDConstants.kI,
-            FlywheelPIDConstants.maxVelocity,
-            io
-        )
+        shooter = Shooter(io)
 
         telemetry.addLine("Flywheel Deadbeat Tuner")
         telemetry.addLine("Use Panels dashboard to adjust inertia and lag")
@@ -65,13 +58,7 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
 
         ioLoop { state, dt ->
             // Update flywheel controller parameters from configurables
-            shooter = Shooter(
-                FlywheelPIDConstants.kP,
-                FlywheelPIDConstants.kD,
-                FlywheelPIDConstants.kI,
-                FlywheelPIDConstants.maxVelocity,
-                io
-            )
+            shooter = Shooter(io)
 
             // D-pad: adjust step size
             if (gamepad1.dpad_up) {
@@ -124,9 +111,6 @@ class FlywheelDeadbeatTuner : SigmaOpMode() {
             tel.addLine("")
 
             tel.addLine("--- Config (adjust in Panels) ---")
-            tel.addData("kP", FlywheelPIDConstants.kP)
-            tel.addData("kD", FlywheelPIDConstants.kD)
-            tel.addData("kI", FlywheelPIDConstants.kI)
             tel.addData("Step Size (rad/s)", FlywheelDeadbeatConfig.stepSize)
             tel.addLine("")
 

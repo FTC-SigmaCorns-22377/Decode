@@ -50,14 +50,6 @@ val flywheelGearRatio = 1.0
 // Two motors geared 1:1 to flywheel — double the torque
 val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio, 2*bareMotorStallTorque*flywheelGearRatio)
 
-object FlywheelPIDConstants {
-    var kP = 0.02
-    var kD = 0.0
-    var kI = 0.0
-    /** Max velocity at power 1.0: 6000 RPM = 628.3 rad/s */
-    val maxVelocity = bareMotorTopSpeed / flywheelGearRatio
-}
-
 val intakeGearRatio = 3.0
 val intakeMotor = LinearDcMotor(bareMotorTopSpeed/intakeGearRatio, bareMotorStallTorque*intakeGearRatio)
 
