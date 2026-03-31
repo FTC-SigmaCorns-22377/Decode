@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * The blocker is fully state-driven:
  * - Engaged (blocking) in IDLE, INTAKING, REVERSING
- * - Disengaged (open) in TRANSFERRING, SHOOTING
+ * - Disengaged (open) in TRANSFERRING, READY_TO_SHOOT
  *
  * When transitioning to TRANSFERRING, the motor waits [BLOCKER_MOVE_DELAY]
  * for the blocker servo to physically open before driving balls through.
@@ -34,15 +34,15 @@ class IntakeTransfer(val io: SigmaIO) {
         /** Motor forward (transfer) after blocker delay, blocker disengaged. */
         TRANSFERRING,
         /** Motor off, blocker disengaged. Used by auto-shoot zone detection. */
-        SHOOTING
+        READY_TO_SHOOT
     }
 
     var state: State = State.IDLE
         set(value) {
             if (field != value) {
                 // When entering a blocker-disengaged state, start the delay timer
-                val wasDisengaged = field == State.TRANSFERRING || field == State.SHOOTING
-                val willDisengage = value == State.TRANSFERRING || value == State.SHOOTING
+                val wasDisengaged = field == State.TRANSFERRING || field == State.READY_TO_SHOOT
+                val willDisengage = value == State.TRANSFERRING || value == State.READY_TO_SHOOT
                 if (willDisengage && !wasDisengaged) {
                     blockerReady = false
                     blockerDisengagedAt = lastUpdateTime
@@ -101,8 +101,8 @@ class IntakeTransfer(val io: SigmaIO) {
         state = State.IDLE
     }
 
-    fun startShooting() {
-        state = State.SHOOTING
+    fun readyToShoot() {
+        state = State.READY_TO_SHOOT
     }
 
     // -- Update (sole owner of IO writes) --
@@ -114,8 +114,8 @@ class IntakeTransfer(val io: SigmaIO) {
     fun update(dt: Duration, time: Duration) {
         lastUpdateTime = time
 
-        // Blocker servo: disengaged only in TRANSFERRING and SHOOTING
-        val blockerDisengaged = state == State.TRANSFERRING || state == State.SHOOTING
+        // Blocker servo: disengaged only in TRANSFERRING and READY_TO_SHOOT
+        val blockerDisengaged = state == State.TRANSFERRING || state == State.READY_TO_SHOOT
         io.blocker = if (blockerDisengaged) BLOCKER_DISENGAGED else BLOCKER_ENGAGED
 
         // Track blocker readiness (delay after disengaging)
@@ -133,7 +133,7 @@ class IntakeTransfer(val io: SigmaIO) {
             State.TRANSFERRING -> if (blockerReady) TRANSFER_POWER else 0.0
             State.REVERSING -> OUTTAKE_POWER
             State.INTAKING -> INTAKE_POWER
-            State.IDLE, State.SHOOTING -> 0.0
+            State.IDLE, State.READY_TO_SHOOT -> 0.0
         }
     }
 }

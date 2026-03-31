@@ -13,13 +13,13 @@ import sigmacorns.subsystem.IntakeTransfer
  * - Feeds beam break full-state into IntakeTransfer
  * - Auto-stops intake when 3 balls are held
  * - Coordinates blocker engagement when starting intake
- * - Auto-shoot zone detection (transitions to SHOOTING state when in zone)
+ * - Auto-shoot zone detection (transitions to READY_TO_SHOOT state when in zone)
  *
  * Only sets state on IntakeTransfer — never writes IO directly.
  */
 class IntakeCoordinator(val robot: Robot) {
 
-    /** When true, transitions to SHOOTING state when robot enters a shooting zone. */
+    /** When true, transitions to READY_TO_SHOOT state when robot enters a shooting zone. */
     var autoShootEnabled: Boolean = false
 
     /**
@@ -33,11 +33,11 @@ class IntakeCoordinator(val robot: Robot) {
             robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         }
 
-        // Auto-shoot zone detection: open blocker via SHOOTING state
+        // Auto-shoot zone detection: open blocker via READY_TO_SHOOT state
         if (autoShootEnabled) {
             if (isRobotInShootingZone()) {
-                robot.intakeTransfer.startShooting()
-            } else if (robot.intakeTransfer.state == IntakeTransfer.State.SHOOTING) {
+                robot.intakeTransfer.readyToShoot()
+            } else if (robot.intakeTransfer.state == IntakeTransfer.State.READY_TO_SHOOT) {
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             }
         }
