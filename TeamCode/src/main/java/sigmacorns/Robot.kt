@@ -160,8 +160,9 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
         beamBreak.update()
 
         // 2. Logic coordination (sets subsystem inputs)
-        intakeCoordinator.update()
+        // Aim runs first: updates vision/fusion so coordinators see fresh data
         aim.update(dt, aimTurret)
+        intakeCoordinator.update()
 
         // 3. Subsystem updates (write IO)
         intakeTransfer.update(dt, t)
