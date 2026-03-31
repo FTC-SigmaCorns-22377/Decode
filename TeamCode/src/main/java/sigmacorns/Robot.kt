@@ -1,6 +1,5 @@
 package sigmacorns
 
-import com.qualcomm.robotcore.hardware.Gamepad
 import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
 import sigmacorns.constants.Network
@@ -11,8 +10,10 @@ import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.control.mpc.MPCClient
 import sigmacorns.control.mpc.MPCRunner
-import sigmacorns.subsystem.AimingSystem
-import sigmacorns.subsystem.DriveController
+import sigmacorns.logic.AimingSystem
+import sigmacorns.logic.IntakeCoordinator
+import sigmacorns.logic.ShooterCoordinator
+import sigmacorns.subsystem.Drivetrain
 import sigmacorns.subsystem.Flywheel
 import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
@@ -21,8 +22,7 @@ import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
 import sigmacorns.subsystem.BeamBreak
 import sigmacorns.subsystem.Hood
-import sigmacorns.subsystem.Intake
-import sigmacorns.subsystem.Transfer
+import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
 import kotlin.time.Duration
@@ -30,14 +30,18 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoCloseable {
-    val aim = AimingSystem(this, blue, shotDataPath)
+    // Subsystems
     val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
-    val drive = DriveController()
-    val beamBreak = BeamBreak(this)
-    val intake = Intake(this)
-    val transfer = Transfer(this)
-    val turret = Turret(this)
-    val hood = Hood(this)
+    val drive = Drivetrain()
+    val beamBreak = BeamBreak(io)
+    val intakeTransfer = IntakeTransfer(io)
+    val turret = Turret(io)
+    val hood = Hood(io)
+
+    // Logic
+    val aim = AimingSystem(this, blue, shotDataPath)
+    val intakeCoordinator = IntakeCoordinator(this)
+    val shooterCoordinator = ShooterCoordinator(this)
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
@@ -156,29 +160,23 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
             turret.targetAngle = 0.0
         }
 
-        // Update subsystems
+        // 1. Read sensors
         beamBreak.update()
-        intake.update(dt)
-        transfer.update(dt)
 
-        // Update flywheel controller
-        if (aimFlywheel) {
+        // 2. Logic coordination (sets subsystem inputs)
+        intakeCoordinator.update()
+        shooterCoordinator.update(dt)
+
+        // 3. Subsystem updates (write IO)
+        intakeTransfer.update(dt)
+
+        if (aimFlywheel && dt > Duration.ZERO) {
             flywheel.update(io.flywheelVelocity(), dt)
         }
 
-        // Update hood (continuously adjusts launch angle)
         hood.update(dt)
-
-        // Update aiming system (vision + turret)
         aim.update(dt, aimTurret)
-
-        if (aimFlywheel) {
-            val recommended = aim.getRecommendedFlywheelVelocity()
-            flywheel.target = recommended ?: 0.0
-        }
-        if (dt > Duration.ZERO) {
-            flywheel.update(io.flywheelVelocity(), dt)
-        }
+        turret.update(dt)
     }
 
     override fun close() {

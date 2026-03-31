@@ -1,14 +1,12 @@
 package sigmacorns.subsystem
 
-import sigmacorns.Robot
+import sigmacorns.io.SigmaIO
 
 /**
  * Continuously polls the three beam break sensors to track how many balls
  * are held in the robot. Each slot is either null (empty) or true (ball present).
- *
- * When all 3 slots are occupied the intake is automatically shut off.
  */
-class BeamBreak(val robot: Robot) {
+class BeamBreak(val io: SigmaIO) {
 
     // 3 slots: null = empty, true = ball present
     val slots: Array<Boolean?> = arrayOfNulls(3)
@@ -21,18 +19,11 @@ class BeamBreak(val robot: Robot) {
 
     /**
      * Call every loop iteration. Reads beam break sensors from IO and
-     * updates the ball slot list. Automatically stops the intake when full.
+     * updates the ball slot list.
      */
     fun update() {
-        val io = robot.io
-
         slots[0] = if (io.beamBreak1()) true else null
         slots[1] = if (io.beamBreak2()) true else null
         slots[2] = if (io.beamBreak3()) true else null
-
-        // Auto-stop intake when we have 3 balls
-        if (isFull) {
-            robot.intake.isRunning = false
-        }
     }
 }

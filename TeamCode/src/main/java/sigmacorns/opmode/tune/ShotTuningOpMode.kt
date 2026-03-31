@@ -52,7 +52,7 @@ class ShotTuningOpMode : SigmaOpMode() {
                 hoodAngle = hoodAngleDeg,
                 hoodServo = robot.hood.currentServoPosition,
                 distance = tuningDistance,
-                isShooting = robot.transfer.isRunning,
+                isShooting = robot.intakeTransfer.isTransferring,
                 ballCount = robot.beamBreak.ballCount
             )
 
@@ -97,9 +97,9 @@ class ShotTuningOpMode : SigmaOpMode() {
             if (shootRequested) {
                 shootRequested = false
                 robot.scope.launch {
-                    robot.transfer.startTransfer()
+                    robot.intakeTransfer.startTransfer()
                     kotlinx.coroutines.delay(1500)
-                    robot.transfer.stopTransfer()
+                    robot.intakeTransfer.stopTransfer()
                 }
             }
 

@@ -1,6 +1,6 @@
 package sigmacorns.subsystem
 
-import sigmacorns.Robot
+import sigmacorns.io.SigmaIO
 import kotlin.math.atan2
 import kotlin.math.sqrt
 import kotlin.time.Duration
@@ -9,16 +9,25 @@ import kotlin.time.Duration
  * Hood angle controller for the shooter.
  *
  * Adjusts the hood servo to set the optimal launch angle. Uses saved tuning
- * data (distance → hood angle interpolation) when available, falling back to
+ * data (distance -> hood angle interpolation) when available, falling back to
  * projectile motion trig when no data exists.
+ *
+ * Input properties [targetDistance] and [recommendedAngleDeg] are set by the
+ * ShooterCoordinator each loop.
  */
-class Hood(val robot: Robot) {
+class Hood(val io: SigmaIO) {
 
     /** Whether the hood auto-adjusts based on distance/speed. */
     var autoAdjust: Boolean = true
 
     /** Manual override angle in radians (used when autoAdjust is false). */
     var manualAngle: Double = Math.toRadians(HoodConfig.defaultAngleDeg)
+
+    /** Distance from robot to goal (set by coordinator). */
+    var targetDistance: Double = 3.0
+
+    /** Recommended hood angle in degrees from adaptive tuner (set by coordinator, null if no data). */
+    var recommendedAngleDeg: Double? = null
 
     /** The computed optimal angle in radians (for telemetry). */
     var computedAngle: Double = Math.toRadians(HoodConfig.defaultAngleDeg)
@@ -35,8 +44,8 @@ class Hood(val robot: Robot) {
     fun update(dt: Duration) {
         val angle = if (autoAdjust) {
             computeAngle(
-                distance = robot.aim.targetDistance,
-                flywheelVelocity = robot.io.flywheelVelocity()
+                distance = targetDistance,
+                flywheelVelocity = io.flywheelVelocity()
             )
         } else {
             manualAngle
@@ -44,7 +53,7 @@ class Hood(val robot: Robot) {
 
         computedAngle = angle
         currentServoPosition = angleToServo(angle)
-        robot.io.hood = currentServoPosition
+        io.hood = currentServoPosition
     }
 
     /**
@@ -52,8 +61,7 @@ class Hood(val robot: Robot) {
      * falls back to projectile motion trig.
      */
     fun computeAngle(distance: Double, flywheelVelocity: Double): Double {
-        // Try interpolated data first
-        val interpolatedDeg = robot.aim.adaptiveTuner.getRecommendedHoodAngle(distance)
+        val interpolatedDeg = recommendedAngleDeg
         if (interpolatedDeg != null) {
             usingInterpolatedData = true
             return Math.toRadians(interpolatedDeg)
@@ -66,7 +74,7 @@ class Hood(val robot: Robot) {
 
     /**
      * Compute optimal launch angle using projectile motion.
-     * θ = atan((v² - sqrt(v⁴ - g(g·d² + 2h·v²))) / (g·d))
+     * theta = atan((v^2 - sqrt(v^4 - g(g*d^2 + 2h*v^2))) / (g*d))
      */
     fun computeOptimalAngleTrig(distance: Double, flywheelVelocity: Double): Double {
         val v = flywheelVelocity * HoodConfig.flywheelRadius * HoodConfig.launchEfficiency

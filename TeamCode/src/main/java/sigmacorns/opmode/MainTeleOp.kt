@@ -42,7 +42,6 @@ class MainTeleOp : SigmaOpMode() {
 
         // State
         var autoAimEnabled = true
-        var shootWhileMoveEnabled = false
         var flywheelTargetSpeed = 400.0
         val flywheelSpeedStep = 25.0
 
@@ -88,16 +87,16 @@ class MainTeleOp : SigmaOpMode() {
 
             // --- Intake: hold left trigger ---
             if (gamepad2.left_trigger > 0.1 && gamepad2.right_trigger <= 0.1) {
-                robot.intake.startIntake()
+                robot.intakeCoordinator.startIntake()
             } else if (!gamepad2.b) {
-                robot.intake.stopIntake()
+                robot.intakeTransfer.stopIntake()
             }
 
             // --- Outtake: hold B to reverse intake ---
             if (gamepad2.b) {
-                robot.intake.startReverse()
+                robot.intakeTransfer.startReverse()
             } else {
-                robot.intake.stopReverse()
+                robot.intakeTransfer.stopReverse()
             }
 
             // --- Toggle: Auto-aim (A button) ---
@@ -108,13 +107,15 @@ class MainTeleOp : SigmaOpMode() {
 
             // --- Toggle: Shoot-while-move (X button) ---
             if (gamepad2.x && !lastX2) {
-                shootWhileMoveEnabled = !shootWhileMoveEnabled
+                robot.shooterCoordinator.shootWhileMoveEnabled =
+                    !robot.shooterCoordinator.shootWhileMoveEnabled
             }
             lastX2 = gamepad2.x
 
             // --- Toggle: Auto-shoot zones (Y button) ---
             if (gamepad2.y && !lastY2) {
-                robot.transfer.autoShoot = !robot.transfer.autoShoot
+                robot.shooterCoordinator.autoShootEnabled =
+                    !robot.shooterCoordinator.autoShootEnabled
             }
             lastY2 = gamepad2.y
 
@@ -153,30 +154,22 @@ class MainTeleOp : SigmaOpMode() {
                 robot.flywheel.target = flywheelTargetSpeed
                 robot.aimFlywheel = true
                 if (transferJob == null || transferJob!!.isCompleted) {
-                    transferJob = robot.scope.launch { robot.transfer.startTransfer() }
+                    transferJob = robot.scope.launch { robot.intakeTransfer.startTransfer() }
                 }
             } else if (gamepad2.left_bumper) {
                 // Spin-up only: flywheel on, blocker stays engaged
                 robot.flywheel.target = flywheelTargetSpeed
                 robot.aimFlywheel = true
-                if (robot.transfer.isRunning) {
-                    transferJob = robot.scope.launch { robot.transfer.stopTransfer() }
+                if (robot.intakeTransfer.isTransferring) {
+                    transferJob = robot.scope.launch { robot.intakeTransfer.stopTransfer() }
                 }
             } else {
                 // Idle: stop flywheel and transfer
                 robot.flywheel.target = 0.0
                 robot.aimFlywheel = true
-                if (robot.transfer.isRunning) {
-                    transferJob = robot.scope.launch { robot.transfer.stopTransfer() }
+                if (robot.intakeTransfer.isTransferring) {
+                    transferJob = robot.scope.launch { robot.intakeTransfer.stopTransfer() }
                 }
-            }
-
-            // --- Shoot-while-move ---
-            if (shootWhileMoveEnabled && autoAimEnabled) {
-                robot.aim.updateVelocityComponents()
-                robot.turret.targetAngleOffset = robot.aim.turretLeadAngle
-            } else {
-                robot.turret.targetAngleOffset = 0.0
             }
 
             // ============================================================
@@ -225,20 +218,20 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addData("Turret Target", "%.1f°", Math.toDegrees(robot.turret.effectiveTargetAngle))
             telemetry.addData("Turret Servo", "%.3f", robot.turret.currentServoPosition)
             telemetry.addData("Field-Relative", robot.turret.fieldRelativeMode)
-            telemetry.addData("Shoot-While-Move", if (shootWhileMoveEnabled) "ON" else "OFF")
+            telemetry.addData("Shoot-While-Move", if (robot.shooterCoordinator.shootWhileMoveEnabled) "ON" else "OFF")
 
             telemetry.addLine("")
             telemetry.addLine("=== SUBSYSTEMS ===")
             val intake1RPM = io.intake1RPM()
             telemetry.addData("Intake", when {
-                robot.intake.isReversing -> "REVERSING"
-                robot.intake.isRunning -> "RUNNING"
+                robot.intakeTransfer.isReversing -> "REVERSING"
+                robot.intakeTransfer.isIntaking -> "RUNNING"
                 else -> "IDLE"
             })
             telemetry.addData("Intake1 RPM", "%.0f", intake1RPM)
-            telemetry.addData("Transfer", if (robot.transfer.isRunning) "RUNNING" else "IDLE")
+            telemetry.addData("Transfer", if (robot.intakeTransfer.isTransferring) "RUNNING" else "IDLE")
             telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
-            telemetry.addData("Auto-Shoot", if (robot.transfer.autoShoot) "ON" else "OFF")
+            telemetry.addData("Auto-Shoot", if (robot.shooterCoordinator.autoShootEnabled) "ON" else "OFF")
             telemetry.addData("Speed Mode", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
             telemetry.update()
 

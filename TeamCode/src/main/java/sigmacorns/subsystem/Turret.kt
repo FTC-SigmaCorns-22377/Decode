@@ -1,7 +1,7 @@
 package sigmacorns.subsystem
 
-import sigmacorns.Robot
 import sigmacorns.control.PIDController
+import sigmacorns.io.SigmaIO
 import sigmacorns.control.SlewRateLimiter
 import sigmacorns.math.normalizeAngle
 import sigmacorns.opmode.tune.TurretPIDConfig
@@ -24,7 +24,7 @@ import kotlin.time.Duration
  * Supports field-relative aiming, slew-rate limiting, angle aliasing,
  * static friction compensation, and robot angular velocity feedforward.
  */
-class Turret(val robot: Robot) {
+class Turret(val io: SigmaIO) {
 
     val angleController: PIDController = PIDController(
         TurretPIDConfig.kP, TurretPIDConfig.kD, TurretPIDConfig.kI, 0.0
@@ -186,13 +186,13 @@ class Turret(val robot: Robot) {
         pos = (pos + angleRate * dtSec).coerceIn(angleLimits)
 
         // Convert angle to servo position and write to both servos
-        currentServoPosition = normalizeAngle(pos)
-        robot.io.turretLeft = currentServoPosition
-        robot.io.turretRight = currentServoPosition  // hardware-reversed
+        currentServoPosition = angleToServoPosition(pos)
+        io.turretLeft = currentServoPosition
+        io.turretRight = currentServoPosition  // hardware-reversed
     }
 
-    /** Normalize radians to servo position [0.0, 1.0]. 0 rad = 0.5 (forward). */
-    private fun normalizeAngle(angle: Double): Double {
+    /** Map turret angle (radians) to servo position [0.0, 1.0]. 0 rad = 0.5 (forward). */
+    private fun angleToServoPosition(angle: Double): Double {
         return (0.5 + angle / TurretServoConfig.servoTotalRange).coerceIn(0.0, 1.0)
     }
 }

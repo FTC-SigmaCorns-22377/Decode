@@ -1,15 +1,14 @@
-package sigmacorns.subsystem
+package sigmacorns.logic
 
 import org.joml.Vector2d
 import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.ShootWhileMoveConstants
-import sigmacorns.constants.turretRange
 import sigmacorns.control.aim.TurretTargeting
-import sigmacorns.control.localization.GTSAMEstimator
-import sigmacorns.control.localization.VisionTracker
 import sigmacorns.control.aim.tune.AdaptiveTuner
 import sigmacorns.control.aim.tune.ShotDataStore
+import sigmacorns.control.localization.GTSAMEstimator
+import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
 import kotlin.math.atan2
@@ -21,7 +20,7 @@ import kotlin.time.Duration
  *
  * Encapsulates AutoAimGTSAM, VisionTracker, and Turret initialization and the
  * core vision → auto-aim → turret update pipeline. Opmodes can override turret
- * targeting between [updateVision] and [updateTurret] for manual control.
+ * targeting between [updateVision] and [setTurretInputs] for manual control.
  */
 class AimingSystem(
     private val robot: Robot,
@@ -128,10 +127,10 @@ class AimingSystem(
     }
 
     /**
-     * Update turret heading feedforward and run turret PID.
-     * Call after setting turret target (auto or manual).
+     * Set turret inputs from fused pose data.
+     * Does NOT call turret.update() — that is done by Robot.update().
      */
-    fun updateTurret(dt: Duration) {
+    fun setTurretInputs(dt: Duration) {
         robot.turret.robotHeading = autoAim.fusedPose.rot
         robot.turret.robotAngularVelocity = robot.io.velocity().rot
         robot.turret.targetDistance = targetDistance
@@ -139,8 +138,6 @@ class AimingSystem(
         positionOverride?.let {
             if(robot.turret.fieldRelativeMode) robot.turret.targetAngle = it else robot.turret.fieldTargetAngle = it
         }
-
-        robot.turret.update(dt)
     }
 
     /**
@@ -159,7 +156,7 @@ class AimingSystem(
         updateVision()
         updateVelocityComponents()
         if(target) applyAutoAimTarget()
-        updateTurret(dt)
+        setTurretInputs(dt)
     }
 
     fun close() {
