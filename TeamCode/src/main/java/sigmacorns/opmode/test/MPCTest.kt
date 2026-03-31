@@ -141,7 +141,7 @@ open class MPCTest(val trajName: String): SigmaOpMode() {
                     }.toIntArray()
                     rr.logPoints3DWithColors("predictedPath", predictedPoints, predictedColors, 0.02f)
 
-                    // Convert drive, strafe, turn to motor powers using DriveController
+                    // Convert drive, strafe, turn to motor powers using the Drivetrain subsystem
                     val robotPower = Pose2d(drive, strafe, turn)
                     drivetrain.drive(robotPower, io)
 
