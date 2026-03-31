@@ -66,20 +66,18 @@ Instead of FTCLib commands or a traditional command-based framework, this projec
 
 Single-subsystem control only. Each subsystem takes `SigmaIO` (not `Robot`), manages its own hardware (motors/servos/sensors), and must not reference other subsystems. Input properties are set by coordinators each loop.
 
-- `IntakeTransfer` — unified intake + transfer path (one mechanical system with two motors and a blocker servo that gates entry into the shooter). Priority: transfer > reverse > intake > idle.
-- `Flywheel` — deadbeat controller for flywheel motor velocity
+- `IntakeTransfer` — unified intake + transfer path (one mechanical system with two motors and a blocker servo that gates entry into the shooter). State enum: IDLE, INTAKING, REVERSING, TRANSFERRING.
+- `Shooter` — unified flywheel + hood. Flywheel uses a deadbeat controller; hood computes launch angle from tuning data or projectile-motion trig fallback. Inputs (`targetDistance`, `recommendedHoodAngleDeg`, `flywheelTarget`) set by AimingSystem.
 - `Turret` — dual-servo geared turret with PID, field-relative aiming, slew rate limiting
-- `Hood` — hood angle controller with trig fallback; inputs (`targetDistance`, `recommendedAngleDeg`) set by ShooterCoordinator
 - `BeamBreak` — reads 3 beam break sensors to track ball count
 - `Drivetrain` — mecanum drive math (stateless, takes IO as method param)
 
-### Logic / Coordinators (`sigmacorns.logic`)
+### Logic (`sigmacorns.logic`)
 
 Cross-subsystem coordination. Logic classes take a `Robot` reference and orchestrate multiple subsystems:
 
-- `AimingSystem` — vision + sensor fusion + turret targeting pipeline (GTSAMEstimator, VisionTracker, AdaptiveTuner)
-- `IntakeCoordinator` — feeds beam break state into IntakeTransfer, auto-stops intake when full, coordinates blocker engagement on intake start
-- `ShooterCoordinator` — feeds aim data into hood/flywheel, auto-shoot zone detection, shoot-while-move turret lead compensation
+- `AimingSystem` — full aiming pipeline: vision + GTSAM sensor fusion + turret targeting + shooter input feeding (hood/flywheel from adaptive tuner) + shoot-while-move compensation
+- `IntakeCoordinator` — feeds beam break state into IntakeTransfer, auto-stops intake when full, coordinates blocker engagement on intake start, auto-shoot zone detection
 
 ### Robot (`sigmacorns.Robot`)
 

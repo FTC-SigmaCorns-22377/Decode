@@ -12,16 +12,14 @@ import sigmacorns.control.mpc.MPCClient
 import sigmacorns.control.mpc.MPCRunner
 import sigmacorns.logic.AimingSystem
 import sigmacorns.logic.IntakeCoordinator
-import sigmacorns.logic.ShooterCoordinator
 import sigmacorns.subsystem.Drivetrain
-import sigmacorns.subsystem.Flywheel
+import sigmacorns.subsystem.Shooter
 import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
 import sigmacorns.subsystem.BeamBreak
-import sigmacorns.subsystem.Hood
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
@@ -31,17 +29,15 @@ import kotlin.time.Duration.Companion.seconds
 
 class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoCloseable {
     // Subsystems
-    val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
+    val shooter = Shooter(flywheelMotor, flywheelParameters.inertia, io)
     val drive = Drivetrain()
     val beamBreak = BeamBreak(io)
     val intakeTransfer = IntakeTransfer(io)
     val turret = Turret(io)
-    val hood = Hood(io)
 
     // Logic
     val aim = AimingSystem(this, blue, shotDataPath)
     val intakeCoordinator = IntakeCoordinator(this)
-    val shooterCoordinator = ShooterCoordinator(this)
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
@@ -165,17 +161,11 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
 
         // 2. Logic coordination (sets subsystem inputs)
         intakeCoordinator.update()
-        shooterCoordinator.update(dt)
+        aim.update(dt, aimTurret)
 
         // 3. Subsystem updates (write IO)
         intakeTransfer.update(dt)
-
-        if (aimFlywheel && dt > Duration.ZERO) {
-            flywheel.update(io.flywheelVelocity(), dt)
-        }
-
-        hood.update(dt)
-        aim.update(dt, aimTurret)
+        shooter.update(dt)
         turret.update(dt)
     }
 

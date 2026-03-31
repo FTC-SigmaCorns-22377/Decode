@@ -11,16 +11,22 @@ import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
+import sigmacorns.subsystem.Shooter
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.time.Duration
 
 /**
- * Shared auto-aim + turret + vision subsystem used across opmodes.
+ * Aiming system: vision + sensor fusion + turret targeting + shooter coordination.
  *
- * Encapsulates AutoAimGTSAM, VisionTracker, and Turret initialization and the
- * core vision → auto-aim → turret update pipeline. Opmodes can override turret
- * targeting between [updateVision] and [setTurretInputs] for manual control.
+ * Owns the full aiming pipeline from vision input to turret/shooter output:
+ * - Vision tracking and GTSAM sensor fusion
+ * - Auto-aim turret targeting
+ * - Feeding shooter (flywheel + hood) inputs from adaptive tuning data
+ * - Shoot-while-move turret lead and flywheel compensation
+ *
+ * Opmodes can override turret targeting between [updateVision] and
+ * [setTurretInputs] for manual control.
  */
 class AimingSystem(
     private val robot: Robot,
@@ -49,6 +55,9 @@ class AimingSystem(
 
     var turretLeadAngle: Double = 0.0
         private set
+
+    /** Whether to apply shoot-while-move compensation. */
+    var shootWhileMoveEnabled = false
 
     /**
      * Decompose the robot's field-relative velocity into radial and lateral
@@ -141,6 +150,34 @@ class AimingSystem(
     }
 
     /**
+     * Feed shooter (flywheel + hood) inputs from adaptive tuning data and
+     * apply shoot-while-move compensation if enabled.
+     */
+    fun setShooterInputs() {
+        val shooter = robot.shooter
+
+        // Feed hood inputs from adaptive tuner
+        shooter.targetDistance = targetDistance
+        shooter.recommendedHoodAngleDeg = adaptiveTuner
+            .getRecommendedHoodAngle(targetDistance)
+
+        // Feed flywheel target from adaptive tuner
+        if (robot.aimFlywheel) {
+            shooter.flywheelTarget = getRecommendedFlywheelVelocity() ?: 0.0
+        }
+
+        // Shoot-while-move: turret lead + flywheel distance compensation
+        if (shootWhileMoveEnabled) {
+            robot.turret.targetAngleOffset = turretLeadAngle
+            shooter.flywheelTarget = Shooter.calculateTargetRPM(
+                targetDistance + radialVelocity * ShootWhileMoveConstants.flywheelLookAheadTime
+            )
+        } else {
+            robot.turret.targetAngleOffset = 0.0
+        }
+    }
+
+    /**
      * Get recommended flywheel velocity in rad/s for current target distance.
      * Returns null if adaptive tuner doesn't have enough calibration points.
      */
@@ -149,7 +186,7 @@ class AimingSystem(
     }
 
     /**
-     * Convenience: full pipeline update (vision → auto-aim → turret).
+     * Convenience: full pipeline update (vision -> auto-aim -> turret + shooter inputs).
      * Use this when no manual turret override is needed.
      */
     fun update(dt: Duration, target: Boolean = true) {
@@ -157,6 +194,7 @@ class AimingSystem(
         updateVelocityComponents()
         if(target) applyAutoAimTarget()
         setTurretInputs(dt)
+        setShooterInputs()
     }
 
     fun close() {

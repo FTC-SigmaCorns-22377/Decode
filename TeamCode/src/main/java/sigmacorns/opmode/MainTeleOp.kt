@@ -5,8 +5,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import sigmacorns.Robot
 import sigmacorns.math.Pose2d
-import sigmacorns.subsystem.HoodConfig
 import sigmacorns.subsystem.IntakeTransfer
+import sigmacorns.subsystem.ShooterConfig
 import kotlin.math.PI
 import kotlin.math.abs
 
@@ -108,21 +108,20 @@ class MainTeleOp : SigmaOpMode() {
 
             // --- Toggle: Shoot-while-move (X button) ---
             if (gamepad2.x && !lastX2) {
-                robot.shooterCoordinator.shootWhileMoveEnabled =
-                    !robot.shooterCoordinator.shootWhileMoveEnabled
+                robot.aim.shootWhileMoveEnabled = !robot.aim.shootWhileMoveEnabled
             }
             lastX2 = gamepad2.x
 
             // --- Toggle: Auto-shoot zones (Y button) ---
             if (gamepad2.y && !lastY2) {
-                robot.shooterCoordinator.autoShootEnabled =
-                    !robot.shooterCoordinator.autoShootEnabled
+                robot.intakeCoordinator.autoShootEnabled =
+                    !robot.intakeCoordinator.autoShootEnabled
             }
             lastY2 = gamepad2.y
 
             // --- Toggle: Hood auto-adjust (D-pad up) ---
             if (gamepad2.dpad_up && !lastDpadUp2) {
-                robot.hood.autoAdjust = !robot.hood.autoAdjust
+                robot.shooter.autoAdjust = !robot.shooter.autoAdjust
             }
             lastDpadUp2 = gamepad2.dpad_up
 
@@ -141,32 +140,32 @@ class MainTeleOp : SigmaOpMode() {
             // --- Hood manual override (right stick Y) ---
             val manualHoodInput = -gamepad2.right_stick_y.toDouble()
             if (abs(manualHoodInput) > 0.05) {
-                robot.hood.autoAdjust = false
-                robot.hood.manualAngle += manualHoodInput * Math.toRadians(30.0) * dt.inWholeMilliseconds / 1000.0
-                robot.hood.manualAngle = robot.hood.manualAngle.coerceIn(
-                    Math.toRadians(HoodConfig.minAngleDeg),
-                    Math.toRadians(HoodConfig.maxAngleDeg)
+                robot.shooter.autoAdjust = false
+                robot.shooter.manualHoodAngle += manualHoodInput * Math.toRadians(30.0) * dt.inWholeMilliseconds / 1000.0
+                robot.shooter.manualHoodAngle = robot.shooter.manualHoodAngle.coerceIn(
+                    Math.toRadians(ShooterConfig.minAngleDeg),
+                    Math.toRadians(ShooterConfig.maxAngleDeg)
                 )
             }
 
             // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
             if (gamepad2.right_trigger > 0.1) {
                 // Shooting: spin flywheel + async transfer (with blocker delay)
-                robot.flywheel.target = flywheelTargetSpeed
+                robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = true
                 if (transferJob == null || transferJob!!.isCompleted) {
                     transferJob = robot.scope.launch { robot.intakeTransfer.startTransfer() }
                 }
             } else if (gamepad2.left_bumper) {
                 // Spin-up only: flywheel on, blocker stays engaged
-                robot.flywheel.target = flywheelTargetSpeed
+                robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = true
                 if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     transferJob = robot.scope.launch { robot.intakeTransfer.stopTransfer() }
                 }
             } else {
                 // Idle: stop flywheel and transfer
-                robot.flywheel.target = 0.0
+                robot.shooter.flywheelTarget = 0.0
                 robot.aimFlywheel = true
                 if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     transferJob = robot.scope.launch { robot.intakeTransfer.stopTransfer() }
@@ -208,10 +207,10 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addLine("=== SHOOTER ===")
             telemetry.addData("Flywheel RPM", "%.0f", flywheelRPM)
             telemetry.addData("Flywheel Vel", "%.1f rad/s", flywheelVel)
-            telemetry.addData("Flywheel Target", "%.1f rad/s (GP1 bumpers to adj)", robot.flywheel.target)
-            telemetry.addData("Hood Angle", "%.1f°", Math.toDegrees(robot.hood.computedAngle))
-            telemetry.addData("Hood", "${if (robot.hood.autoAdjust) "AUTO" else "MANUAL"} ${if (robot.hood.usingInterpolatedData) "(data)" else "(trig)"}")
-            telemetry.addData("Hood Servo", "%.3f", robot.hood.currentServoPosition)
+            telemetry.addData("Flywheel Target", "%.1f rad/s (GP1 bumpers to adj)", robot.shooter.flywheelTarget)
+            telemetry.addData("Hood Angle", "%.1f°", Math.toDegrees(robot.shooter.computedHoodAngle))
+            telemetry.addData("Hood", "${if (robot.shooter.autoAdjust) "AUTO" else "MANUAL"} ${if (robot.shooter.usingInterpolatedData) "(data)" else "(trig)"}")
+            telemetry.addData("Hood Servo", "%.3f", robot.shooter.hoodServoPosition)
 
             telemetry.addLine("")
             telemetry.addLine("=== TURRET ===")
@@ -219,7 +218,7 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addData("Turret Target", "%.1f°", Math.toDegrees(robot.turret.effectiveTargetAngle))
             telemetry.addData("Turret Servo", "%.3f", robot.turret.currentServoPosition)
             telemetry.addData("Field-Relative", robot.turret.fieldRelativeMode)
-            telemetry.addData("Shoot-While-Move", if (robot.shooterCoordinator.shootWhileMoveEnabled) "ON" else "OFF")
+            telemetry.addData("Shoot-While-Move", if (robot.aim.shootWhileMoveEnabled) "ON" else "OFF")
 
             telemetry.addLine("")
             telemetry.addLine("=== SUBSYSTEMS ===")
@@ -232,7 +231,7 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addData("Intake1 RPM", "%.0f", intake1RPM)
             telemetry.addData("Transfer", if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) "RUNNING" else "IDLE")
             telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
-            telemetry.addData("Auto-Shoot", if (robot.shooterCoordinator.autoShootEnabled) "ON" else "OFF")
+            telemetry.addData("Auto-Shoot", if (robot.intakeCoordinator.autoShootEnabled) "ON" else "OFF")
             telemetry.addData("Speed Mode", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
             telemetry.update()
 

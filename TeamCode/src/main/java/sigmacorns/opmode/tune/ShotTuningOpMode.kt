@@ -37,7 +37,7 @@ class ShotTuningOpMode : SigmaOpMode() {
         robot.init(Pose2d(), apriltagTracking = false)
         robot.aimTurret = false
         robot.aimFlywheel = false
-        robot.hood.autoAdjust = false
+        robot.shooter.autoAdjust = false
 
         val dataStore = ShotDataStore()
         dataStore.load()
@@ -51,7 +51,7 @@ class ShotTuningOpMode : SigmaOpMode() {
                 flywheelRPM = io.flywheelVelocity() * 60.0 / (2.0 * PI),
                 flywheelPower = io.flywheel,
                 hoodAngle = hoodAngleDeg,
-                hoodServo = robot.hood.currentServoPosition,
+                hoodServo = robot.shooter.hoodServoPosition,
                 distance = tuningDistance,
                 isShooting = robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING,
                 ballCount = robot.beamBreak.ballCount
@@ -87,12 +87,11 @@ class ShotTuningOpMode : SigmaOpMode() {
         waitForStart()
 
         ioLoop { state, dt ->
-            // Apply flywheel target
-            robot.flywheel.target = flywheelTarget
-            robot.flywheel.update(io.flywheelVelocity(), dt)
+            // Apply flywheel target (manual, bypassing aim system)
+            robot.shooter.flywheelTarget = flywheelTarget
 
             // Apply hood angle (manual from web UI)
-            robot.hood.manualAngle = Math.toRadians(hoodAngleDeg)
+            robot.shooter.manualHoodAngle = Math.toRadians(hoodAngleDeg)
 
             // Handle shoot request from web UI
             if (shootRequested) {
@@ -151,7 +150,7 @@ class ShotTuningOpMode : SigmaOpMode() {
             telemetry.addData("FW RPM", "%.0f", flywheelRPM)
             telemetry.addData("FW Power", "%.3f", io.flywheel)
             telemetry.addData("Hood Angle", "%.1f°", hoodAngleDeg)
-            telemetry.addData("Hood Servo", "%.3f", robot.hood.currentServoPosition)
+            telemetry.addData("Hood Servo", "%.3f", robot.shooter.hoodServoPosition)
             telemetry.addData("Balls", robot.beamBreak.ballCount)
             telemetry.addData("Data Points", tuner.pointCount())
             telemetry.addLine("")
