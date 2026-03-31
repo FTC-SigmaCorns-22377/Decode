@@ -23,9 +23,21 @@ class IntakeTransfer(val io: SigmaIO) {
     }
 
     var state: State = State.IDLE
+        set(value) {
+            field = value
+            transferToken++
+        }
 
     /** Set by coordinator from BeamBreak state. */
     var isFull: Boolean = false
+
+    /**
+     * Monotonic token incremented on every state change. Used by [startTransfer]
+     * to detect if the state was changed during the blocker delay, preventing
+     * a stale coroutine from transitioning to TRANSFERRING after the operator
+     * has already released the trigger.
+     */
+    private var transferToken: Long = 0
 
     companion object {
         const val INTAKE_POWER = 1.0
@@ -68,10 +80,17 @@ class IntakeTransfer(val io: SigmaIO) {
     /**
      * Begin transferring balls to the shooter.
      * Disengages blocker first and waits for it to physically move.
+     * If the state changes during the delay (e.g. operator releases trigger),
+     * the transfer is aborted and the blocker re-engaged.
      */
     suspend fun startTransfer() {
+        val token = transferToken
         disengageBlocker()
         delay(BLOCKER_MOVE_DELAY_MS)
+        if (transferToken != token) {
+            // State changed during delay — abort; blocker already handled by new state.
+            return
+        }
         state = State.TRANSFERRING
     }
 
