@@ -3,6 +3,7 @@ package sigmacorns.opmode.tune
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import kotlinx.coroutines.launch
 import sigmacorns.Robot
+import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.control.aim.tune.AdaptiveTuner
 import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.math.Pose2d
@@ -52,7 +53,7 @@ class ShotTuningOpMode : SigmaOpMode() {
                 hoodAngle = hoodAngleDeg,
                 hoodServo = robot.hood.currentServoPosition,
                 distance = tuningDistance,
-                isShooting = robot.intakeTransfer.isTransferring,
+                isShooting = robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING,
                 ballCount = robot.beamBreak.ballCount
             )
 

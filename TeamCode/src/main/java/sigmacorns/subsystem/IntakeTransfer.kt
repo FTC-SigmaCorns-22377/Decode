@@ -11,13 +11,18 @@ import kotlin.time.Duration
  * by two motors sharing a single [SigmaIO.intake] power output. A blocker servo
  * at the end of the transfer path gates ball entry into the shooter.
  *
- * Motor priority: transfer > reverse > intake > idle.
+ * Motor priority: TRANSFERRING > REVERSING > INTAKING > IDLE.
  */
 class IntakeTransfer(val io: SigmaIO) {
 
-    var isIntaking = false
-    var isReversing = false
-    var isTransferring = false
+    enum class State {
+        IDLE,
+        INTAKING,
+        REVERSING,
+        TRANSFERRING
+    }
+
+    var state: State = State.IDLE
 
     /** Set by coordinator from BeamBreak state. */
     var isFull: Boolean = false
@@ -33,22 +38,23 @@ class IntakeTransfer(val io: SigmaIO) {
 
     fun startIntake() {
         if (isFull) return
-        isIntaking = true
-        isReversing = false
+        state = State.INTAKING
     }
 
     fun stopIntake() {
-        isIntaking = false
-        isReversing = false
+        if (state == State.INTAKING || state == State.REVERSING) {
+            state = State.IDLE
+        }
     }
 
     fun startReverse() {
-        isReversing = true
-        isIntaking = false
+        state = State.REVERSING
     }
 
     fun stopReverse() {
-        isReversing = false
+        if (state == State.REVERSING) {
+            state = State.IDLE
+        }
     }
 
     fun engageBlocker() {
@@ -66,25 +72,24 @@ class IntakeTransfer(val io: SigmaIO) {
     suspend fun startTransfer() {
         disengageBlocker()
         delay(BLOCKER_MOVE_DELAY_MS)
-        isTransferring = true
+        state = State.TRANSFERRING
     }
 
     /** Stop transferring. Re-engages blocker. */
     suspend fun stopTransfer() {
-        isTransferring = false
+        state = State.IDLE
         engageBlocker()
     }
 
     /**
-     * Called every loop. Sets motor power based on state flags.
-     * Priority: transfer > reverse > intake > idle.
+     * Called every loop. Sets motor power based on state.
      */
     fun update(dt: Duration) {
-        io.intake = when {
-            isTransferring -> TRANSFER_POWER
-            isReversing -> OUTTAKE_POWER
-            isIntaking -> INTAKE_POWER
-            else -> 0.0
+        io.intake = when (state) {
+            State.TRANSFERRING -> TRANSFER_POWER
+            State.REVERSING -> OUTTAKE_POWER
+            State.INTAKING -> INTAKE_POWER
+            State.IDLE -> 0.0
         }
     }
 }

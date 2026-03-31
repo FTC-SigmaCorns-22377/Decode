@@ -1,6 +1,7 @@
 package sigmacorns.logic
 
 import sigmacorns.Robot
+import sigmacorns.subsystem.IntakeTransfer
 
 /**
  * Cross-subsystem coordinator for the intake-transfer and beam break subsystems.
@@ -20,7 +21,7 @@ class IntakeCoordinator(val robot: Robot) {
         robot.intakeTransfer.isFull = robot.beamBreak.isFull
 
         if (robot.beamBreak.isFull) {
-            robot.intakeTransfer.isIntaking = false
+            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         }
     }
 
@@ -30,7 +31,7 @@ class IntakeCoordinator(val robot: Robot) {
      */
     fun startIntake() {
         if (robot.beamBreak.isFull) return
-        robot.intakeTransfer.isTransferring = false
+        robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         robot.intakeTransfer.engageBlocker()
         robot.intakeTransfer.startIntake()
     }

@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import sigmacorns.Robot
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.HoodConfig
+import sigmacorns.subsystem.IntakeTransfer
 import kotlin.math.PI
 import kotlin.math.abs
 
@@ -160,14 +161,14 @@ class MainTeleOp : SigmaOpMode() {
                 // Spin-up only: flywheel on, blocker stays engaged
                 robot.flywheel.target = flywheelTargetSpeed
                 robot.aimFlywheel = true
-                if (robot.intakeTransfer.isTransferring) {
+                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     transferJob = robot.scope.launch { robot.intakeTransfer.stopTransfer() }
                 }
             } else {
                 // Idle: stop flywheel and transfer
                 robot.flywheel.target = 0.0
                 robot.aimFlywheel = true
-                if (robot.intakeTransfer.isTransferring) {
+                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     transferJob = robot.scope.launch { robot.intakeTransfer.stopTransfer() }
                 }
             }
@@ -224,12 +225,12 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addLine("=== SUBSYSTEMS ===")
             val intake1RPM = io.intake1RPM()
             telemetry.addData("Intake", when {
-                robot.intakeTransfer.isReversing -> "REVERSING"
-                robot.intakeTransfer.isIntaking -> "RUNNING"
+                robot.intakeTransfer.state == IntakeTransfer.State.REVERSING -> "REVERSING"
+                robot.intakeTransfer.state == IntakeTransfer.State.INTAKING -> "RUNNING"
                 else -> "IDLE"
             })
             telemetry.addData("Intake1 RPM", "%.0f", intake1RPM)
-            telemetry.addData("Transfer", if (robot.intakeTransfer.isTransferring) "RUNNING" else "IDLE")
+            telemetry.addData("Transfer", if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) "RUNNING" else "IDLE")
             telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
             telemetry.addData("Auto-Shoot", if (robot.shooterCoordinator.autoShootEnabled) "ON" else "OFF")
             telemetry.addData("Speed Mode", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
