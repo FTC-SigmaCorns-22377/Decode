@@ -10,7 +10,7 @@ import sigmacorns.io.BallColor
 import sigmacorns.io.JoltSimIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.SimGamepad
-import sigmacorns.subsystem.DriveController
+import sigmacorns.subsystem.Drivetrain
 
 class JoltVisualizerTest {
     private lateinit var sim: JoltSimIO
@@ -200,7 +200,7 @@ class JoltVisualizerTest {
         val server = sigmacorns.sim.viz.SimVizServer(sim)
         server.start()
 
-        val driveController = DriveController()
+        val drivetrain = Drivetrain()
 
         println("Visualizer running at http://localhost:8080")
         println("Use WASD keys in the browser to drive. Press Ctrl+C to stop.")
@@ -212,7 +212,7 @@ class JoltVisualizerTest {
             val vx = if (wasd.w) 1.0 else if (wasd.s) -1.0 else 0.0
             val vy = if (wasd.a) -1.0 else if (wasd.d) 1.0 else 0.0
             val omega = if (wasd.q) -1.0 else if (wasd.e) 1.0 else 0.0
-            driveController.drive(Pose2d(vx, vy, omega), sim)
+            drivetrain.drive(Pose2d(vx, vy, omega), sim)
             sim.turret = 0.5
 
             // R = intake + flywheel, F = shoot one ball per press
@@ -239,7 +239,7 @@ class JoltVisualizerTest {
 
         val gamepad = Gamepad()
         val simGamepad = SimGamepad(gamepad)
-        val driveController = DriveController()
+        val drivetrain = Drivetrain()
 
         println("Visualizer running at http://localhost:8080")
         println("Use a connected gamepad to drive. Press Ctrl+C to stop.")
@@ -247,7 +247,7 @@ class JoltVisualizerTest {
         var frameCount = 0
         while (true) {
             simGamepad.tick()
-            driveController.update(gamepad, sim)
+            drivetrain.update(gamepad, sim)
 
             // Right trigger = intake, left bumper = flywheel, right bumper = shoot
             sim.intake = gamepad.right_trigger.toDouble()
