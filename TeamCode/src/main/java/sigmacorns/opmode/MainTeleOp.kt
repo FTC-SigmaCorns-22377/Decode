@@ -40,7 +40,7 @@ class MainTeleOp : SigmaOpMode() {
         robot.startApriltag()
 
         // State
-        var autoAimEnabled = true
+        var autoAimEnabled = false
         var flywheelTargetSpeed = 400.0
         val flywheelSpeedStep = 25.0
 
@@ -130,7 +130,7 @@ class MainTeleOp : SigmaOpMode() {
                 robot.aimTurret = false
                 robot.turret.fieldRelativeMode = false
                 robot.turret.targetAngle += manualTurretInput * 2.0 * dt.inWholeMilliseconds / 1000.0
-                robot.turret.targetAngle = robot.turret.targetAngle.coerceIn(-PI / 2.0, PI / 2.0)
+                robot.turret.targetAngle = robot.turret.targetAngle.coerceIn(-PI, PI)
             } else if (autoAimEnabled) {
                 robot.aimTurret = true
             }
@@ -145,6 +145,8 @@ class MainTeleOp : SigmaOpMode() {
                     Math.toRadians(ShooterConfig.maxAngleDeg)
                 )
             }
+
+//            robot.io.flywheel = if (gamepad2.right_trigger > 0.1) { 0.88 } else { 0.0 }
 
             // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
             if (gamepad2.right_trigger > 0.1) {

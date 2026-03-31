@@ -124,12 +124,12 @@ class Turret(val io: SigmaIO) {
         // Convert angle to servo position and write to both servos
         currentServoPosition = angleToServo(effectiveTargetAngle)
         robot.io.turretLeft = currentServoPosition
-        robot.io.turretRight = currentServoPosition  // hardware-reversed
+        robot.io.turretRight = 1-currentServoPosition  // hardware-reversed
     }
 
     /** Convert radians to servo position [0.0, 1.0]. 0 rad = 0.5 (forward). */
     private fun angleToServo(angle: Double): Double {
-        return (0.5 + (angle - TurretServoConfig.servoCenterAngle) / TurretServoConfig.servoTotalRange).coerceIn(0.0, 1.0)
+        return (0.5 + ((angle - TurretServoConfig.servoCenterAngle) / TurretServoConfig.servoTotalRange)).coerceIn(0.0, 1.0)
     }
 }
 
@@ -141,13 +141,13 @@ object TurretServoConfig {
     @JvmField var servoTotalRange = 355.0 * PI / 180.0
 
     /** Minimum turret angle in radians */
-    @JvmField var minAngle = -PI / 2.0
+    @JvmField var minAngle = -PI
 
     /** Maximum turret angle in radians */
-    @JvmField var maxAngle = PI / 2.0
+    @JvmField var maxAngle = PI
 
     /** Angle in radians that maps to servo position 0.5 */
-    @JvmField var servoCenterAngle = PI / 2.0
+    @JvmField var servoCenterAngle = 0.0
 
     /** Alignment tolerance in radians (~2 degrees) */
     @JvmField var alignmentTolerance = 0.035
