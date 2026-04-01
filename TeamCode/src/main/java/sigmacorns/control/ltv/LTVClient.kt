@@ -31,7 +31,8 @@ data class WindowSelConfig(
 
 enum class QpSolverType(val nativeId: Int) {
     FISTA(0),
-    HPIPM_OCP(1);
+    HPIPM_OCP(1),
+    NEON_IPM(2);
 
     val isAvailable: Boolean get() = MecanumLTVBridge.nativeIsSolverAvailable(nativeId)
 }
@@ -61,7 +62,7 @@ class LTVClient private constructor(
         qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
         rDiag: DoubleArray = doubleArrayOf(0.005, 0.005, 0.005, 0.005),
         qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
-        solverType: QpSolverType = QpSolverType.HPIPM_OCP,
+        solverType: QpSolverType = QpSolverType.NEON_IPM,
         windowSelConfig: WindowSelConfig = WindowSelConfig()
     ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS)) {
         MecanumLTVBridge.nativeSetModelParams(
