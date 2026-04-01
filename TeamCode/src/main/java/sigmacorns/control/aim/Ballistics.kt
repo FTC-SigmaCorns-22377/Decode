@@ -48,22 +48,9 @@ class Ballistics(
         val tMin: Double,
         val tMax: Double
     )
-    /**
-     * Evaluate intermediate quantities at a specific flight time T.
-     */
-    fun evalA(p: Target, T: Double): Double = -rH / T
-
-    fun evalB(p: Target, T: Double, theta: Double): Double {
-        val b = (p.dx - rH) / T - p.vR.x
-        val c = (p.dy - rH) / T - p.vR.y
-        return -rH / T + cos(theta) * b + sin(theta) * c
-    }
-
-    fun evalC(p: Target, T: Double): Double = p.dz / T + 0.5 * g * T
-
     fun evalTheta(p: Target, T: Double): Double {
-        val b = (p.dx - rH) / T - p.vR.x
-        val c = (p.dy - rH) / T - p.vR.y
+        val b = (p.dx) / T - p.vR.x
+        val c = (p.dy) / T - p.vR.y
         return atan2(c, b)
     }
 
@@ -73,8 +60,8 @@ class Ballistics(
     fun solve(p: Target, T: Double): ShotState {
         val theta = evalTheta(p, T)
 
-        val b = (p.dx - rH) / T - p.vR.x
-        val c = (p.dy - rH) / T - p.vR.y
+        val b = (p.dx ) / T - p.vR.x
+        val c = (p.dy ) / T - p.vR.y
         val a = -rH / T
 
         val B = a + cos(theta) * b + sin(theta) * c
@@ -96,13 +83,13 @@ class Ballistics(
      * Compute dTheta/dT analytically.
      */
     fun dThetaDT(p: Target, T: Double): Double {
-        // theta = atan2(c, b) where b = (dx - rH)/T - vR.x, c = (dy - rH)/T - vR.y
-        // db/dT = -(dx - rH)/T^2,  dc/dT = -(dy - rH)/T^2
+        // theta = atan2(c, b) where b = (dx )/T - vR.x, c = (dy )/T - vR.y
+        // db/dT = -(dx )/T^2,  dc/dT = -(dy )/T^2
         // dTheta/dT = (dc/dT * b - db/dT * c) / (b^2 + c^2)
-        val b = (p.dx - rH) / T - p.vR.x
-        val c = (p.dy - rH) / T - p.vR.y
-        val dbdT = -(p.dx - rH) / (T * T)
-        val dcdT = -(p.dy - rH) / (T * T)
+        val b = (p.dx ) / T - p.vR.x
+        val c = (p.dy ) / T - p.vR.y
+        val dbdT = -(p.dx ) / (T * T)
+        val dcdT = -(p.dy ) / (T * T)
         return (dcdT * b - dbdT * c) / (b * b + c * c)
     }
 
@@ -114,43 +101,43 @@ class Ballistics(
      * We bound numerator above and denominator below.
      */
     fun lipschitzTheta(p: Target, tMin: Double, tMax: Double): Double {
-        // b = (dx - rH)/T - vR.x, c = (dy - rH)/T - vR.y
-        // db/dT = -(dx - rH)/T^2, dc/dT = -(dy - rH)/T^2
+        // b = (dx )/T - vR.x, c = (dy )/T - vR.y
+        // db/dT = -(dx )/T^2, dc/dT = -(dy )/T^2
         // Numerator = dc/dT * b - db/dT * c
-        //   = -(dy-rH)/T^2 * ((dx-rH)/T - vR.x) + (dx-rH)/T^2 * ((dy-rH)/T - vR.y)
-        //   = 1/T^2 * ((dx-rH)*((dy-rH)/T - vR.y) - (dy-rH)*((dx-rH)/T - vR.x))
-        //   = 1/T^2 * ((dx-rH)*vRx - (dy-rH)*vRy) ... wait, let me just do it numerically.
-        // Actually: numerator = (-(dy-rH)(dx-rH) + (dx-rH)(dy-rH))/T^3 + ((dy-rH)*vRx - (dx-rH)*vRy)/T^2
-        //                     = ((dy-rH)*vRx - (dx-rH)*vRy) / T^2
-        // So dTheta/dT = ((dy-rH)*vRx - (dx-rH)*vRy) / (T^2 * (b^2 + c^2))
+        //   = -(dy)/T^2 * ((dx)/T - vR.x) + (dx)/T^2 * ((dy)/T - vR.y)
+        //   = 1/T^2 * ((dx)*((dy)/T - vR.y) - (dy)*((dx)/T - vR.x))
+        //   = 1/T^2 * ((dx)*vRx - (dy)*vRy) ... wait, let me just do it numerically.
+        // Actually: numerator = (-(dy)(dx) + (dx)(dy))/T^3 + ((dy)*vRx - (dx)*vRy)/T^2
+        //                     = ((dy)*vRx - (dx)*vRy) / T^2
+        // So dTheta/dT = ((dy)*vRx - (dx)*vRy) / (T^2 * (b^2 + c^2))
 
-        val crossTerm = (p.dy - rH) * p.vR.x - (p.dx - rH) * p.vR.y
+        val crossTerm = (p.dy ) * p.vR.x - (p.dx ) * p.vR.y
 
         // |numerator| upper bound: |crossTerm| / tMin^2
         val numUp = abs(crossTerm) / (tMin * tMin)
 
         // denominator = b^2 + c^2, need lower bound
-        // b(T) = (dx-rH)/T - vRx, evaluate at endpoints and find minimum of b^2+c^2
+        // b(T) = (dx)/T - vRx, evaluate at endpoints and find minimum of b^2+c^2
         val denLo = run {
             var lo = Double.MAX_VALUE
             for (t in listOf(tMin, tMax)) {
-                val b = (p.dx - rH) / t - p.vR.x
-                val c = (p.dy - rH) / t - p.vR.y
+                val b = (p.dx ) / t - p.vR.x
+                val c = (p.dy ) / t - p.vR.y
                 lo = min(lo, b * b + c * c)
             }
-            // b = 0 at T = (dx-rH)/vRx if vRx != 0, c = 0 at T = (dy-rH)/vRy if vRy != 0
+            // b = 0 at T = (dx)/vRx if vRx != 0, c = 0 at T = (dy)/vRy if vRy != 0
             // Check if critical T values lie in interval
             if (p.vR.x != 0.0) {
-                val tCritB = (p.dx - rH) / p.vR.x
+                val tCritB = p.dx / p.vR.x
                 if (tCritB in tMin..tMax) {
-                    val c = (p.dy - rH) / tCritB - p.vR.y
+                    val c = (p.dy ) / tCritB - p.vR.y
                     lo = min(lo, c * c)
                 }
             }
             if (p.vR.y != 0.0) {
-                val tCritC = (p.dy - rH) / p.vR.y
+                val tCritC = (p.dy ) / p.vR.y
                 if (tCritC in tMin..tMax) {
-                    val b = (p.dx - rH) / tCritC - p.vR.x
+                    val b = (p.dx ) / tCritC - p.vR.x
                     lo = min(lo, b * b)
                 }
             }
@@ -196,11 +183,11 @@ class Ballistics(
         var maxCS = 0.0
         for (i in 0..nSamples) {
             val t = tMin + (tMax - tMin) * i / nSamples
-            val b = (p.dx - rH) / t - p.vR.x
-            val c = (p.dy - rH) / t - p.vR.y
+            val b = (p.dx ) / t - p.vR.x
+            val c = (p.dy ) / t - p.vR.y
             val dthetaDt = dThetaDT(p, t)
-            val term1 = dthetaDt * c - (p.dx - rH) / (t * t)
-            val term2 = dthetaDt * b + (p.dy - rH) / (t * t)
+            val term1 = dthetaDt * c - (p.dx ) / (t * t)
+            val term2 = dthetaDt * b + (p.dy ) / (t * t)
             maxCS = max(maxCS, rH / (t * t) + sqrt(term1 * term1 + term2 * term2))
         }
 
@@ -220,8 +207,8 @@ class Ballistics(
         // --- B0, C bounds ---
         val sol = solve(p, tStar)
         val theta0 = sol.theta
-        val b0val = (p.dx - rH) / tStar - p.vR.x
-        val c0val = (p.dy - rH) / tStar - p.vR.y
+        val b0val = (p.dx ) / tStar - p.vR.x
+        val c0val = (p.dy ) / tStar - p.vR.y
         val a0 = -rH / tStar
         val B0 = a0 + cos(theta0) * b0val + sin(theta0) * c0val
 
@@ -344,7 +331,7 @@ class Ballistics(
 
         // binary search for tMin
         lo = 0.0
-        hi = tStar
+        hi = tMax
 
         while (hi-lo > tol) {
             val m = (hi+lo)/2.0
