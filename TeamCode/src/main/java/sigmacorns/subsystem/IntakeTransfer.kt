@@ -51,9 +51,6 @@ class IntakeTransfer(val io: SigmaIO) {
             }
         }
 
-    /** Set by coordinator from BeamBreak state. */
-    var isFull: Boolean = false
-
     companion object {
         const val INTAKE_POWER = 1.0
         const val OUTTAKE_POWER = -1.0
