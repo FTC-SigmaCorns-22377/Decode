@@ -1,10 +1,13 @@
 package sigmacorns.subsystem
 
-import sigmacorns.control.PIDController
+import sigmacorns.constants.FLYWHEEL_INERTIA
 import sigmacorns.io.SigmaIO
+import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.exp
 import kotlin.math.sqrt
 import kotlin.time.Duration
+import kotlin.time.DurationUnit
 
 /**
  * Unified flywheel + hood shooter subsystem.
@@ -13,7 +16,7 @@ import kotlin.time.Duration
  * launch balls, and the hood servo controls the launch angle. Both take `SigmaIO`
  * and write their respective outputs each loop.
  *
- * Flywheel uses a PID controller with feedforward to reach the target velocity.
+ * Flywheel uses a discrete-time LQR controller to reach the target velocity.
  * Hood computes the optimal launch angle from distance and flywheel velocity,
  * preferring interpolated tuning data over trig fallback.
  *
@@ -21,25 +24,13 @@ import kotlin.time.Duration
  * are set by the AimingSystem each loop.
  */
 class Shooter(
-    kP: Double,
-    kD: Double,
-    kI: Double,
-    val maxVelocity: Double,
-    val io: SigmaIO,
+    val io: SigmaIO
 ) {
 
     // --- Flywheel state ---
 
-    val pid = PIDController(kP, kD, kI, 0.0)
-
     /** Target flywheel velocity in rad/s (set by AimingSystem or opmode). */
     var flywheelTarget: Double = 0.0
-        set(value) {
-            if (field != value) {
-                field = value
-                pid.setpoint = value
-            }
-        }
 
     // --- Hood state ---
 
@@ -80,21 +71,75 @@ class Shooter(
     }
 
     // ========================================================================
-    // Flywheel (PID + feedforward)
+    // Flywheel (LQR)
     // ========================================================================
 
     private fun updateFlywheel(curV: Double, dt: Duration) {
         if (dt <= Duration.ZERO) return
 
-        val feedforward = flywheelTarget / maxVelocity
-        val pidOutput = pid.update(curV, dt)
-        val power = feedforward + pidOutput
+        if (flywheelTarget == 0.0) {
+            io.flywheel = 0.0
+            return
+        }
 
-        io.flywheel = (power / io.voltage() * 12.0).coerceIn(-1.0..1.0)
+        io.flywheel = calculateFlywheelSpeed(
+            io.voltage(),
+            flywheelTarget,
+            curV,
+            dt.toDouble(DurationUnit.SECONDS)
+        )
     }
 
-    fun resetPID() {
-        pid.reset()
+    /**
+     * Compute flywheel motor power using a discrete-time LQR controller.
+     *
+     * Models the DC motor as: J*dω/dt = (T_stall/V_ref)*V - (T_stall/(V_ref*ω_free))*ω
+     * Discretizes the continuous dynamics with a zero-order hold, then solves the
+     * discrete algebraic Riccati equation (DARE) for the optimal gain K.
+     *
+     * @param hubVoltage current battery voltage (V)
+     * @param targetVelocity desired flywheel angular velocity (rad/s)
+     * @param currentVelocity measured flywheel angular velocity (rad/s)
+     * @param dt time step (s)
+     * @return motor power in [-1, 1]
+     */
+    private fun calculateFlywheelSpeed(
+        hubVoltage: Double,
+        targetVelocity: Double,
+        currentVelocity: Double,
+        dt: Double,
+    ): Double {
+        if (hubVoltage <= 0.0) return 0.0
+
+        val q = 1.0 // q
+        val r = 240.0 // r
+
+        val inertia = FLYWHEEL_INERTIA
+        val referenceVoltage = 12.0
+        val stallTorque = 1.47 * 0.0980665 // 1.47 kg·cm -> N·m
+        val freeSpeed = 5650.0 * (12/12.41) / 60 * 2 * PI // rad/s
+
+        // Continuous-time state-space: dω/dt = stateCoeff*ω + inputCoeff*V
+        val stateCoeff = -stallTorque / (freeSpeed * referenceVoltage * inertia)
+        val inputCoeff = stallTorque / (inertia * referenceVoltage)
+
+        // Zero-order hold discretization
+        val discreteState = exp(stateCoeff * dt)
+        val discreteInput = (inputCoeff * (discreteState - 1)) / stateCoeff
+
+        // Solve DARE for steady-state cost P
+        val riccatiLinear = q * (1 - discreteState * discreteState) - r * discreteInput * discreteInput
+        val riccatiCost = (-riccatiLinear + sqrt(
+            riccatiLinear * riccatiLinear + 4 * discreteInput * discreteInput * r * q
+        )) / (2 * discreteInput * discreteInput)
+
+        // Optimal LQR gain
+        val gain = (discreteState * discreteInput * riccatiCost) /
+            (r + discreteInput * discreteInput * riccatiCost)
+
+        val feedforward = referenceVoltage * targetVelocity / freeSpeed
+        val voltage = -gain * (currentVelocity - targetVelocity) + feedforward
+        return (voltage / hubVoltage).coerceIn(-1.0..1.0)
     }
 
     // ========================================================================
