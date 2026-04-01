@@ -4,12 +4,12 @@ import sigmacorns.io.SigmaIO
 
 /**
  * Continuously polls the three beam break sensors to track how many balls
- * are held in the robot. Each slot is either null (empty) or true (ball present).
+ * are held in the robot. Ball slot 1 is the slot closest to the shooter.
  */
 class BeamBreak(val io: SigmaIO) {
 
     // 3 slots: null = empty, true = ball present
-    val slots: Array<Boolean?> = arrayOfNulls(3)
+    val slots: BooleanArray = booleanArrayOf(false, false, false)
 
     /** Number of balls currently held. */
     val ballCount: Int get() = slots.count { it == true }
@@ -22,8 +22,8 @@ class BeamBreak(val io: SigmaIO) {
      * updates the ball slot list.
      */
     fun update() {
-        slots[0] = if (io.beamBreak1()) true else null
-        slots[1] = if (io.beamBreak2()) true else null
-        slots[2] = if (io.beamBreak3()) true else null
+        slots[0] = io.beamBreak1()
+        slots[1] = io.beamBreak2()
+        slots[2] = io.beamBreak3()
     }
 }
