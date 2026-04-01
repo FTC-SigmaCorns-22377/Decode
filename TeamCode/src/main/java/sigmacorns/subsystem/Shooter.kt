@@ -77,6 +77,11 @@ class Shooter(
     private fun updateFlywheel(curV: Double, dt: Duration) {
         if (dt <= Duration.ZERO) return
 
+        if (flywheelTarget == 0.0) {
+            io.flywheel = 0.0
+            return
+        }
+
         io.flywheel = calculateFlywheelSpeed(
             io.voltage(),
             flywheelTarget,
@@ -92,27 +97,27 @@ class Shooter(
      * Discretizes the continuous dynamics with a zero-order hold, then solves the
      * discrete algebraic Riccati equation (DARE) for the optimal gain K.
      *
-     * @param batteryVoltage current battery voltage (V)
+     * @param hubVoltage current battery voltage (V)
      * @param targetVelocity desired flywheel angular velocity (rad/s)
      * @param currentVelocity measured flywheel angular velocity (rad/s)
      * @param dt time step (s)
      * @return motor power in [-1, 1]
      */
     private fun calculateFlywheelSpeed(
-        batteryVoltage: Double,
+        hubVoltage: Double,
         targetVelocity: Double,
         currentVelocity: Double,
         dt: Double,
     ): Double {
-        if (batteryVoltage <= 0.0) return 0.0
+        if (hubVoltage <= 0.0) return 0.0
 
-        val stateCost = 0.5
-        val inputCost = 0.5
+        val q = 1.0 // q
+        val r = 240.0 // r
 
         val inertia = FLYWHEEL_INERTIA
         val referenceVoltage = 12.0
         val stallTorque = 1.47 * 0.0980665 // 1.47 kg·cm -> N·m
-        val freeSpeed = 5000.0 / 60 * 2 * PI // 5000 RPM -> rad/s
+        val freeSpeed = 5650.0 * (12/12.41) / 60 * 2 * PI // rad/s
 
         // Continuous-time state-space: dω/dt = stateCoeff*ω + inputCoeff*V
         val stateCoeff = -stallTorque / (freeSpeed * referenceVoltage * inertia)
@@ -123,17 +128,18 @@ class Shooter(
         val discreteInput = (inputCoeff * (discreteState - 1)) / stateCoeff
 
         // Solve DARE for steady-state cost P
-        val riccatiLinear = stateCost * (1 - discreteState * discreteState) - inputCost * discreteInput * discreteInput
+        val riccatiLinear = q * (1 - discreteState * discreteState) - r * discreteInput * discreteInput
         val riccatiCost = (-riccatiLinear + sqrt(
-            riccatiLinear * riccatiLinear + 4 * discreteInput * discreteInput * inputCost * stateCost
+            riccatiLinear * riccatiLinear + 4 * discreteInput * discreteInput * r * q
         )) / (2 * discreteInput * discreteInput)
 
         // Optimal LQR gain
         val gain = (discreteState * discreteInput * riccatiCost) /
-            (inputCost + discreteInput * discreteInput * riccatiCost)
+            (r + discreteInput * discreteInput * riccatiCost)
 
-        val voltage = -gain * (currentVelocity - targetVelocity)
-        return (voltage / batteryVoltage).coerceIn(-1.0..1.0)
+        val feedforward = referenceVoltage * targetVelocity / freeSpeed
+        val voltage = -gain * (currentVelocity - targetVelocity) + feedforward
+        return (voltage / hubVoltage).coerceIn(-1.0..1.0)
     }
 
     // ========================================================================

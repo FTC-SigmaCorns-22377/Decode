@@ -231,7 +231,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
-        cachedFlywheelVelocity = (flywheel1?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
+        cachedFlywheelVelocity = (flywheel1?.velocity ?: 0.0) / 28.0 * 2 * PI
         cachedIntake1RPM = (intake1Motor?.velocity ?: 0.0) / 145.1 * 60
         allHubs.map { it.clearBulkCache() }
     }
@@ -299,6 +299,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flywheel2?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intake1Motor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intake2Motor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
+
+        flywheel1?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+        flywheel2?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
 
         // Turret servos: left = FORWARD, right = REVERSE (mirrored mounting, geared together)
         // Both servos receive the same position value; reversing the right servo
