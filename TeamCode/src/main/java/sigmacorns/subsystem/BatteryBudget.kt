@@ -17,14 +17,13 @@ import kotlin.math.exp
  * Only instantiated when running on a physical robot (HardwareIO), since
  * simulation environments provide ideal voltage and don't model battery sag.
  *
- * Uses Moving Horizon Estimation to recover the true battery voltage from the
- * hub voltage reading: V_hub = V_batt - I_total * R_internal.
+ * Uses the hub's reported voltage reading directly as the battery voltage for
+ * budgeting, combined with a current draw model for each motor to estimate
+ * total system current and enforce a current limit.
  *
  * Current draw model for a DC motor:
  *   I = I_stall * (V_motor / V_ref) - I_stall * (ω / ω_free)
  * where ω is the bare motor velocity (before gearbox).
- *
- * See doc/battery-mhe-theory.md for full derivation.
  */
 class BatteryBudget(val io: HardwareIO) {
 
