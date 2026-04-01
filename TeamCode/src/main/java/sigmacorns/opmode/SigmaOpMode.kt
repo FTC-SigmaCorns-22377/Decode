@@ -23,7 +23,7 @@ abstract class SigmaOpMode(
 ): LinearOpMode() {
 
     val io: SigmaIO by lazy {
-        providedIO ?: simIO ?: hardwareMap?.let { HardwareIO(it) } ?: SimIO()
+        providedIO ?: (if (SIM) simIO else null) ?: hardwareMap?.let { HardwareIO(it) } ?: SimIO()
     }
 
     private val internalState = OpModeReflection(this)
