@@ -3,6 +3,7 @@ package sigmacorns.subsystem
 import sigmacorns.constants.FLYWHEEL_INERTIA
 import sigmacorns.io.SigmaIO
 import kotlin.math.PI
+import kotlin.math.absoluteValue
 import kotlin.math.atan2
 import kotlin.math.exp
 import kotlin.math.sqrt
@@ -119,6 +120,49 @@ class Shooter(
         val stallTorque = 1.47 * 0.0980665 // 1.47 kg·cm -> N·m
         val freeSpeed = 5650.0 * (12/12.41) / 60 * 2 * PI // rad/s
 
+        // encoder position resolution
+        val encoderRes = 2*PI/28.0
+
+        /**
+         * Chub uses period measurement:
+         *
+         * omega_measured = 2pi/28 / T_measured
+         *
+         * where T_measured is the measured time in between ticks
+         *
+         * Assume a timer with resolution dt is used. Let T be the true inter-tick time
+         *
+         * T = 2pi/28/omega
+         * omega_measured = 2pi/28 / (T +- δt)
+         *
+         * angular resolution (from differentiating):
+         *
+         * dw=2pi/28 * dt/T^2
+         *
+         * substituting T= 2pi/28/omega
+         *
+         * dw = 28 * w^2 * dt / 2pi
+         *
+         * when testing encoder switched between 399 rad/s and 403 rad/s, so at omega = 401 rad/s dw=4 rad/s
+         *
+         * dt = dw * 2pi / (28* w^2)
+         *
+         * dt = 4 * 2pi / (28 * (401)^2)
+         *
+         * dt = 5.58 * 10^-6 -> means timer is running at ~180 Mhz
+         */
+
+        val dTimer = 0.00000558204
+
+        val velResolution = (28.0 * currentVelocity*currentVelocity * dTimer)/ (2.0*PI)
+
+        var xErr = currentVelocity - targetVelocity
+
+        if ((currentVelocity-targetVelocity).absoluteValue < velResolution) {
+            // deadzone at encoder resolution to prevent chatter
+            xErr = 0.0
+        }
+
         // Continuous-time state-space: dω/dt = stateCoeff*ω + inputCoeff*V
         val stateCoeff = -stallTorque / (freeSpeed * referenceVoltage * inertia)
         val inputCoeff = stallTorque / (inertia * referenceVoltage)
@@ -138,7 +182,7 @@ class Shooter(
             (r + discreteInput * discreteInput * riccatiCost)
 
         val feedforward = referenceVoltage * targetVelocity / freeSpeed
-        val voltage = -gain * (currentVelocity - targetVelocity) + feedforward
+        val voltage = -gain * xErr + feedforward
         return (voltage / hubVoltage).coerceIn(-1.0..1.0)
     }
 
