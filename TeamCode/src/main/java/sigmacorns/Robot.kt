@@ -18,6 +18,7 @@ import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
+import sigmacorns.subsystem.BatteryBudget
 import sigmacorns.subsystem.BeamBreak
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.Turret
@@ -39,6 +40,7 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
     val beamBreak = BeamBreak(io)
     val intakeTransfer = IntakeTransfer(io)
     val turret = Turret(io)
+    val batteryBudget: BatteryBudget? = (io as? HardwareIO)?.let { BatteryBudget(it) }
 
     // Logic
     val aim = AimingSystem(this, blue, shotDataPath)
@@ -160,6 +162,9 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
             turret.fieldRelativeMode = false
             turret.targetAngle = 0.0
         }
+
+        // 0. Battery estimation
+        batteryBudget?.update()
 
         // 1. Read sensors
         beamBreak.update()

@@ -30,10 +30,10 @@ typealias FTCPose2d = org.firstinspires.ftc.robotcore.external.navigation.Pose2D
 // import odometry from some library
 class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //drive motor declarations
-    private val driveFLMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveFL")
-    private val driveBLMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveBL")
-    private val driveFRMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveFR")
-    private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
+    private val driveFLMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java,"driveFL")
+    private val driveBLMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java, "driveBL")
+    private val driveFRMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java, "driveFR")
+    private val driveBRMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java,"driveBR")
 
     //shooter
     private val flywheel1: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter1")
@@ -41,7 +41,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //intake
     private val intake1Motor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"intake1")
     //intake
-    private val intake2Motor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intake2")
+    private val intake2Motor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"intake2")
 
     // turret servos (dual-servo geared turret)
     private val turretLeftServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretLeft")
@@ -91,6 +91,22 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private var cachedFlywheelVelocity: Double = 0.0
     private var cachedIntake1RPM: Double = 0.0
     private var cachedTurretPosition: Double = 0.0
+
+    // Cached drive motor velocities (bare motor rad/s, before gearbox)
+    var cachedDriveFLVelocity: Double = 0.0
+        private set
+    var cachedDriveFRVelocity: Double = 0.0
+        private set
+    var cachedDriveBLVelocity: Double = 0.0
+        private set
+    var cachedDriveBRVelocity: Double = 0.0
+        private set
+    var cachedIntake1Velocity: Double = 0.0
+        private set
+    var cachedIntake2Velocity: Double = 0.0
+        private set
+    var cachedFlywheel2Velocity: Double = 0.0
+        private set
 
     // Cached beam break values (true = beam broken = ball present)
     private var cachedBeamBreak1: Boolean = false
@@ -231,8 +247,18 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
-        cachedFlywheelVelocity = (flywheel1?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
+        cachedFlywheelVelocity = (flywheel1?.velocity ?: 0.0) / 28.0 * 2 * PI
         cachedIntake1RPM = (intake1Motor?.velocity ?: 0.0) / 145.1 * 60
+
+        // Bare motor velocities (ticks/s -> rad/s, 28 ticks per bare motor rev)
+        cachedDriveFLVelocity = driveFLMotor.velocity / 28.0 * 2 * PI
+        cachedDriveFRVelocity = driveFRMotor.velocity / 28.0 * 2 * PI
+        cachedDriveBLVelocity = driveBLMotor.velocity / 28.0 * 2 * PI
+        cachedDriveBRVelocity = driveBRMotor.velocity / 28.0 * 2 * PI
+        cachedIntake1Velocity = (intake1Motor?.velocity ?: 0.0) / 28.0 * 2 * PI
+        cachedIntake2Velocity = (intake2Motor?.velocity ?: 0.0) / 28.0 * 2 * PI
+        cachedFlywheel2Velocity = (flywheel2?.velocity ?: 0.0) / 28.0 * 2 * PI
+
         allHubs.map { it.clearBulkCache() }
     }
 
