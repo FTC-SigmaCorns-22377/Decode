@@ -20,7 +20,7 @@ class LTVSimple : LTVTest("Trajectory 1")
 
 open class LTVTest(val trajName: String) : SigmaOpMode() {
     override fun runOpMode() {
-        val projectFile = MPCTest.findProjectFile("simple")
+        val projectFile = TrajoptLoader.findProjectFile("simple")
             ?: throw IllegalStateException("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
 
         val traj = TrajoptLoader.loadTrajectory(projectFile, trajName)

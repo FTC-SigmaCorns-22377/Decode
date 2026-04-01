@@ -14,7 +14,6 @@ import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.opmode.test.MPCTest
 import java.io.File
 import kotlin.math.hypot
 import kotlin.math.max
@@ -102,7 +101,7 @@ class LTVOffsetRobustnessTest {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
 
-        val projectFile = MPCTest.findProjectFile("simple")
+        val projectFile = TrajoptLoader.findProjectFile("simple")
             ?: error("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
         val traj = TrajoptLoader.loadFirstTrajectory(projectFile)
             ?: error("No trajectory found in ${projectFile.name}")
@@ -333,7 +332,7 @@ class LTVOffsetRobustnessTest {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
 
-        val projectFile = MPCTest.findProjectFile("simple")
+        val projectFile = TrajoptLoader.findProjectFile("simple")
             ?: error("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
         val trajectories = TrajoptLoader.loadAllTrajectories(projectFile)
         require(trajectories.isNotEmpty()) { "No trajectories found in ${projectFile.name}" }

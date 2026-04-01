@@ -14,6 +14,14 @@ import java.io.FileReader
 object TrajoptLoader {
     private val gson = Gson()
 
+    fun findProjectFile(name: String): File? {
+        val robotDir = robotTrajoptDir()
+        if (robotDir.exists()) {
+            return findProjectFiles(robotDir).find { it.nameWithoutExtension==name }
+        }
+        return null
+    }
+
     /**
      * Load a trajectory project from a JSON file.
      */
