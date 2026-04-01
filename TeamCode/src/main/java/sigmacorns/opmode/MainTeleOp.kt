@@ -227,6 +227,7 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
             telemetry.addData("Auto-Shoot", if (robot.intakeCoordinator.autoShootEnabled) "ON" else "OFF")
             telemetry.addData("Speed Mode", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
+            telemetry.addData("Drive Scale Avg", "%.3f", robot.drive.averageScaleFactor)
             telemetry.update()
 
             false // continue loop

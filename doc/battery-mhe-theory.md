@@ -1,8 +1,8 @@
-# Battery Voltage Estimation via Moving Horizon Estimation
+# Battery Budget System
 
-This document describes the theory behind the `BatteryMHE` estimator used in
-`BatteryBudget` to recover the true battery voltage and internal resistance
-from the hub voltage sensor reading.
+This document describes the theory behind `BatteryBudget` — the subsystem that
+tracks per-motor current draw and provides current-limited drivetrain control
+using physics-based simulation.
 
 ## 1. DC Motor Current Model
 
@@ -35,186 +35,114 @@ This is the model used in `BatteryBudget.motorCurrent()`. For an RS-555 at 12V:
 The velocity `omega` is the **bare motor** velocity (before gearbox), obtained by
 reading the encoder ticks and converting via `ticks/s / 28 * 2*pi`.
 
-## 2. Hub vs Battery Voltage
+### Regenerative Case
 
-The REV Control Hub reads voltage at its own terminals, not at the battery.
-Between the battery and the hub sits the battery's internal resistance (and wiring
-resistance). Under load, Ohm's law gives:
+When motor power is zero, the H-bridge is not driving the motor. No current flows
+from the battery regardless of motor velocity (coasting or brake mode dissipates
+energy through the motor windings, not back through the battery).
+`motorCurrent()` returns 0 when `power == 0`.
 
-```
-V_hub = V_batt - I_total * R_internal
-```
+## 2. Hub Voltage and Motor Voltage
 
-where `I_total` is the total current drawn by all motors, and `R_internal` includes
-the battery's electrochemical resistance plus connector and wire resistance
-(typically 0.1-0.3 ohms total).
-
-At 10A total draw with R=0.15 ohms, the voltage sag is 1.5V. This means using
-`V_hub` directly as the battery voltage **underestimates** motor voltages and
-currents, especially during high-load maneuvers (driving + shooting).
-
-## 3. The Circular Dependency
-
-To compute `V_batt` we need `I_total`, but motor current depends on motor voltage,
-which depends on `V_batt`:
+The REV Control Hub reads voltage at its own terminals. The motor voltage for
+each motor is:
 
 ```
-V_motor = power * V_batt       (PWM duty cycle * supply voltage)
-I_motor = f(V_motor, omega)     (motor current model)
-I_total = sum(I_motor)
-V_hub = V_batt - I_total * R
+V_motor = power * V_hub
 ```
 
-This appears circular, but we can break it by expressing `I_total` as a linear
-function of `V_batt`.
+where `power` is the PWM duty cycle in [-1, 1] and `V_hub` is the hub voltage
+reading from `io.voltage()`.
 
-### Linearization
+## 3. Per-Motor Current Tracking
 
-For motor `i` with power command `p_i` and bare motor velocity `omega_i`:
+`BatteryBudget.update()` runs each control loop and computes:
 
-```
-V_motor_i = p_i * V_batt
-I_motor_i = I_stall * (p_i * V_batt / V_ref) - I_stall * (omega_i / omega_free)
-```
+1. Hub voltage from `io.voltage()`
+2. Per-motor voltage: `power * hubVoltage` for all 8 motors (4 drive, 2 flywheel, 2 intake)
+3. Per-motor current using the DC motor model above
+4. Total current as the sum of all motor currents
 
-Summing over all motors:
+Motor velocities are read as bare motor rad/s from `HardwareIO` cached values.
+Drive motors use `DcMotorEx.getVelocity()` converted from encoder ticks to bare
+motor rad/s. The flywheel (1:1 gear ratio) reads bare motor velocity directly.
 
-```
-I_total = (I_stall / V_ref) * sum(|p_i|) * V_batt - I_stall * sum(omega_i / omega_free)
-        = A * V_batt + B
-```
+## 4. Physics-Based Drivetrain Current Prediction
 
-where:
-- `A = (I_stall / V_ref) * sum(|p_i|)` &mdash; depends only on commanded motor powers
-- `B = -I_stall * sum(omega_i / omega_free)` &mdash; depends only on measured velocities
+### The Problem
 
-Both `A` and `B` are known quantities each loop. Substituting into the voltage equation:
+When requesting new drive motor powers, we need to predict the resulting current
+draw **after the robot responds** to the new command. A motor starting from
+standstill at full power draws near-stall current initially, but this drops
+quickly as the robot accelerates.
 
-```
-V_hub = V_batt - (A * V_batt + B) * R
-V_hub = V_batt * (1 - A*R) - B*R
-```
+A naive prediction (using current velocity with new power) over-estimates
+current. A simple first-order model ignores robot mass, wheel coupling, and drag.
 
-This is the **measurement equation** for the estimator.
+### The Solution: MecanumDynamics Simulation
 
-## 4. Moving Horizon Estimation (MHE)
+`requestDrivetrainPower()` uses the existing `MecanumDynamics` model to simulate
+the robot forward **0.2 seconds** under the requested wheel powers. This model
+accounts for:
 
-### Why not a Kalman Filter?
+- **Robot mass** (14.1 kg) and **rotational inertia** (0.5 kg*m^2)
+- **Mecanum wheel kinematics** — coupling between wheel velocities and robot motion
+- **Motor torque curve** — `LinearDcMotor.torque(power, omega)` = `T_stall * (power * V/V_ref - omega/omega_free)`
+- **Viscous drag** — linear (0.1 * v * mass) and rotational (0.05 * omega * I)
+- **13.7:1 gearbox** — wheel velocity to bare motor velocity conversion
 
-A Kalman filter would be the standard choice for linear state estimation, but:
-
-1. The measurement equation is **bilinear** in the unknowns (`V_batt * R` term),
-   making it nonlinear.
-2. We want to enforce **hard constraints**: `V_batt in [10, 14] V` and
-   `R in [0.05, 0.5] ohms`. The Kalman filter has no mechanism for this and can
-   produce physically impossible estimates.
-3. MHE naturally handles both issues through its optimization-based formulation.
-
-### General MHE Formulation
-
-MHE maintains a sliding window of the last `N` measurements and solves for the
-state trajectory that best explains the data, subject to constraints.
-
-At each timestep, it minimizes:
+### Simulation Flow
 
 ```
-J = sum_k ||V_hub[k] - h(V_batt[k], R)||^2           (measurement fit)
-  + w_smooth * sum_k ||V_batt[k+1] - V_batt[k]||^2   (process model: V_batt changes slowly)
-  + w_arrival * ||V_batt[0] - V_batt_prior||^2        (arrival cost: anchor to previous window)
+1. Build MecanumState from current IO readings (position + velocity)
+2. Integrate forward 0.2s with RK4 (dt=5ms, 40 steps)
+3. Extract predicted robot velocity at t=0.2s
+4. Rotate to robot frame, compute wheel velocities via inverse kinematics
+5. Convert to bare motor velocities (* gear ratio)
+6. Compute per-motor current using the DC motor model
+7. Sum to get total predicted drive current
 ```
 
-subject to:
-```
-V_batt[k] in [10.0, 14.0]  for all k
-R in [0.05, 0.5]
-```
+### Current Limiting
 
-The **arrival cost** summarizes all information from before the current window,
-preventing the estimator from "forgetting" its history as old measurements
-slide out.
+`requestDrivetrainPower(FL, BL, BR, FR)`:
 
-## 5. Alternating Minimization
+1. Computes the available current budget: `MAX_CURRENT - (flywheel + intake current)`
+2. Predicts drive current at full requested power using the simulation
+3. If under budget, applies powers directly (returns scale = 1.0)
+4. If over budget, binary searches for the largest uniform scale factor on all 4
+   drive powers that keeps predicted drive current within budget (10 iterations,
+   ~0.1% precision)
+5. Applies scaled powers and returns the scale factor
 
-The bilinear term `V_batt[k] * R` in the measurement equation prevents a direct
-least-squares solution. We use **alternating minimization**: fix one set of
-variables, solve for the other, and iterate.
+### Integration with Drivetrain
 
-### Step 1: Fix R, Solve for V_batt
-
-With `R` fixed, the measurement equation becomes linear in `V_batt[k]`:
-
-```
-V_hub[k] = V_batt[k] * (1 - A[k]*R) - B[k]*R
-```
-
-Each sample has a closed-form solution:
-
-```
-V_batt[k] = (V_hub[k] + B[k]*R) / (1 - A[k]*R)
-```
-
-These raw estimates are then smoothed across the window using a weighted average
-with neighboring samples and the arrival cost, enforcing the process model
-assumption that battery voltage changes slowly.
-
-### Step 2: Fix V_batt, Solve for R
-
-With `V_batt[k]` fixed, the measurement equation is linear in `R`:
-
-```
-V_batt[k] - V_hub[k] = (A[k]*V_batt[k] + B[k]) * R = I_total[k] * R
-```
-
-This is a single-variable least-squares problem:
-
-```
-R = sum(I_total[k] * (V_batt[k] - V_hub[k])) / sum(I_total[k]^2)
-```
-
-The result is clamped to `[0.05, 0.5]` ohms.
-
-### Convergence
-
-The overall problem is **biconvex**: convex in `V_batt` with `R` fixed, and convex
-in `R` with `V_batt` fixed. Alternating minimization on biconvex problems is
-guaranteed to monotonically decrease the cost function and converge to a
-coordinate-wise minimum. In practice, 3 iterations are sufficient since the
-coupling between `V_batt` and `R` is weak (R changes very slowly).
-
-## 6. Implementation Details
-
-### Ring Buffer
-
-The sliding window uses pre-allocated `DoubleArray` ring buffers for `V_hub`,
-`A`, and `B` values. No heap allocation occurs in the update loop.
-
-### Bootstrapping
-
-Before the window is full (fewer than `horizonLength` samples):
-- The estimator works with whatever samples are available
-- Initial estimates: `V_batt = 13.0 V`, `R = 0.15 ohms`
-- The arrival cost prior starts at 13.0V (a fresh battery)
-- After 3-5 samples the estimates converge to reasonable values
+`Drivetrain.computeAndSetPower()` routes through `requestDrivetrainPower()` when
+a `BatteryBudget` is available (real hardware only, null in simulation). It tracks
+a running average of scale factors (only when non-zero power is applied) exposed
+as `averageScaleFactor` for telemetry.
 
 ### Tuning Parameters
 
-| Parameter | Default | Purpose |
-|-----------|---------|---------|
-| `horizonLength` | 20 | Window size (~400ms at 50Hz) |
-| `smoothWeight` | 5.0 | Penalizes V_batt changes between consecutive samples |
-| `arrivalWeight` | 2.0 | Anchors window start to previous estimate |
-| `alternatingIterations` | 3 | Number of solve passes per update |
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| `MAX_CURRENT` | 18.0 A | Total circuit current limit |
+| `PREDICT_HORIZON` | 0.2 s | How far ahead to simulate |
+| `PREDICT_DT` | 0.005 s | RK4 integration timestep |
 
 ### Computational Cost
 
-Per update cycle:
-- Coefficient computation: 16 additions + 2 multiplications
-- Alternating minimization (3 iterations x 20 samples): ~420 FLOPs total
-- Well under 1 microsecond on any ARM processor
+Per `requestDrivetrainPower` call (worst case, binary search):
+- 11 dynamics simulations (1 full check + 10 binary search iterations)
+- Each simulation: 40 RK4 steps with 4x4 matrix multiplies
+- Total: ~50,000 FLOPs, well under 1ms on ARM
 
-### Observability
+### Behavior at Extremes
 
-The estimator requires current flow to distinguish `V_batt` from `R`. When all
-motors are idle (`A = 0`, `I_total = 0`), the measurement becomes `V_hub = V_batt`
-and `R` is unobservable. The estimator handles this gracefully by keeping the
-previous `R` estimate and setting `V_batt = V_hub`.
+- **From standstill, full power**: Stall current per drive motor is ~9.2A (36.8A
+  total for 4 motors). The simulation predicts the robot will be moving at 0.2s,
+  reducing current. Typical scale factor: 0.5-0.7 depending on other motor loads.
+- **At cruising speed**: Back-EMF reduces current significantly. Full power
+  typically passes through unscaled (scale = 1.0).
+- **Other motors saturating budget**: If flywheel + intake draw is already near
+  MAX_CURRENT, drive powers are scaled to near zero.

@@ -1,7 +1,13 @@
 package sigmacorns.subsystem
 
+import org.joml.*
 import sigmacorns.constants.bareMotorTopSpeed
+import sigmacorns.constants.driveGearRatio
+import sigmacorns.constants.drivetrainParameters
 import sigmacorns.io.HardwareIO
+import sigmacorns.math.Pose2d
+import sigmacorns.sim.MecanumDynamics
+import sigmacorns.sim.MecanumState
 import kotlin.math.abs
 import kotlin.math.exp
 
@@ -21,6 +27,8 @@ import kotlin.math.exp
  * See doc/battery-mhe-theory.md for full derivation.
  */
 class BatteryBudget(val io: HardwareIO) {
+
+    private val dynamics = MecanumDynamics(drivetrainParameters)
 
     /** Maximum configurable allowable current draw in amps. */
     val MAX_CURRENT: Double = 18.0
@@ -174,86 +182,109 @@ class BatteryBudget(val io: HardwareIO) {
     }
 
     /**
-     * Request motor powers with current-limited protection.
+     * Request drivetrain motor powers with current-limited protection.
      *
-     * Predicts the total current after applying the requested powers. If the
-     * predicted current is under [MAX_CURRENT], the powers are applied as-is.
-     * Otherwise, only the *requested* motors are scaled down uniformly until
-     * the total current fits within the budget. Motors not included in the
-     * request keep their current IO values and are not scaled.
+     * Uses the full mecanum dynamics model to simulate the robot forward 0.2s
+     * under the requested powers, accounting for robot mass, wheel kinematics,
+     * viscous drag, and motor back-EMF. Computes predicted current draw at the
+     * end of the simulation window.
      *
-     * Any motor left as `null` is unchanged and excluded from scaling.
+     * If predicted total current (drive + other motors) is under [MAX_CURRENT],
+     * powers are applied as-is. Otherwise, drive powers are scaled down uniformly.
      *
+     * @param driveFLPower front-left wheel power [-1, 1]
+     * @param driveBLPower back-left wheel power [-1, 1]
+     * @param driveBRPower back-right wheel power [-1, 1]
+     * @param driveFRPower front-right wheel power [-1, 1]
      * @return the scale factor applied (1.0 = no scaling, <1.0 = throttled)
      */
-    fun requestPower(
-        driveFLPower: Double? = null,
-        driveFRPower: Double? = null,
-        driveBLPower: Double? = null,
-        driveBRPower: Double? = null,
-        flywheelPower: Double? = null,
-        intakePower: Double? = null,
+    fun requestDrivetrainPower(
+        driveFLPower: Double,
+        driveBLPower: Double,
+        driveBRPower: Double,
+        driveFRPower: Double,
     ): Double {
-        // Start with full requested powers
-        var scale = 1.0
+        val nonDriveCurrent = flywheel1Current + flywheel2Current + intake1Current + intake2Current
+        val currentBudget = MAX_CURRENT - nonDriveCurrent
 
-        // Binary search for the largest scale factor that keeps total current under MAX_CURRENT
-        var lo = 0.0
-        var hi = 1.0
+        if (currentBudget <= 0.0) {
+            io.driveFL = 0.0
+            io.driveBL = 0.0
+            io.driveBR = 0.0
+            io.driveFR = 0.0
+            return 0.0
+        }
 
-        // First check: does full power fit?
-        val fullPrediction = predictState(
-            driveFLPower = driveFLPower,
-            driveFRPower = driveFRPower,
-            driveBLPower = driveBLPower,
-            driveBRPower = driveBRPower,
-            flywheelPower = flywheelPower,
-            intakePower = intakePower,
-        )
-
-        if (fullPrediction.totalCurrent <= MAX_CURRENT) {
-            // No scaling needed — apply as requested
-            if (driveFLPower != null) io.driveFL = driveFLPower
-            if (driveFRPower != null) io.driveFR = driveFRPower
-            if (driveBLPower != null) io.driveBL = driveBLPower
-            if (driveBRPower != null) io.driveBR = driveBRPower
-            if (flywheelPower != null) io.flywheel = flywheelPower
-            if (intakePower != null) io.intake = intakePower
+        val fullCurrent = predictDrivetrainCurrent(driveFLPower, driveBLPower, driveBRPower, driveFRPower)
+        if (fullCurrent <= currentBudget) {
+            io.driveFL = driveFLPower
+            io.driveBL = driveBLPower
+            io.driveBR = driveBRPower
+            io.driveFR = driveFRPower
             return 1.0
         }
 
         // Binary search for scale factor (10 iterations -> ~0.1% precision)
+        var lo = 0.0
+        var hi = 1.0
         repeat(10) {
             val mid = (lo + hi) / 2.0
-            val prediction = predictState(
-                driveFLPower = driveFLPower?.let { it * mid },
-                driveFRPower = driveFRPower?.let { it * mid },
-                driveBLPower = driveBLPower?.let { it * mid },
-                driveBRPower = driveBRPower?.let { it * mid },
-                flywheelPower = flywheelPower?.let { it * mid },
-                intakePower = intakePower?.let { it * mid },
+            val current = predictDrivetrainCurrent(
+                driveFLPower * mid, driveBLPower * mid,
+                driveBRPower * mid, driveFRPower * mid,
             )
-            if (prediction.totalCurrent <= MAX_CURRENT) {
-                lo = mid
-            } else {
-                hi = mid
-            }
+            if (current <= currentBudget) lo = mid else hi = mid
         }
-        scale = lo
 
-        // Apply scaled powers
-        if (driveFLPower != null) io.driveFL = driveFLPower * scale
-        if (driveFRPower != null) io.driveFR = driveFRPower * scale
-        if (driveBLPower != null) io.driveBL = driveBLPower * scale
-        if (driveBRPower != null) io.driveBR = driveBRPower * scale
-        if (flywheelPower != null) io.flywheel = flywheelPower * scale
-        if (intakePower != null) io.intake = intakePower * scale
-        return scale
+        io.driveFL = driveFLPower * lo
+        io.driveBL = driveBLPower * lo
+        io.driveBR = driveBRPower * lo
+        io.driveFR = driveFRPower * lo
+        return lo
+    }
+
+    /**
+     * Simulate the drivetrain forward [PREDICT_HORIZON]s and compute the total
+     * drive motor current draw at the end of the window.
+     */
+    private fun predictDrivetrainCurrent(
+        pFL: Double, pBL: Double, pBR: Double, pFR: Double,
+    ): Double {
+        val currentState = MecanumState(
+            vel = io.velocity(),
+            pos = io.position(),
+        )
+
+        val powers = doubleArrayOf(pFL, pBL, pBR, pFR)
+        val predicted = dynamics.integrate(PREDICT_HORIZON, PREDICT_DT, powers, currentState)
+
+        // Rotate predicted field velocity into robot frame to get wheel velocities
+        val robotVel = Pose2d(predicted.vel.v.x, predicted.vel.v.y, predicted.vel.rot)
+        robotVel.v = Matrix2d().rotate(-predicted.pos.rot) * robotVel.v
+        val wheelVels = dynamics.mecanumInverseVelKinematics(robotVel)
+
+        // Convert geared wheel velocities to bare motor velocities
+        val bareFL = wheelVels.x * driveGearRatio
+        val bareBL = wheelVels.y * driveGearRatio
+        val bareBR = wheelVels.z * driveGearRatio
+        val bareFR = wheelVels.w * driveGearRatio
+
+        val vHub = hubVoltage
+        return motorCurrent(pFL, pFL * vHub, bareFL) +
+            motorCurrent(pBL, pBL * vHub, bareBL) +
+            motorCurrent(pBR, pBR * vHub, bareBR) +
+            motorCurrent(pFR, pFR * vHub, bareFR)
     }
 
     companion object {
         /** Default prediction horizon: one loop at 50Hz. */
         const val DEFAULT_PREDICT_DT = 0.02
+
+        /** Drivetrain simulation horizon in seconds. */
+        const val PREDICT_HORIZON = 0.2
+
+        /** Drivetrain simulation timestep in seconds. */
+        const val PREDICT_DT = 0.005
 
         /** RS-555 bare motor stall current at 12V. */
         const val STALL_CURRENT = 9.2

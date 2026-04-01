@@ -42,6 +42,10 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
     val turret = Turret(io)
     val batteryBudget: BatteryBudget? = (io as? HardwareIO)?.let { BatteryBudget(it) }
 
+    init {
+        drive.batteryBudget = batteryBudget
+    }
+
     // Logic
     val aim = AimingSystem(this, blue, shotDataPath)
     val intakeCoordinator = IntakeCoordinator(this)
