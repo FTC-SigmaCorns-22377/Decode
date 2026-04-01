@@ -75,22 +75,25 @@ class Drivetrain {
             wheelPowers.z != 0.0 || wheelPowers.w != 0.0
 
         val budget = batteryBudget
-        if (budget != null && hasNonZeroPower) {
-            val scale = budget.requestDrivetrainPower(
+        val scale = if (budget != null && hasNonZeroPower) {
+            budget.requestDrivetrainPower(
                 driveFLPower = wheelPowers.x,
                 driveBLPower = wheelPowers.y,
                 driveBRPower = wheelPowers.z,
                 driveFRPower = wheelPowers.w,
-            )
-            scaleFactorSum += scale
-            scaleFactorCount++
+            ).also {
+                scaleFactorSum += it
+                scaleFactorCount++
+            }
         } else {
             io.driveFL = wheelPowers[0]
             io.driveBL = wheelPowers[1]
             io.driveBR = wheelPowers[2]
             io.driveFR = wheelPowers[3]
+            1.0
         }
 
+        wheelPowers *= scale
         return doubleArrayOf(wheelPowers[0], wheelPowers[1], wheelPowers[2], wheelPowers[3])
     }
 

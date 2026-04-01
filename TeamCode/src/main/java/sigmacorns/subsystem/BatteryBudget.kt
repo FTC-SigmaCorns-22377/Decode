@@ -81,7 +81,7 @@ class BatteryBudget(val io: HardwareIO) {
     fun update() {
         hubVoltage = io.voltage()
 
-        // Motor voltages using estimated true battery voltage
+        // Motor voltages: power * hub voltage (hub applies duty cycle to its supply)
         driveFLVolts = io.driveFL * hubVoltage
         driveFRVolts = io.driveFR * hubVoltage
         driveBLVolts = io.driveBL * hubVoltage
@@ -91,7 +91,7 @@ class BatteryBudget(val io: HardwareIO) {
         intake1Volts = io.intake * hubVoltage
         intake2Volts = io.intake * hubVoltage
 
-        // Motor currents using corrected voltages
+        // Motor currents from hub voltage and motor velocities
         driveFLCurrent = motorCurrent(io.driveFL, driveFLVolts, io.cachedDriveFLVelocity)
         driveFRCurrent = motorCurrent(io.driveFR, driveFRVolts, io.cachedDriveFRVelocity)
         driveBLCurrent = motorCurrent(io.driveBL, driveBLVolts, io.cachedDriveBLVelocity)
@@ -203,6 +203,10 @@ class BatteryBudget(val io: HardwareIO) {
         driveBRPower: Double,
         driveFRPower: Double,
     ): Double {
+        // Ensure hub voltage and non-drive currents are fresh, since this may be
+        // called before Robot.update() runs batteryBudget.update().
+        update()
+
         val nonDriveCurrent = flywheel1Current + flywheel2Current + intake1Current + intake2Current
         val currentBudget = MAX_CURRENT - nonDriveCurrent
 
