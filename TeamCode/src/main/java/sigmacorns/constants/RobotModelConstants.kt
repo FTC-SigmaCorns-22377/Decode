@@ -1,6 +1,7 @@
 package sigmacorns.constants
 
 import org.joml.Vector2d
+import org.joml.Vector3d
 import sigmacorns.control.MotorRangeMapper
 import sigmacorns.opmode.tune.FlywheelDeadbeatConfig
 import sigmacorns.sim.MecanumParameters
@@ -74,3 +75,9 @@ val turretRange = MotorRangeMapper(
     limitsTick = -PI*turretTicksPerRad..PI*turretTicksPerRad,
     slowdownDist = 0.3           // slow down within 0.3 rad of limits
 )
+
+val turretPos = Vector3d(
+    0.305, 0.0, 0.3289
+)
+
+val ballExitRadius = 0.0785
