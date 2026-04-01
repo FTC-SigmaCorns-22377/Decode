@@ -22,11 +22,12 @@ import kotlin.time.DurationUnit
  * Uses the "test12ball" trajectory with:
  * - Intake waypoints marking where to run the intake
  * - Event markers at ~2.9s, ~5.9s, ~8.6s marking when to shoot all 3 held balls
- * - Flywheel spins up on the return path before each shoot event
+ * - Flywheel spins up on the return path before each shoot event using a fixed
+ *   flywheelTarget (FLYWHEEL_TARGET) with aimFlywheel disabled
  *
- * Shooting uses the same mechanism as teleop: spin up flywheel via aimFlywheel,
- * then set IntakeTransfer to TRANSFERRING to disengage the blocker and feed
- * balls into the flywheel.
+ * Shooting follows the same general sequence as teleop: first spin up the
+ * flywheel to the target velocity, then set IntakeTransfer to TRANSFERRING to
+ * disengage the blocker and feed balls into the flywheel.
  */
 @Autonomous(name = "Auto 12 Ball", group = "Competition")
 class Auto12Ball : SigmaOpMode() {
