@@ -68,7 +68,7 @@ class SimVizServer(
                 "x" to robotState[0],
                 "y" to robotState[1],
                 "theta" to robotState[2],
-                "turretAngle" to simIO.turretPosition() / sigmacorns.constants.turretTicksPerRad,
+                "turretAngle" to simIO.turretPosition(),
                 "intakeAngle" to simIO.intakeAngle(),
                 "intakeRollerRPM" to simIO.intakeRollerVelocity() * 60.0 / (2.0 * Math.PI),
                 "hoodAngle" to simIO.hoodPosition(),

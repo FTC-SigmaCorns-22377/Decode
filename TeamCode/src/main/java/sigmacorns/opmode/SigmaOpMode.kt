@@ -23,7 +23,7 @@ abstract class SigmaOpMode(
 ): LinearOpMode() {
 
     val io: SigmaIO by lazy {
-        providedIO ?: hardwareMap?.let { HardwareIO(it) } ?: SimIO()
+        providedIO ?: simIO ?: hardwareMap?.let { HardwareIO(it) } ?: SimIO()
     }
 
     private val internalState = OpModeReflection(this)
@@ -105,5 +105,7 @@ abstract class SigmaOpMode(
 
         var SIM: Boolean = false
         var LIMELIGHT_CONNECTED: Boolean = true
+        /** Override IO for testing. When set, all SigmaOpMode instances use this instead of SimIO. */
+        var simIO: SigmaIO? = null
     }
 }

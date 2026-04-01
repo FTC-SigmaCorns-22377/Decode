@@ -29,7 +29,7 @@ class IntakeCoordinator(val robot: Robot) {
     fun update() {
         robot.intakeTransfer.isFull = robot.beamBreak.isFull
 
-        if (robot.beamBreak.isFull) {
+        if (robot.beamBreak.isFull && robot.intakeTransfer.state == IntakeTransfer.State.INTAKING) {
             robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         }
 
