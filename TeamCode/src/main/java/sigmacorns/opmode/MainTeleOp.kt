@@ -181,8 +181,7 @@ class MainTeleOp : SigmaOpMode() {
 
             telemetry.addLine("=== BALL STATUS ===")
             telemetry.addData("Balls Held", robot.beamBreak.ballCount)
-            telemetry.addData("Slots", robot.beamBreak.slots.map { if (it == true) "BALL" else "---" })
-            telemetry.addData("Beam 1|2|3", "${io.beamBreak1()}|${io.beamBreak2()}|${io.beamBreak3()}")
+            telemetry.addData("Beam 1|2|3", robot.beamBreak.slots.map { if (it == true) "O" else "-" })
 
             telemetry.addLine("")
             telemetry.addLine("=== POSITION ===")
