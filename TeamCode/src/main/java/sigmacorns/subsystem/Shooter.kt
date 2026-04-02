@@ -113,7 +113,7 @@ class Shooter(
         if (hubVoltage <= 0.0) return 0.0
 
         val q = 1.0 // q
-        val r = 240.0 // r
+        val r = 120.0 // r
 
         val inertia = FLYWHEEL_INERTIA
         val referenceVoltage = 12.0
