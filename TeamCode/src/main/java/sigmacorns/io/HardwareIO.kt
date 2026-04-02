@@ -17,6 +17,7 @@ import org.joml.Vector2d
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.TurretServoConfig
 import sigmacorns.math.toPose2d
+import sigmacorns.subsystem.IntakeTransfer
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -81,7 +82,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var turretLeft: Double = 0.5
     override var turretRight: Double = 0.5
     override var hood: Double = 0.5
-    override var blocker: Double = 0.0
+    override var blocker: Double = IntakeTransfer.BLOCKER_DISENGAGED
 
     private var savedVoltage: Double = 12.0
 
