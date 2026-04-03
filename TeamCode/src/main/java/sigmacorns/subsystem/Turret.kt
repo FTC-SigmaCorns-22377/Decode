@@ -24,9 +24,6 @@ class Turret(val io: SigmaIO) {
     /** Turret angle limits in radians. */
     val angleLimits: ClosedRange<Double> = TurretServoConfig.minAngle..TurretServoConfig.maxAngle
 
-    // distance(m) from target
-    var targetDistance: Double = 0.0
-
     // angle(rad) in robot-relative frame (Yaw) - used when fieldRelativeMode is false
     var targetAngle: Double = 0.0
 
@@ -51,9 +48,6 @@ class Turret(val io: SigmaIO) {
     /** The raw robot-relative target before limiting (for goal tracking) */
     var goalTargetAngle: Double = 0.0
         private set
-    /** The target angle lookahead offset based on shoot while move dynamics */
-    var targetAngleOffset: Double = 0.0
-
     /** The actual servo position being commanded (for telemetry) */
     var currentServoPosition: Double = 0.5
         private set
@@ -79,7 +73,7 @@ class Turret(val io: SigmaIO) {
                 fieldTargetAngle - robotHeading
             } else {
                 targetAngle
-            } + targetAngleOffset
+            }
         )
 
         goalTargetAngle = rawTarget
@@ -142,10 +136,10 @@ object TurretServoConfig {
     @JvmField var servoTotalRange = 355.0 * PI / 180.0
 
     /** Minimum turret angle in radians */
-    @JvmField var minAngle = -PI
+    @JvmField var minAngle = -PI/2.0
 
     /** Maximum turret angle in radians */
-    @JvmField var maxAngle = PI
+    @JvmField var maxAngle = PI/2.0
 
     /** Angle in radians that maps to servo position 0.5 */
     @JvmField var servoCenterAngle = 0.0

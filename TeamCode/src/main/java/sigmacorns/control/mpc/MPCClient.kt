@@ -1,7 +1,6 @@
 package sigmacorns.control.mpc
 
 import org.joml.Vector2d
-import sigmacorns.constants.drivetrainCenter
 import sigmacorns.control.SlewRateLimiter
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MECANUM_DT
@@ -521,11 +520,7 @@ class MPCClient(
 
     fun update(state: MecanumState, v: Number, time: Duration) {
         V = v.toDouble()
-        x0 = state.copy().also {
-
-            // go from odometry center to drivetrain center
-            it.pos.v.add(drivetrainCenter.rotate(it.pos.rot))
-        }
+        x0 = state.copy()
 
         println("sending state=$state")
         println("sending $x0")

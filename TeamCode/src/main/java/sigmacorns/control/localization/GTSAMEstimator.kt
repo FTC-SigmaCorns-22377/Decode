@@ -4,6 +4,8 @@ import org.joml.Vector2d
 import org.joml.Vector3d
 import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import org.firstinspires.ftc.robotcore.internal.system.AppUtil
+import org.joml.plus
+import sigmacorns.constants.turretPos
 import sigmacorns.control.aim.LogLevel
 import sigmacorns.control.aim.LogcatLogger
 import sigmacorns.control.aim.Logger
@@ -129,26 +131,20 @@ class GTSAMEstimator(
 
     // ===== Main Update Method =====
 
-    fun update(robotPose: Pose2d, turretAngle: Double, visionResult: VisionResult?) {
+    fun update(robotPose: Pose2d, velocity: Pose2d, turretAngle: Double, visionResult: VisionResult?) {
+        val p = turretPos.rotateZ(robotPose.rot) + Vector3d(robotPose.v,0.0)
+
         val currentTime = System.currentTimeMillis()
-        val dt = if (lastUpdateTimeMs > 0) (currentTime - lastUpdateTimeMs) / 1000.0 else 0.02
 
         if (!fusionWorker.isInitialized && !fusionWorker.hasPendingInit()) {
             logger.log(LogLevel.INFO, "Queueing GTSAM initialization")
             fusionWorker.requestInitialize(robotPose, landmarkPositions)
         }
 
-        // Log raw odometry
-        val velocity = if (lastRobotPose != null) {
-            val dPose = robotPose.minus(lastRobotPose!!)
-            Pose2d(dPose.v.div(dt), dPose.rot / dt)
-        } else {
-            Pose2d(0.0, 0.0, 0.0)
-        }
         debugLogger?.logRawOdometry(robotPose, velocity, currentTime / 1000.0)
 
         if (lastRobotPose != null) {
-            processOdometryDelta(robotPose)
+            processOdometryDelta(Pose2d(p.x,p.y,robotPose.rot))
         }
 
         updateVision(visionResult, turretAngle)

@@ -11,7 +11,6 @@ import sigmacorns.control.mpc.MPCRunner
 import sigmacorns.logic.AimingSystem
 import sigmacorns.logic.IntakeCoordinator
 import sigmacorns.subsystem.Drivetrain
-import sigmacorns.subsystem.Shooter
 import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
@@ -19,13 +18,14 @@ import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
 import sigmacorns.subsystem.BeamBreak
 import sigmacorns.subsystem.IntakeTransfer
+import sigmacorns.subsystem.Shooter
 import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoCloseable {
+class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     // Subsystems
     val shooter = Shooter(io)
     val drive = Drivetrain()
@@ -34,7 +34,7 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
     val turret = Turret(io)
 
     // Logic
-    val aim = AimingSystem(this, blue, shotDataPath)
+    val aim = AimingSystem(this, blue)
     val intakeCoordinator = IntakeCoordinator(this)
 
     val dispatcher = PollableDispatcher(io)

@@ -1,18 +1,23 @@
 package sigmacorns.logic
 
 import org.joml.Vector2d
+import org.joml.Vector3d
 import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
-import sigmacorns.constants.ShootWhileMoveConstants
-import sigmacorns.control.aim.TurretTargeting
-import sigmacorns.control.aim.tune.AdaptiveTuner
-import sigmacorns.control.aim.tune.ShotDataStore
+import sigmacorns.constants.ballExitRadius
+import sigmacorns.constants.flywheelMotor
+import sigmacorns.constants.flywheelRadius
+import sigmacorns.constants.turretPos
+import sigmacorns.control.aim.Ballistics
+import sigmacorns.control.aim.OmegaMap
+import sigmacorns.control.aim.ShotSolver
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
-import sigmacorns.subsystem.Shooter
-import kotlin.math.atan2
+import sigmacorns.subsystem.IntakeTransfer
+import sigmacorns.subsystem.ShooterConfig
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.time.Duration
 
@@ -21,28 +26,29 @@ import kotlin.time.Duration
  *
  * Owns the full aiming pipeline from vision input to turret/shooter output:
  * - Vision tracking and GTSAM sensor fusion
- * - Auto-aim turret targeting
- * - Feeding shooter (flywheel + hood) inputs from adaptive tuning data
- * - Shoot-while-move turret lead and flywheel compensation
+ * - Auto-aim turret targeting via ShotSolver (ballistic trajectory optimization)
+ * - Directly sets turret [fieldTargetAngle], shooter [hoodAngle], and [flywheelTarget]
+ *   from the solver's optimal [Ballistics.ShotState]
+ * - Robot motion compensation is inherent: robot velocity is passed to [Ballistics.Target]
  *
- * Opmodes can override turret targeting between [updateVision] and
- * [setTurretInputs] for manual control.
+ * Opmodes can disable turret targeting by setting robot.aimTurret = false,
+ * and disable flywheel/hood targeting via robot.aimFlywheel = false.
+ * Manual hood override uses shooter.autoAdjust = false + shooter.manualHoodAngle.
  */
 class AimingSystem(
     private val robot: Robot,
     private val blue: Boolean,
-    private val shotDataPath: String? = null
 ) {
     val turret get() = robot.turret
     lateinit var autoAim: GTSAMEstimator
         private set
     var visionTracker: VisionTracker? = null
         private set
-    lateinit var adaptiveTuner: AdaptiveTuner
-        private set
+
+    private lateinit var ballistics: Ballistics
+    private lateinit var shotSolver: ShotSolver
 
     var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
-    val targeting = TurretTargeting(goalPosition)
 
     var positionOverride: Double? = null
 
@@ -50,43 +56,20 @@ class AimingSystem(
     var targetDistance: Double = 3.0
         private set
 
-    var radialVelocity: Double = 0.0
-        private set
-
-    var turretLeadAngle: Double = 0.0
-        private set
-
-    /** Whether to apply shoot-while-move compensation. */
-    var shootWhileMoveEnabled = false
+    /**
+     * Set to true to arm a shot. AimingSystem will fire (TRANSFERRING) as soon as all
+     * actuators are within tolerance of the solver target. Cleared automatically after firing.
+     */
+    var shotRequested: Boolean = false
 
     /**
-     * Decompose the robot's field-relative velocity into radial and lateral
-     * components relative to the goal direction, and compute the turret lead
-     * angle to compensate for lateral motion.
+     * True when turret, hood, and flywheel are all within tolerance of the current solver target.
+     * Updated every loop; readable by opmodes for telemetry.
      */
-    fun updateVelocityComponents() {
-        val fusedPose = autoAim.fusedPose
-        val vel = robot.io.velocity()
+    var readyToShoot: Boolean = false
+        private set
 
-        val toGoal = Vector2d(
-            goalPosition.x - fusedPose.v.x,
-            goalPosition.y - fusedPose.v.y
-        )
-        val dist = toGoal.length()
-        if (dist < 0.01) {
-            radialVelocity = 0.0
-            turretLeadAngle = 0.0
-            return
-        }
-
-        val radialDir = Vector2d(toGoal).div(dist)
-        val lateralDir = Vector2d(-radialDir.y, radialDir.x)
-
-        radialVelocity = vel.v.dot(radialDir)
-        val lateralVelocity = vel.v.dot(lateralDir)
-
-        turretLeadAngle = atan2(-lateralVelocity, dist) * ShootWhileMoveConstants.turretLookAheadTime
-    }
+    private var lastShotState: Ballistics.ShotState? = null
 
     /**
      * Initialize all subsystems. Call once before the main loop.
@@ -103,10 +86,21 @@ class AimingSystem(
             allowedTagIds = FieldLandmarks.landmarkTagIds
         )
 
-        // Initialize adaptive tuner for flywheel velocity
-        val dataStore = if (shotDataPath != null) ShotDataStore(shotDataPath) else ShotDataStore()
-        dataStore.load()
-        adaptiveTuner = AdaptiveTuner(dataStore)
+        ballistics = Ballistics(
+            rH = ballExitRadius,
+            vMax = AimConfig.vMax,
+            phiMin = Math.toRadians(ShooterConfig.minAngleDeg),
+            phiMax = Math.toRadians(ShooterConfig.maxAngleDeg),
+        )
+
+
+        shotSolver = ShotSolver(
+            omega = AimConfig.omegaMap,
+            wOmega = ShotSolverConfig.wOmega,
+            wTheta = ShotSolverConfig.wTheta,
+            wPhi = ShotSolverConfig.wPhi,
+            ballistics = ballistics,
+        )
 
         autoAim.enabled = true
     }
@@ -117,87 +111,124 @@ class AimingSystem(
      */
     fun updateVision() {
         val visionResult = visionTracker?.read()
-        autoAim.update(robot.io.position(), robot.turret.pos, visionResult)
+        autoAim.update(robot.io.position(), robot.io.velocity(), robot.io.turretPosition(), visionResult)
 
         val fusedPose = autoAim.fusedPose
         targetDistance = hypot(goalPosition.x - fusedPose.v.x, goalPosition.y - fusedPose.v.y)
     }
 
     /**
-     * Apply auto-aim turret targeting: point turret toward the goal using fused pose.
-     * Sets the turret to field-relative mode and targets the goal direction.
-     */
-    fun applyAutoAimTarget() {
-        if (!autoAim.enabled) return
-        val angles = targeting.computeAngles(autoAim.fusedPose)
-        turret.fieldRelativeMode = true
-        turret.fieldTargetAngle = angles.fieldAngle
-        targetDistance = angles.distance
-    }
-
-    /**
-     * Set turret inputs from fused pose data.
+     * Set turret heading and angular velocity from fused pose.
      * Does NOT call turret.update() — that is done by Robot.update().
      */
     fun setTurretInputs(dt: Duration) {
         robot.turret.robotHeading = autoAim.fusedPose.rot
         robot.turret.robotAngularVelocity = robot.io.velocity().rot
-        robot.turret.targetDistance = targetDistance
+    }
+
+    /**
+     * Solve for the optimal shot and directly set turret, hood, and flywheel targets.
+     *
+     * Builds a [Ballistics.Target] from the current fused pose and robot velocity,
+     * then calls [ShotSolver.optimalAdjust] to find the flight time that minimizes
+     * actuator movement. Sets subsystem targets from the resulting [Ballistics.ShotState].
+     *
+     * Robot velocity enters via [Ballistics.Target.vR], providing inherent shoot-while-move
+     * compensation without a separate lead-angle calculation.
+     *
+     * @param aimTurret if true, overrides turret field target from solver output
+     */
+    fun setShooterInputs(aimTurret: Boolean) {
+        val shooter = robot.shooter
+        val fusedPose = autoAim.fusedPose
+        val vel = robot.io.velocity()
+
+        val target = Ballistics.Target(
+            target = FieldLandmarks.goalPosition3d(blue, AimConfig.goalHeight),
+            turret = Vector3d(fusedPose.v.x, fusedPose.v.y, turretPos.z),
+            vR = Vector2d(vel.v.x, vel.v.y),
+        )
+
+        val currentVexit = AimConfig.omegaInv(robot.io.flywheelVelocity(),robot.shooter.hoodAngle)
+        val currentState = Ballistics.ShotState(
+            theta = turret.pos + fusedPose.rot,
+            phi = shooter.computedHoodAngle,
+            vExit = currentVexit,
+        )
+
+        val curShotErr = ballistics.shotError(currentState,target)
+
+        if (shotRequested && curShotErr < AimConfig.shotTolerance) {
+            shotRequested = false
+            robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+        }
+
+        val shotState = try {
+            shotSolver.optimalAdjust(currentState, target, ShotSolverConfig.tolerance)
+        } catch (e: Exception) {
+            readyToShoot = false
+            return
+        }
+
+        lastShotState = shotState
+
+        if (aimTurret) {
+            turret.fieldRelativeMode = true
+            turret.fieldTargetAngle = shotState.theta
+        }
+
+        if (robot.aimFlywheel) {
+            shooter.hoodAngle = shotState.phi
+            shooter.flywheelTarget = AimConfig.omegaMap.omega(shotState.phi,shotState.vExit)
+        }
+    }
+
+    /**
+     * Convenience: full pipeline update (vision -> turret inputs -> solver targets).
+     * positionOverride is applied last and always wins over solver output.
+     */
+    fun update(dt: Duration, aimTurret: Boolean = true) {
+        updateVision()
+        setTurretInputs(dt)
+        setShooterInputs(aimTurret)
 
         positionOverride?.let {
-            if(robot.turret.fieldRelativeMode) robot.turret.targetAngle = it else robot.turret.fieldTargetAngle = it
+            if (turret.fieldRelativeMode) turret.fieldTargetAngle = it
+            else turret.targetAngle = it
         }
-    }
-
-    /**
-     * Feed shooter (flywheel + hood) inputs from adaptive tuning data and
-     * apply shoot-while-move compensation if enabled.
-     */
-    fun setShooterInputs() {
-        val shooter = robot.shooter
-
-        // Feed hood inputs from adaptive tuner
-        shooter.targetDistance = targetDistance
-        shooter.recommendedHoodAngleDeg = adaptiveTuner
-            .getRecommendedHoodAngle(targetDistance)
-
-        // Feed flywheel target from adaptive tuner
-        if (robot.aimFlywheel) {
-            shooter.flywheelTarget = getRecommendedFlywheelVelocity() ?: 0.0
-        }
-
-        // Shoot-while-move: turret lead + flywheel distance compensation
-        if (shootWhileMoveEnabled) {
-            robot.turret.targetAngleOffset = turretLeadAngle
-            shooter.flywheelTarget = Shooter.calculateTargetRPM(
-                targetDistance + radialVelocity * ShootWhileMoveConstants.flywheelLookAheadTime
-            )
-        } else {
-            robot.turret.targetAngleOffset = 0.0
-        }
-    }
-
-    /**
-     * Get recommended flywheel velocity in rad/s for current target distance.
-     * Returns null if adaptive tuner doesn't have enough calibration points.
-     */
-    fun getRecommendedFlywheelVelocity(): Double? {
-        return adaptiveTuner.getRecommendedSpeed(targetDistance)
-    }
-
-    /**
-     * Convenience: full pipeline update (vision -> auto-aim -> turret + shooter inputs).
-     * Use this when no manual turret override is needed.
-     */
-    fun update(dt: Duration, target: Boolean = true) {
-        updateVision()
-        updateVelocityComponents()
-        if(target) applyAutoAimTarget()
-        setTurretInputs(dt)
-        setShooterInputs()
     }
 
     fun close() {
         autoAim.close()
     }
+}
+
+object AimConfig {
+    @JvmField var goalHeight = 1.14
+
+    @JvmField var launchEfficiency = 0.7
+
+    val omegaMap = object : OmegaMap {
+        override fun omega(hood: Double, vExit: Double) =
+            vExit / (flywheelRadius * launchEfficiency)
+
+        override fun lipschitzBound(
+            hood: ClosedRange<Double>, vExit: ClosedRange<Double>,
+            lHood: Double, lvExit: Double
+        ) = lvExit / (flywheelRadius * launchEfficiency)
+    }
+
+    val omegaInv = { omega: Double, hood: Double -> omega*flywheelRadius*launchEfficiency }
+
+    @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
+
+    // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
+    @JvmField var shotTolerance = 0.05 // m
+}
+
+object ShotSolverConfig {
+    @JvmField var wOmega = 0.01   // s per rad/s flywheel change
+    @JvmField var wTheta = 0.1    // s per rad turret change
+    @JvmField var wPhi = 0.1      // s per rad hood change
+    @JvmField var tolerance = 0.01
 }

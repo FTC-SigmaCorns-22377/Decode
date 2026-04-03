@@ -53,6 +53,22 @@ class Ballistics(
         return atan2(c, b)
     }
 
+    fun shotError(shot: ShotState, target: Target): Double {
+        // -1/2 * g * T^2 + T * v_exit * sin(phi) - Delta_z = 0
+        val a = -0.5 * g
+        val b = shot.vExit * sin(shot.phi)
+        val c = -target.dz + rH*cos(shot.phi)
+
+        if (b*b < 4.0*a*c) return Double.POSITIVE_INFINITY
+
+        // find travel time so the
+        val T = (-b + sqrt(b*b - 4.0*a*c))/(2.0*a)
+        val xf = target.turret.x + rH*(1.0 - sin(shot.phi))*cos(shot.theta) + T*(shot.vExit*cos(shot.phi)*cos(shot.theta) + target.vR.x)
+        val yf = target.turret.y + rH*(1.0 - sin(shot.phi))*sin(shot.theta) + T*(shot.vExit*cos(shot.phi)*sin(shot.theta) + target.vR.y)
+
+        return hypot(xf-target.target.x, yf-target.target.y)
+    }
+
     /**
      * Compute full aim solution for a given flight time T.
      */

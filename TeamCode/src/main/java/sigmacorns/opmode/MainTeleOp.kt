@@ -31,7 +31,7 @@ import kotlin.math.abs
  *   D-pad right          - Increase flywheel target speed (+25 rad/s)
  */
 @TeleOp(name = "Main TeleOp", group = "Competition")
-class MainTeleOp : SigmaOpMode() {
+class   MainTeleOp : SigmaOpMode() {
 
     override fun runOpMode() {
         val robot = Robot(io, blue = false)
@@ -45,7 +45,6 @@ class MainTeleOp : SigmaOpMode() {
 
         // Toggle debounce flags (GP2)
         var lastA2 = false
-        var lastX2 = false
         var lastY2 = false
         var lastDpadUp2 = false
         var lastDpadLeft2 = false
@@ -101,12 +100,6 @@ class MainTeleOp : SigmaOpMode() {
                 autoAimEnabled = !autoAimEnabled
             }
             lastA2 = gamepad2.a
-
-            // --- Toggle: Shoot-while-move (X button) ---
-            if (gamepad2.x && !lastX2) {
-                robot.aim.shootWhileMoveEnabled = !robot.aim.shootWhileMoveEnabled
-            }
-            lastX2 = gamepad2.x
 
             // --- Toggle: Auto-shoot zones (Y button) ---
             if (gamepad2.y && !lastY2) {
@@ -202,7 +195,7 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addData("Flywheel Vel", "%.1f rad/s", flywheelVel)
             telemetry.addData("Flywheel Target", "%.1f rad/s (GP2 D-pad L/R)", robot.shooter.flywheelTarget)
             telemetry.addData("Hood Angle", "%.1f°", Math.toDegrees(robot.shooter.computedHoodAngle))
-            telemetry.addData("Hood", "${if (robot.shooter.autoAdjust) "AUTO" else "MANUAL"} ${if (robot.shooter.usingInterpolatedData) "(data)" else "(trig)"}")
+            telemetry.addData("Hood", if (robot.shooter.autoAdjust) "AUTO" else "MANUAL")
             telemetry.addData("Hood Servo", "%.3f", robot.shooter.hoodServoPosition)
 
             telemetry.addLine("")
@@ -211,7 +204,6 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addData("Turret Target", "%.1f°", Math.toDegrees(robot.turret.effectiveTargetAngle))
             telemetry.addData("Turret Servo", "%.3f", robot.turret.currentServoPosition)
             telemetry.addData("Field-Relative", robot.turret.fieldRelativeMode)
-            telemetry.addData("Shoot-While-Move", if (robot.aim.shootWhileMoveEnabled) "ON" else "OFF")
 
             telemetry.addLine("")
             telemetry.addLine("=== SUBSYSTEMS ===")
