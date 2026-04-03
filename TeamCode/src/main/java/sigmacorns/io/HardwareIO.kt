@@ -234,6 +234,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
+        // our encoders are plugged into drive motor ports so we only have to bulk read from the chub
         cachedFlywheelVelocity = (driveBRMotor?.velocity ?: 0.0) / 28.0 * 2 * PI
         cachedIntake1RPM = (driveFRMotor?.velocity ?: 0.0) / 145.1 * 60
         allHubs.map { it.clearBulkCache() }
