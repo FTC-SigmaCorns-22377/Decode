@@ -326,11 +326,12 @@ class JoltVisualizerTest {
             // Drivetrain (sticks + dpad speed mode handled by DriveController)
             robot.drive.update(gamepad, sim)
 
-            // Intake - left trigger (matching TeleopBase)
-            sim.intake = gamepad.left_trigger.toDouble()
-
-            // Force intake - B button
-            if (gamepad.b) sim.intake = 1.0
+            // Intake - left trigger or B button
+            if (gamepad.left_trigger > 0.1 || gamepad.b) {
+                robot.intakeTransfer.state = sigmacorns.subsystem.IntakeTransfer.State.INTAKING
+            } else if (robot.intakeTransfer.state == sigmacorns.subsystem.IntakeTransfer.State.INTAKING) {
+                robot.intakeTransfer.state = sigmacorns.subsystem.IntakeTransfer.State.IDLE
+            }
 
             // Shoot - right trigger with edge detection (matching TeleopBase)
             val isShooting = gamepad.right_trigger > 0.5
@@ -348,7 +349,8 @@ class JoltVisualizerTest {
             if (gamepad.a) {
                 sim.driveFL = 0.0; sim.driveBL = 0.0
                 sim.driveFR = 0.0; sim.driveBR = 0.0
-                sim.intake = 0.0; sim.flywheel = 0.0
+                robot.intakeTransfer.state = sigmacorns.subsystem.IntakeTransfer.State.IDLE
+                sim.flywheel = 0.0
                 robot.aimFlywheel = false
                 manualFlywheelPower = 0.0
             }
@@ -394,7 +396,7 @@ class JoltVisualizerTest {
 
             // Keyboard intake + flywheel combo - R (toggle)
             if (kb.r) {
-                sim.intake = 1.0
+                robot.intakeTransfer.state = sigmacorns.subsystem.IntakeTransfer.State.INTAKING
                 robot.aimFlywheel = true
             }
 
@@ -475,10 +477,10 @@ class JoltVisualizerTest {
 
             // Intake + flywheel combo - R (toggle)
             if (kb.r) {
-                sim.intake = 1.0
+                robot.intakeTransfer.state = sigmacorns.subsystem.IntakeTransfer.State.INTAKING
                 robot.aimFlywheel = true
-            } else {
-                sim.intake = 0.0
+            } else if (robot.intakeTransfer.state == sigmacorns.subsystem.IntakeTransfer.State.INTAKING) {
+                robot.intakeTransfer.state = sigmacorns.subsystem.IntakeTransfer.State.IDLE
             }
 
             // Shoot - F

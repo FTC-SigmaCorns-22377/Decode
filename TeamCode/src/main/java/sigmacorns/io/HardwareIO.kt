@@ -17,6 +17,9 @@ import org.joml.Vector2d
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.TurretServoConfig
 import sigmacorns.math.toPose2d
+import sigmacorns.subsystem.IntakeTransfer
+import sigmacorns.subsystem.Shooter
+import sigmacorns.subsystem.ShooterConfig
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -30,10 +33,10 @@ typealias FTCPose2d = org.firstinspires.ftc.robotcore.external.navigation.Pose2D
 // import odometry from some library
 class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //drive motor declarations
-    private val driveFLMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveFL")
-    private val driveBLMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveBL")
-    private val driveFRMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveFR")
-    private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
+    private val driveFLMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java,"driveFL")
+    private val driveBLMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java, "driveBL")
+    private val driveFRMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java, "driveFR")
+    private val driveBRMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java,"driveBR")
 
     //shooter
     private val flywheel1: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter1")
@@ -41,7 +44,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //intake
     private val intake1Motor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"intake1")
     //intake
-    private val intake2Motor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intake2")
+    private val intake2Motor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"intake2")
 
     // turret servos (dual-servo geared turret)
     private val turretLeftServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretLeft")
@@ -80,8 +83,8 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var turret: Double = 0.0
     override var turretLeft: Double = 0.5
     override var turretRight: Double = 0.5
-    override var hood: Double = 0.5
-    override var blocker: Double = 0.0
+    override var hood: Double = ShooterConfig.minServo
+    override var blocker: Double = IntakeTransfer.BLOCKER_DISENGAGED
 
     private var savedVoltage: Double = 12.0
 
@@ -231,8 +234,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
-        cachedFlywheelVelocity = (flywheel1?.velocity ?: 0.0) / 28.0 * 2 * PI
-        cachedIntake1RPM = (intake1Motor?.velocity ?: 0.0) / 145.1 * 60
+        // our encoders are plugged into drive motor ports so we only have to bulk read from the chub
+        cachedFlywheelVelocity = (driveBRMotor?.velocity ?: 0.0) / 28.0 * 2 * PI
+        cachedIntake1RPM = (driveFRMotor?.velocity ?: 0.0) / 145.1 * 60
         allHubs.map { it.clearBulkCache() }
     }
 
