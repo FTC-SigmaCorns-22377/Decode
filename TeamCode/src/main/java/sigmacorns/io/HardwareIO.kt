@@ -86,8 +86,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     private var savedVoltage: Double = 12.0
 
-    var turretOffset = 0.0
-
     // Cached motor values
     private var cachedFlywheelVelocity: Double = 0.0
     private var cachedIntake1RPM: Double = 0.0
@@ -155,11 +153,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun turretPosition(): Double {
-        return cachedTurretPosition + turretOffset
-    }
-
-    override fun setTurretPosition(Offset: Double) {
-        turretOffset = Offset //change
+        return cachedTurretPosition
     }
 
     var posOffset = Pose2d()

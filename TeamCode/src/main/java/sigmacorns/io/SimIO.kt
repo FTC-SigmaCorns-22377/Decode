@@ -45,10 +45,6 @@ class SimIO : SigmaIO {
         return 0.0 // Todo: Implement turret simulation
     }
 
-    override fun setTurretPosition(Offset: Double) {
-        TODO("Not yet implemented")
-    }
-
     override fun update() {
         robot.advanceSim(SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS),this)
         t += SIM_UPDATE_TIME

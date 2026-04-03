@@ -82,11 +82,6 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     override fun intake1RPM(): Double = intakeRollerState.omega
 
     override fun turretPosition(): Double = turretAngleRad * turretTicksPerRad + turretOffset
-
-    override fun setTurretPosition(offset: Double) {
-        turretOffset = offset
-    }
-
     override fun setPosition(p: Pose2d) {
         JoltNative.nativeSetRobotPose(handle, p.v.x.toFloat(), p.v.y.toFloat(), p.rot.toFloat())
     }
