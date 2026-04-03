@@ -3,7 +3,6 @@ package sigmacorns.constants
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.control.MotorRangeMapper
-import sigmacorns.opmode.tune.FlywheelDeadbeatConfig
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
@@ -58,9 +57,12 @@ val intakeMotor = LinearDcMotor(bareMotorTopSpeed/intakeGearRatio, bareMotorStal
 /**
  * Parameters of the dual-motor flywheel used in the simulator
  */
+/** Flywheel inertia in kg*m^2: ½mr² = 0.5 * 0.38709252 kg * (0.046 m)² */
+const val FLYWHEEL_INERTIA = 0.000410
+
 val flywheelParameters = FlywheelParameters(
     flywheelMotor,
-    FlywheelDeadbeatConfig.inertia,
+    FLYWHEEL_INERTIA,
     0.0001,
 )
 

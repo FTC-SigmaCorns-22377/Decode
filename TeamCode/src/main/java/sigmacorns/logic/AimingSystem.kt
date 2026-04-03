@@ -1,27 +1,32 @@
-package sigmacorns.subsystem
+package sigmacorns.logic
 
 import org.joml.Vector2d
 import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.ShootWhileMoveConstants
-import sigmacorns.constants.turretRange
 import sigmacorns.control.aim.TurretTargeting
-import sigmacorns.control.localization.GTSAMEstimator
-import sigmacorns.control.localization.VisionTracker
 import sigmacorns.control.aim.tune.AdaptiveTuner
 import sigmacorns.control.aim.tune.ShotDataStore
+import sigmacorns.control.localization.GTSAMEstimator
+import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.math.Pose2d
+import sigmacorns.subsystem.Shooter
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.time.Duration
 
 /**
- * Shared auto-aim + turret + vision subsystem used across opmodes.
+ * Aiming system: vision + sensor fusion + turret targeting + shooter coordination.
  *
- * Encapsulates AutoAimGTSAM, VisionTracker, and Turret initialization and the
- * core vision → auto-aim → turret update pipeline. Opmodes can override turret
- * targeting between [updateVision] and [updateTurret] for manual control.
+ * Owns the full aiming pipeline from vision input to turret/shooter output:
+ * - Vision tracking and GTSAM sensor fusion
+ * - Auto-aim turret targeting
+ * - Feeding shooter (flywheel + hood) inputs from adaptive tuning data
+ * - Shoot-while-move turret lead and flywheel compensation
+ *
+ * Opmodes can override turret targeting between [updateVision] and
+ * [setTurretInputs] for manual control.
  */
 class AimingSystem(
     private val robot: Robot,
@@ -50,6 +55,9 @@ class AimingSystem(
 
     var turretLeadAngle: Double = 0.0
         private set
+
+    /** Whether to apply shoot-while-move compensation. */
+    var shootWhileMoveEnabled = false
 
     /**
      * Decompose the robot's field-relative velocity into radial and lateral
@@ -128,10 +136,10 @@ class AimingSystem(
     }
 
     /**
-     * Update turret heading feedforward and run turret PID.
-     * Call after setting turret target (auto or manual).
+     * Set turret inputs from fused pose data.
+     * Does NOT call turret.update() — that is done by Robot.update().
      */
-    fun updateTurret(dt: Duration) {
+    fun setTurretInputs(dt: Duration) {
         robot.turret.robotHeading = autoAim.fusedPose.rot
         robot.turret.robotAngularVelocity = robot.io.velocity().rot
         robot.turret.targetDistance = targetDistance
@@ -139,8 +147,34 @@ class AimingSystem(
         positionOverride?.let {
             if(robot.turret.fieldRelativeMode) robot.turret.targetAngle = it else robot.turret.fieldTargetAngle = it
         }
+    }
 
-        robot.turret.update(dt)
+    /**
+     * Feed shooter (flywheel + hood) inputs from adaptive tuning data and
+     * apply shoot-while-move compensation if enabled.
+     */
+    fun setShooterInputs() {
+        val shooter = robot.shooter
+
+        // Feed hood inputs from adaptive tuner
+        shooter.targetDistance = targetDistance
+        shooter.recommendedHoodAngleDeg = adaptiveTuner
+            .getRecommendedHoodAngle(targetDistance)
+
+        // Feed flywheel target from adaptive tuner
+        if (robot.aimFlywheel) {
+            shooter.flywheelTarget = getRecommendedFlywheelVelocity() ?: 0.0
+        }
+
+        // Shoot-while-move: turret lead + flywheel distance compensation
+        if (shootWhileMoveEnabled) {
+            robot.turret.targetAngleOffset = turretLeadAngle
+            shooter.flywheelTarget = Shooter.calculateTargetRPM(
+                targetDistance + radialVelocity * ShootWhileMoveConstants.flywheelLookAheadTime
+            )
+        } else {
+            robot.turret.targetAngleOffset = 0.0
+        }
     }
 
     /**
@@ -152,14 +186,15 @@ class AimingSystem(
     }
 
     /**
-     * Convenience: full pipeline update (vision → auto-aim → turret).
+     * Convenience: full pipeline update (vision -> auto-aim -> turret + shooter inputs).
      * Use this when no manual turret override is needed.
      */
     fun update(dt: Duration, target: Boolean = true) {
         updateVision()
         updateVelocityComponents()
         if(target) applyAutoAimTarget()
-        updateTurret(dt)
+        setTurretInputs(dt)
+        setShooterInputs()
     }
 
     fun close() {

@@ -1,6 +1,6 @@
 package sigmacorns.control.mpc
 
-import sigmacorns.subsystem.DriveController
+import sigmacorns.subsystem.Drivetrain
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumState
@@ -40,7 +40,7 @@ private sealed class MPCCommand {
  */
 class MPCRunner(
     val mpc: MPCClient,
-    val driveController: DriveController = DriveController(),
+    val drivetrain: Drivetrain = Drivetrain(),
 ) : AutoCloseable {
 
     private val mpcLock = ReentrantLock()
@@ -143,7 +143,7 @@ class MPCRunner(
      */
     fun driveWithMPC(io: SigmaIO, voltage: Double) {
         val u = getControl(voltage)
-        driveController.drive(Pose2d(u[0], u[1], u[2]), io)
+        drivetrain.drive(Pose2d(u[0], u[1], u[2]), io)
     }
 
     /**
