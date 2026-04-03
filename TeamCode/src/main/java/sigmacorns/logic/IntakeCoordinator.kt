@@ -27,7 +27,7 @@ class IntakeCoordinator(val robot: Robot) {
      * Propagates sensor state and enforces cross-subsystem rules.
      */
     fun update() {
-        if (robot.beamBreak.isFull) {
+        if (robot.beamBreak.isFull && robot.intakeTransfer.state == IntakeTransfer.State.INTAKING) {
             robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         }
 

@@ -191,13 +191,15 @@ class Shooter(
     private fun hoodAngleToServo(angle: Double): Double {
         val minRad = Math.toRadians(ShooterConfig.minAngleDeg)
         val maxRad = Math.toRadians(ShooterConfig.maxAngleDeg)
-        return ((angle - minRad) / (maxRad - minRad)).coerceIn(0.0, 1.0)
+        val t = ((angle - minRad) / (maxRad - minRad)).coerceIn(0.0, 1.0)
+        return ShooterConfig.minServo + t * (ShooterConfig.maxServo - ShooterConfig.minServo)
     }
 
     fun hoodServoToAngle(servo: Double): Double {
         val minRad = Math.toRadians(ShooterConfig.minAngleDeg)
         val maxRad = Math.toRadians(ShooterConfig.maxAngleDeg)
-        return minRad + servo * (maxRad - minRad)
+        val t = (servo - ShooterConfig.minServo) / (ShooterConfig.maxServo - ShooterConfig.minServo)
+        return minRad + t * (maxRad - minRad)
     }
 
 }
@@ -206,4 +208,6 @@ object ShooterConfig {
     @JvmField var minAngleDeg = 28.441752
     @JvmField var maxAngleDeg = 70.0
     @JvmField var defaultAngleDeg = 45.0
+    @JvmField var minServo = 0.29
+    @JvmField var maxServo = 1.0
 }

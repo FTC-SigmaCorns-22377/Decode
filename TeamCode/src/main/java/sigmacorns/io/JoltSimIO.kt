@@ -6,6 +6,8 @@ import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.intakeMotor
 import sigmacorns.constants.turretPos
 import sigmacorns.constants.turretTicksPerRad
+import sigmacorns.subsystem.ShooterConfig
+import sigmacorns.subsystem.TurretServoConfig
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
 import sigmacorns.math.Pose2d
@@ -29,7 +31,10 @@ enum class BallColor(val joltId: Int) {
     }
 }
 
-class JoltSimIO : SigmaIO, AutoCloseable {
+class JoltSimIO(
+    /** When true, update() sleeps to match wall-clock time to sim time (for visualization). */
+    var realTime: Boolean = false,
+) : SigmaIO, AutoCloseable {
     private val handle: Long = JoltNative.nativeCreate()
     private val drivetrain = MecanumDynamics(drivetrainParameters)
     private val flywheelDynamics = FlywheelDynamics(SIM_FLYWHEEL_PARAMS)
@@ -37,14 +42,16 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     private val robotState = FloatArray(6) // [x, y, theta, vx, vy, omega]
 
     private var t = 0.seconds
+    private val wallClockStart = System.nanoTime()
     private var flywheelState = FlywheelState()
     private var intakeRollerState = FlywheelState()
     private var turretAngleRad = 0.0
     private var turretVelocityRad = 0.0
     private var turretOffset = 0.0
-    private var hoodAngleRad = Math.toRadians(DEFAULT_BALL_LAUNCH_ANGLE_DEGREES)
+    private var hoodAngleRad = Math.toRadians(ShooterConfig.defaultAngleDeg)
 
     val heldBalls = mutableListOf<BallColor>()
+    private var autoShootTimer = 0.0
 
     /** Hood servo input: 0.0 = horizontal, 1.0 = 70 degrees */
     var hoodInput: Double = DEFAULT_BALL_LAUNCH_ANGLE_DEGREES / 70.0
@@ -81,7 +88,7 @@ class JoltSimIO : SigmaIO, AutoCloseable {
 
     override fun intake1RPM(): Double = intakeRollerState.omega
 
-    override fun turretPosition(): Double = turretAngleRad * turretTicksPerRad + turretOffset
+    override fun turretPosition(): Double = turretAngleRad + turretOffset
     override fun setPosition(p: Pose2d) {
         JoltNative.nativeSetRobotPose(handle, p.v.x.toFloat(), p.v.y.toFloat(), p.rot.toFloat())
     }
@@ -119,22 +126,27 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         // Send roller omega to C++ for contact surface velocity
         JoltNative.nativeSetIntakeRollerOmega(handle, intakeRollerState.omega.toFloat())
 
-        // Integrate turret (DC motor model matching Turret.kt PID output)
-        val turretTorque = TURRET_MOTOR.torque(turret, turretVelocityRad)
-        val turretDamping = TURRET_DAMPING * turretVelocityRad
-        val turretAlpha = if (TURRET_INERTIA > 0.0) (turretTorque - turretDamping) / TURRET_INERTIA else 0.0
-        turretVelocityRad += turretAlpha * dtSeconds
-        turretAngleRad += turretVelocityRad * dtSeconds
-        // Clamp to turret limits and zero velocity at limits
-        if (turretAngleRad > TURRET_ANGLE_LIMIT) { turretAngleRad = TURRET_ANGLE_LIMIT; turretVelocityRad = 0.0 }
-        if (turretAngleRad < -TURRET_ANGLE_LIMIT) { turretAngleRad = -TURRET_ANGLE_LIMIT; turretVelocityRad = 0.0 }
+        // Turret servo simulation: convert servo position to angle.
+        // Turret.kt writes turretLeft where 0.5 = center (servoCenterAngle).
+        // angle = (servoPos - 0.5) * servoTotalRange + servoCenterAngle
+        val targetTurretAngle = ((turretLeft - 0.5) * TurretServoConfig.servoTotalRange +
+            TurretServoConfig.servoCenterAngle)
+            .coerceIn(-TURRET_ANGLE_LIMIT, TURRET_ANGLE_LIMIT)
+
+        // Smooth servo response (first-order with time constant)
+        val servoAlpha = 1.0 - kotlin.math.exp(-dtSeconds / SERVO_TIME_CONSTANT)
+        turretAngleRad += servoAlpha * (targetTurretAngle - turretAngleRad)
 
         // Integrate hood servo
-        val hoodTarget = hoodInput.coerceIn(0.0, 1.0) * HOOD_RANGE
+        // Shooter maps [minAngleDeg, maxAngleDeg] → [0, 1], so invert:
+        // angle = minAngle + servoPos * (maxAngle - minAngle)
+        val hoodMinRad = Math.toRadians(ShooterConfig.minAngleDeg)
+        val hoodMaxRad = Math.toRadians(ShooterConfig.maxAngleDeg)
+        val hoodTarget = (hoodMinRad + hoodInput.coerceIn(0.0, 1.0) * (hoodMaxRad - hoodMinRad))
         val hoodError = hoodTarget - hoodAngleRad
         val hoodVel = (SERVO_K * hoodError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
         hoodAngleRad += hoodVel * dtSeconds
-        hoodAngleRad = hoodAngleRad.coerceIn(0.0, HOOD_RANGE)
+        hoodAngleRad = hoodAngleRad.coerceIn(hoodMinRad, hoodMaxRad)
 
         // Physics-based intake: C++ removes balls and returns their colors
         val maxPickup = (3 - heldBalls.size).coerceAtLeast(0)
@@ -152,7 +164,30 @@ class JoltSimIO : SigmaIO, AutoCloseable {
             JoltNative.nativeGetPendingPickups(handle, drain, 10)
         }
 
+        // Auto-shoot: when blocker is disengaged and transfer motor is running,
+        // the ball path to the flywheel is open. If flywheel is spinning fast enough,
+        // shoot one ball per transfer cycle (~200ms between shots).
+        if (blocker > 0.5 && intake > 0.5 && heldBalls.isNotEmpty()) {
+            autoShootTimer += dtSeconds
+            if (autoShootTimer >= AUTO_SHOOT_INTERVAL) {
+                autoShootTimer = 0.0
+                shootBall()
+            }
+        } else {
+            autoShootTimer = 0.0
+        }
+
         t += SIM_UPDATE_TIME
+
+        // Pace to wall-clock time for real-time visualization
+        if (realTime) {
+            val simTimeNanos = t.inWholeNanoseconds
+            val wallElapsed = System.nanoTime() - wallClockStart
+            val sleepNanos = simTimeNanos - wallElapsed
+            if (sleepNanos > 0) {
+                Thread.sleep(sleepNanos / 1_000_000, (sleepNanos % 1_000_000).toInt())
+            }
+        }
     }
 
     // --- Shooter API ---
@@ -306,6 +341,9 @@ class JoltSimIO : SigmaIO, AutoCloseable {
     companion object {
         val SIM_UPDATE_TIME = 5.milliseconds
 
+        /** Time between auto-shot attempts when transfer motor is running (seconds). */
+        const val AUTO_SHOOT_INTERVAL = 0.2
+
         // Robot geometry (must match C++ jolt_world.h)
         const val ROBOT_HEIGHT = 0.15
         const val ROBOT_LENGTH = 0.4
@@ -323,6 +361,8 @@ class JoltSimIO : SigmaIO, AutoCloseable {
         )
         const val TURRET_INERTIA = 0.005 // kg·m^2, turret assembly inertia
         const val TURRET_DAMPING = 0.5 // viscous damping coefficient
+        /** Servo first-order response time constant (seconds). */
+        const val SERVO_TIME_CONSTANT = 0.05
         val TURRET_ANGLE_LIMIT = Math.PI // ±180° range matching turretRange limits
 
         // Default hood angle
