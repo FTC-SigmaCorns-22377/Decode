@@ -118,8 +118,8 @@ class Turret(val io: SigmaIO) {
 
         // Convert angle to servo position and write to both servos
         currentServoPosition = angleToServo(effectiveTargetAngle)
-        io.turretLeft = currentServoPosition
-        io.turretRight = 1-currentServoPosition  // hardware-reversed
+        io.turretLeft = 1.0 - currentServoPosition // hardware reversed
+        io.turretRight = currentServoPosition
     }
 
     /** Convert radians to servo position [0.0, 1.0]. 0 rad = 0.5 (forward). */

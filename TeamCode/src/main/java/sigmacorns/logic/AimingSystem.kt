@@ -206,7 +206,7 @@ class AimingSystem(
 object AimConfig {
     @JvmField var goalHeight = 1.14
 
-    @JvmField var launchEfficiency = 0.7
+    @JvmField var launchEfficiency = 0.5
 
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
@@ -223,12 +223,12 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.05 // m
+    @JvmField var shotTolerance = 0.03 // m
 }
 
 object ShotSolverConfig {
     @JvmField var wOmega = 0.01   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
     @JvmField var wPhi = 0.1      // s per rad hood change
-    @JvmField var tolerance = 0.01
+    @JvmField var tolerance = 0.05
 }

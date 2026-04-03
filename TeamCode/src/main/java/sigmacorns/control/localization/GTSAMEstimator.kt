@@ -9,6 +9,7 @@ import sigmacorns.constants.turretPos
 import sigmacorns.control.aim.LogLevel
 import sigmacorns.control.aim.LogcatLogger
 import sigmacorns.control.aim.Logger
+import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.math.normalizeAngle
 import java.util.concurrent.atomic.AtomicLong
@@ -132,20 +133,25 @@ class GTSAMEstimator(
     // ===== Main Update Method =====
 
     fun update(robotPose: Pose2d, velocity: Pose2d, turretAngle: Double, visionResult: VisionResult?) {
-        val p = turretPos.rotateZ(robotPose.rot) + Vector3d(robotPose.v,0.0)
+        val turretOffset = Vector2d(turretPos)
+        val p = turretOffset.rotate(robotPose.rot) + robotPose.v
+
+        val curPose = Pose2d(p.x,p.y,robotPose.rot)
 
         val currentTime = System.currentTimeMillis()
 
         if (!fusionWorker.isInitialized && !fusionWorker.hasPendingInit()) {
             logger.log(LogLevel.INFO, "Queueing GTSAM initialization")
-            fusionWorker.requestInitialize(robotPose, landmarkPositions)
+            fusionWorker.requestInitialize(curPose, landmarkPositions)
         }
 
         debugLogger?.logRawOdometry(robotPose, velocity, currentTime / 1000.0)
 
         if (lastRobotPose != null) {
-            processOdometryDelta(Pose2d(p.x,p.y,robotPose.rot))
+            processOdometryDelta(curPose)
         }
+
+        lastRobotPose = curPose
 
         updateVision(visionResult, turretAngle)
 
@@ -164,7 +170,7 @@ class GTSAMEstimator(
         debugLogger?.logCoordinateFrames(
             fusedPose,
             turretAngle, 
-            Vector3d(EstimatorConfig    .cameraOffsetX, EstimatorConfig.cameraOffsetY, EstimatorConfig.cameraOffsetZ),
+            Vector3d(EstimatorConfig.cameraOffsetX, EstimatorConfig.cameraOffsetY, EstimatorConfig.cameraOffsetZ),
             EstimatorConfig.cameraRoll, EstimatorConfig.cameraPitch, EstimatorConfig.cameraYaw
         )
         
@@ -189,7 +195,6 @@ class GTSAMEstimator(
             }
         }
 
-        lastRobotPose = robotPose
         lastUpdateTimeMs = currentTime
 
         fusionWorker.pollError()?.let { error ->

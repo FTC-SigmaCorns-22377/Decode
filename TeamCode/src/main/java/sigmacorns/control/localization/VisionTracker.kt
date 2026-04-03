@@ -41,11 +41,17 @@ class VisionTracker(
     var enableDebugLogging: Boolean = false
 ) {
     fun read(): VisionResult {
-        if (limelight == null || limelight.status.pipelineIndex != Limelight.APRILTAG_PIPELINE) {
+        if (limelight == null) {
             return VisionResult(emptyStatus(), null)
         }
 
+        if(limelight.status.pipelineIndex != Limelight.APRILTAG_PIPELINE) {
+            limelight.pipelineSwitch(Limelight.APRILTAG_PIPELINE)
+        }
+
         val result: LLResult = limelight.latestResult
+        println("LIMELIGHT RESULT= ${result.fiducialResults}")
+
         if (!result.isValid) {
             logDebug("Limelight result invalid")
             return VisionResult(emptyStatus(), null)

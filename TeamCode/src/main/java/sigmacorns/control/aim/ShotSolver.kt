@@ -30,7 +30,7 @@ class ShotSolver(
         return max(wOmega*dOmega, max(wPhi*dPhi,wTheta*dTheta))
     }
 
-    fun optimalAdjust(cur: Ballistics.ShotState, target: Ballistics.Target, tol: Double): Ballistics.ShotState {
+    fun optimalAdjust(cur: Ballistics.ShotState, target: Ballistics.Target, tol: Double, maxIter: Int = 50): Ballistics.ShotState {
         val bounds = ballistics.tBounds(target, tol / 2.0)
         val tMin = bounds.start
         val tMax = bounds.endInclusive
@@ -61,7 +61,7 @@ class ShotSolver(
         var lbGlobal = Double.NEGATIVE_INFINITY
 
         var iter = 0
-        while (bestCost - lbGlobal > tol && iter < 500) {
+        while (bestCost - lbGlobal > tol && iter < maxIter) {
             iter++
 
             // Find interval with lowest lower bound and the T that achieves it
@@ -107,7 +107,7 @@ class ShotSolver(
         target2: Ballistics.Target,
         omegaDrop: Double,
         tol: Double,
-        maxIter: Int = 100
+        maxIter: Int = 20
     ): Pair<Ballistics.ShotState, Ballistics.ShotState> {
         val b1 = ballistics.tBounds(target1, tol / 4.0)
         val b2 = ballistics.tBounds(target2, tol / 4.0)

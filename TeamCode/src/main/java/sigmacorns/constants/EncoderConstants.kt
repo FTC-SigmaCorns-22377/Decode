@@ -8,5 +8,5 @@ object PinpointConfig {
     const val X_OFFSET_MM = -80.0
 
     /** Y offset from robot center to pinpoint in mm. */
-    const val Y_OFFSET_MM = 157.475
+    const val Y_OFFSET_MM = -157.475
 }

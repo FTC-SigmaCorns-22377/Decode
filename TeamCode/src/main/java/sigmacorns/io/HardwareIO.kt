@@ -68,7 +68,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     private val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
 
-    private val chub: LynxModule = hardwareMap.get("Control Hub") as LynxModule
+    private val chub: LynxModule = hardwareMap.getAll<LynxModule>(LynxModule::class.java).find {
+        it.isParent
+    }!!
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -222,7 +224,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         cachedBeamBreak3 = beamBreak3Sensor?.state?.not() ?: false
 
         // update analog reading
-        cachedTurretPosition = (turretEncoder?.voltage ?: 0.0) / 3.3 * TurretServoConfig.servoTotalRange - TurretServoConfig.servoCenterAngle
+        cachedTurretPosition = -((turretEncoder?.voltage ?: 0.0) / 3.3 - 0.5) * TurretServoConfig.servoTotalRange + TurretServoConfig.servoCenterAngle
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
@@ -251,7 +253,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(
             GoBildaPinpointDriver.EncoderDirection.FORWARD,
-            GoBildaPinpointDriver.EncoderDirection.FORWARD
+            GoBildaPinpointDriver.EncoderDirection.REVERSED
         )
 
         //resetting the positions for the IMU

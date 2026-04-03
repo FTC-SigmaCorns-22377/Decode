@@ -53,7 +53,6 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
         io.setPosition(pos)
         aim.init(io.position(),apriltagTracking)
         limelight?.start()
-        stopMPCSolver()
     }
 
     /** Switch limelight to the pipeline that starts the MPC solver process. */

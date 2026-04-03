@@ -7,6 +7,7 @@ import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Full-featured competition TeleOp.
@@ -15,6 +16,11 @@ import kotlin.math.abs
  *   Left stick          - Translate (mecanum drive)
  *   Right stick X       - Rotate
  *   D-pad up/down       - Speed mode toggle (full / precision)
+ *
+ *   Left trigger         - Hold to intake balls
+ *   B                    - Hold to reverse intake (spit balls out)
+ *   Right trigger        - Hold to shoot (flywheel + transfer)
+ *   Left bumper          - Hold to spin up flywheel (without shooting)
  *
  * GAMEPAD 2 (Operator - all subsystem controls):
  *   Left trigger         - Hold to intake balls
@@ -79,9 +85,9 @@ class   MainTeleOp : SigmaOpMode() {
             lastDpadRight2 = gamepad2.dpad_right
 
             // --- Intake: hold left trigger ---
-            if (gamepad2.left_trigger > 0.1 && gamepad2.right_trigger <= 0.1) {
+            if ( (max(gamepad2.left_trigger,gamepad1.left_trigger) > 0.1 && max(gamepad2.right_trigger,gamepad1.right_trigger) <= 0.1) ) {
                 robot.intakeCoordinator.startIntake()
-            } else if (!gamepad2.b) {
+            } else if (!gamepad2.b || !gamepad1.b) {
                 if (robot.intakeTransfer.state == IntakeTransfer.State.INTAKING ||
                     robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
@@ -89,7 +95,7 @@ class   MainTeleOp : SigmaOpMode() {
             }
 
             // --- Outtake: hold B to reverse intake ---
-            if (gamepad2.b) {
+            if (gamepad2.b || gamepad1.b) {
                 robot.intakeTransfer.state = IntakeTransfer.State.REVERSING
             } else if (robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
@@ -140,12 +146,12 @@ class   MainTeleOp : SigmaOpMode() {
 //            robot.io.flywheel = if (gamepad2.right_trigger > 0.1) { 0.88 } else { 0.0 }
 
             // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
-            if (gamepad2.right_trigger > 0.1) {
+            if (max(gamepad2.right_trigger, gamepad1.right_trigger) > 0.1) {
                 // Shooting: spin flywheel + transfer (blocker delay handled by state machine)
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = false
                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
-            } else if (gamepad2.left_bumper) {
+            } else if (gamepad2.left_bumper || gamepad1.left_bumper) {
                 // Spin-up only: flywheel on, blocker stays engaged
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = false

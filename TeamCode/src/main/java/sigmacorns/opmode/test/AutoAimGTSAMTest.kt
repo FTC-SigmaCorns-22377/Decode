@@ -13,6 +13,7 @@ class AutoAimGTSAMTest : SigmaOpMode() {
         Panels.config.enableLogs = false
 
         val robot = Robot(io, blue = true)
+        robot.aimFlywheel = false
         robot.init(Pose2d(0.0, 0.0, PI / 2.0), apriltagTracking = true)
         robot.startApriltag()
         robot.turret.fieldRelativeMode = true
