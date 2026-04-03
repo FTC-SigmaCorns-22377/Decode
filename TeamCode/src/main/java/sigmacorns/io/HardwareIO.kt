@@ -63,11 +63,12 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
 
     //odometry
+    // TODO: thread pinpoint
     var pinpoint: GoBildaPinpointDriver? = hardwareMap.tryGet(GoBildaPinpointDriver::class.java,"pinpoint")
 
-    val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
+    private val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
 
-    private val allHubs: MutableList<LynxModule> = hardwareMap.getAll(LynxModule::class.java)
+    private val chub: LynxModule = hardwareMap.get("Control Hub") as LynxModule
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -233,7 +234,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         savedVoltage = voltageSensor?.voltage ?: 12.0
         cachedFlywheelVelocity = (flywheel1?.velocity ?: 0.0) / 28.0 * 2 * PI
         cachedIntake1RPM = (intake1Motor?.velocity ?: 0.0) / 145.1 * 60
-        allHubs.map { it.clearBulkCache() }
+        chub.clearBulkCache()
     }
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
@@ -303,6 +304,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flywheel1?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
         flywheel2?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
 
+        intake1Motor?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+        intake2Motor?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+
         // Turret servos: left = FORWARD, right = REVERSE (mirrored mounting, geared together)
         // Both servos receive the same position value; reversing the right servo
         // makes both physical shafts rotate the same direction.
@@ -317,9 +321,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         // configuring pinpoint
         configurePinpoint()
 
-        for (hub in allHubs) {
-            hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL)
-        }
+        chub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL)
     }
 
 }
