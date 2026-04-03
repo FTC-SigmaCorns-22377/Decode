@@ -302,6 +302,113 @@ class ShotSolverOptimalityTest {
             "Move cost should be reasonable (< 10)")
     }
 
+    /**
+     * Helper: Compute robust move cost — same as moveCost but omega1 is reduced by omegaDrop,
+     * modeling flywheel speed loss after a shot.
+     */
+    private fun computeRobustMoveCost(
+        from: Ballistics.ShotState,
+        to: Ballistics.ShotState,
+        omegaDrop: Double
+    ): Double {
+        val fromOmega = testOmegaMap.omega(from.phi, from.vExit) - omegaDrop
+        val toOmega = testOmegaMap.omega(to.phi, to.vExit)
+        val dOmega = abs(fromOmega - toOmega)
+        val dPhi = abs(from.phi - to.phi)
+        val dTheta = abs(from.theta - to.theta)
+        return max(shotSolver.wOmega * dOmega, max(shotSolver.wPhi * dPhi, shotSolver.wTheta * dTheta))
+    }
+
+    @Test
+    fun testRobustShotOptimalityViaGridSearch() {
+        // Verify optimalRobustShot() finds minimum cost via 2D grid search.
+        // optimalRobustShot minimizes: J(T1, T2) = moveCost(s1_with_reduced_omega, s2)
+        // where s1's omega is reduced by omegaDrop to model flywheel speed loss after firing.
+
+        val omegaDrop = 5.0  // rad/s drop after firing
+
+        val target1 = createTarget(Vector3d(0.0, 0.0, 0.5), 0.0, 0.5, 1.2)
+        val target2 = createTarget(Vector3d(0.0, 0.0, 0.5), 0.2, 0.7, 1.2)
+
+        val bounds1 = ballistics.tBounds(target1, 0.001)
+        val bounds2 = ballistics.tBounds(target2, 0.001)
+
+        assertTrue(bounds1.start < bounds1.endInclusive && bounds2.start < bounds2.endInclusive,
+            "Both targets should be feasible")
+
+        // Grid search over T1 and T2
+        val gridSamples = 20  // 20x20 = 400 samples
+        val t1Step = (bounds1.endInclusive - bounds1.start) / gridSamples
+        val t2Step = (bounds2.endInclusive - bounds2.start) / gridSamples
+
+        var bestGridCost = Double.MAX_VALUE
+        var bestGridT1 = bounds1.start
+        var bestGridT2 = bounds2.start
+
+        println("2D Grid search for robust shot over ${gridSamples + 1}x${gridSamples + 1} = ${(gridSamples + 1) * (gridSamples + 1)} samples:")
+        println("omegaDrop = $omegaDrop rad/s")
+
+        for (i in 0..gridSamples) {
+            for (j in 0..gridSamples) {
+                val t1 = bounds1.start + i * t1Step
+                val t2 = bounds2.start + j * t2Step
+
+                try {
+                    val shot1 = ballistics.solve(target1, t1)
+                    val shot2 = ballistics.solve(target2, t2)
+
+                    if (shot1.vExit <= ballistics.vMax && shot1.phi in ballistics.phiMin..ballistics.phiMax &&
+                        shot2.vExit <= ballistics.vMax && shot2.phi in ballistics.phiMin..ballistics.phiMax) {
+
+                        val cost = computeRobustMoveCost(shot1, shot2, omegaDrop)
+                        if (cost < bestGridCost) {
+                            bestGridCost = cost
+                            bestGridT1 = t1
+                            bestGridT2 = t2
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Solution may not exist at all flight times
+                }
+            }
+        }
+
+        assertTrue(bestGridCost < Double.MAX_VALUE, "Grid search should find feasible solution")
+
+        val gridShot1 = ballistics.solve(target1, bestGridT1)
+        val gridShot2 = ballistics.solve(target2, bestGridT2)
+
+        println("Grid search best: cost=${"%.6f".format(bestGridCost)}")
+        println("  T1=${"%.3f".format(bestGridT1)} s, T2=${"%.3f".format(bestGridT2)} s")
+        println("  Shot 1: vExit=${"%.2f".format(gridShot1.vExit)} m/s, phi=${"%.1f".format(Math.toDegrees(gridShot1.phi))}°")
+        println("  Shot 2: vExit=${"%.2f".format(gridShot2.vExit)} m/s, phi=${"%.1f".format(Math.toDegrees(gridShot2.phi))}°")
+
+        // Use ShotSolver's robust shot optimization
+        val (solverShot1, solverShot2) = shotSolver.optimalRobustShot(target1, target2, omegaDrop, tol = 0.01, maxIter = 200)
+
+        // Verify both shots are feasible
+        assertTrue(solverShot1.vExit in 0.0..ballistics.vMax && solverShot1.phi in ballistics.phiMin..ballistics.phiMax,
+            "First shot should be feasible")
+        assertTrue(solverShot2.vExit in 0.0..ballistics.vMax && solverShot2.phi in ballistics.phiMin..ballistics.phiMax,
+            "Second shot should be feasible")
+
+        val solverCost = computeRobustMoveCost(solverShot1, solverShot2, omegaDrop)
+
+        println("ShotSolver robust best: cost=${"%.6f".format(solverCost)}")
+        println("  Shot 1: vExit=${"%.2f".format(solverShot1.vExit)} m/s, phi=${"%.1f".format(Math.toDegrees(solverShot1.phi))}°")
+        println("  Shot 2: vExit=${"%.2f".format(solverShot2.vExit)} m/s, phi=${"%.1f".format(Math.toDegrees(solverShot2.phi))}°")
+
+        // Allow 5% tolerance relative to grid minimum (grid is coarse at 20x20)
+        val tolerance = max(1e-4, bestGridCost * 0.05)
+        println("Cost difference: ${"%.6f".format(solverCost - bestGridCost)} (tolerance: ${"%.6f".format(tolerance)})")
+
+        assertTrue(
+            solverCost <= bestGridCost + tolerance,
+            "optimalRobustShot cost (${"%.6f".format(solverCost)}) should be within tolerance " +
+            "of grid search minimum (${"%.6f".format(bestGridCost)})"
+        )
+    }
+
     @Test
     fun testMultipleShotsMoveCostProgression() {
         // Test that move costs are reasonable for multiple targets in sequence.

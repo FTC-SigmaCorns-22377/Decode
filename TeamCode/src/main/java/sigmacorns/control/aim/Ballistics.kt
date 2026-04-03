@@ -29,7 +29,6 @@ class Ballistics(
         val turret: Vector3d,
         val vR: Vector2d
     ) {
-        val dxy: Vector2d get() = Vector2d(dx,dy)
         val dx: Double get() = target.x - turret.x
         val dy: Double get() = target.y - turret.y
         val dz: Double get() = target.z - turret.z

@@ -93,6 +93,106 @@ class ShotSolver(
     }
 
     /**
+     * Minimize J(T1, T2) = moveCost(s1_reduced, s2) where s1_reduced is s1 with its
+     * flywheel speed (omega) reduced by omegaDrop, simulating the speed loss after firing.
+     *
+     * Finds shot parameters robust to flywheel loss: the transition from post-shot
+     * speed to the next shot's required speed is minimized.
+     *
+     * Uses 2D branch-and-bound with Lipschitz lower bounds, bisecting the dimension
+     * with the larger Lipschitz-weighted half-width at each step.
+     */
+    fun optimalRobustShot(
+        target1: Ballistics.Target,
+        target2: Ballistics.Target,
+        omegaDrop: Double,
+        tol: Double,
+        maxIter: Int = 100
+    ): Pair<Ballistics.ShotState, Ballistics.ShotState> {
+        val b1 = ballistics.tBounds(target1, tol / 4.0)
+        val b2 = ballistics.tBounds(target2, tol / 4.0)
+        val tMin1 = b1.start;       val tMax1 = b1.endInclusive
+        val tMin2 = b2.start;       val tMax2 = b2.endInclusive
+        val tMid1 = (tMin1 + tMax1) / 2.0
+        val tMid2 = (tMin2 + tMax2) / 2.0
+
+        val lip1 = ballistics.lipschitzBounds(target1, tMid1, tMin1, tMax1)
+        val lip2 = ballistics.lipschitzBounds(target2, tMid2, tMin2, tMax2)
+
+        fun omegaL(lipB: Ballistics.LipschitzBounds, target: Ballistics.Target, tLo: Double, tHi: Double): Double {
+            val sLo = ballistics.solve(target, tLo); val sHi = ballistics.solve(target, tHi)
+            val phiR = minOf(sLo.phi, sHi.phi)..maxOf(sLo.phi, sHi.phi)
+            val vR   = minOf(sLo.vExit, sHi.vExit)..maxOf(sLo.vExit, sHi.vExit)
+            return omega.lipschitzBound(phiR, vR, lipB.lPhi, lipB.lVExit)
+        }
+
+        val lOmega1 = omegaL(lip1, target1, tMin1, tMax1)
+        val lOmega2 = omegaL(lip2, target2, tMin2, tMax2)
+
+        // Subtracting a constant from omega1 doesn't change the Lipschitz constant of |omega1 - omega2|
+        val L1 = max(wOmega * lOmega1, max(wPhi * lip1.lPhi, wTheta * lip1.lTheta))
+        val L2 = max(wOmega * lOmega2, max(wPhi * lip2.lPhi, wTheta * lip2.lTheta))
+
+        fun J(t1: Double, t2: Double): Double {
+            val s1 = ballistics.solve(target1, t1)
+            val s2 = ballistics.solve(target2, t2)
+            val omega1 = omega.omega(s1.phi, s1.vExit) - omegaDrop
+            val omega2 = omega.omega(s2.phi, s2.vExit)
+            val dOmega = (omega1 - omega2).absoluteValue
+            val dPhi = (s1.phi - s2.phi).absoluteValue
+            val dTheta = (s1.theta - s2.theta).absoluteValue
+            return max(wOmega * dOmega, max(wPhi * dPhi, wTheta * dTheta))
+        }
+
+        data class Rect(val t1Lo: Double, val t1Hi: Double, val t2Lo: Double, val t2Hi: Double, val lb: Double)
+
+        fun makeRect(t1Lo: Double, t1Hi: Double, t2Lo: Double, t2Hi: Double): Rect {
+            val tc1 = (t1Lo + t1Hi) / 2.0; val tc2 = (t2Lo + t2Hi) / 2.0
+            val lb = J(tc1, tc2) - L1 * (t1Hi - t1Lo) / 2.0 - L2 * (t2Hi - t2Lo) / 2.0
+            return Rect(t1Lo, t1Hi, t2Lo, t2Hi, lb)
+        }
+
+        val queue = PriorityQueue<Rect>(compareBy { it.lb })
+        queue.add(makeRect(tMin1, tMax1, tMin2, tMax2))
+
+        var bestJ = J(tMid1, tMid2)
+        var bestT1 = tMid1; var bestT2 = tMid2
+        for (t1 in listOf(tMin1, tMax1)) for (t2 in listOf(tMin2, tMax2)) {
+            val j = J(t1, t2)
+            if (j < bestJ) { bestJ = j; bestT1 = t1; bestT2 = t2 }
+        }
+
+        var iter = 0
+        while (iter < maxIter) {
+            iter++
+            val rect = queue.poll() ?: break
+            if (bestJ - rect.lb <= tol) break
+
+            val half1 = L1 * (rect.t1Hi - rect.t1Lo) / 2.0
+            val half2 = L2 * (rect.t2Hi - rect.t2Lo) / 2.0
+            val children = if (half1 >= half2) {
+                val tm = (rect.t1Lo + rect.t1Hi) / 2.0
+                listOf(makeRect(rect.t1Lo, tm, rect.t2Lo, rect.t2Hi),
+                       makeRect(tm, rect.t1Hi, rect.t2Lo, rect.t2Hi))
+            } else {
+                val tm = (rect.t2Lo + rect.t2Hi) / 2.0
+                listOf(makeRect(rect.t1Lo, rect.t1Hi, rect.t2Lo, tm),
+                       makeRect(rect.t1Lo, rect.t1Hi, tm, rect.t2Hi))
+            }
+
+            for (child in children) {
+                val tc1 = (child.t1Lo + child.t1Hi) / 2.0
+                val tc2 = (child.t2Lo + child.t2Hi) / 2.0
+                val j = J(tc1, tc2)
+                if (j < bestJ) { bestJ = j; bestT1 = tc1; bestT2 = tc2 }
+                if (child.lb < bestJ) queue.add(child)
+            }
+        }
+
+        return Pair(ballistics.solve(target1, bestT1), ballistics.solve(target2, bestT2))
+    }
+
+    /**
      * Minimize J(T1, T2) = moveCost(s1, s2) + T2 - T1
      * over feasible flight times for two shots at different targets.
      *
