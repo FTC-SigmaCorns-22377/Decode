@@ -1,8 +1,12 @@
 package sigmacorns.control.ltv
 
+import kotlinx.coroutines.yield
 import sigmacorns.control.trajopt.TrajoptTrajectory
+import sigmacorns.io.SigmaIO
+import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.MecanumState
+import kotlin.math.hypot
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -207,8 +211,43 @@ class LTVClient private constructor(
         return doubleArrayOf(uOut[0], uOut[2], uOut[3], uOut[1])
     }
 
+    fun holdPos(
+        io: SigmaIO,
+        p: Pose2d,
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
+        r: Double = 0.03,
+    ) {
+        val u = solveWaypoint(
+            MecanumState(io.velocity(),io.position()),
+            MecanumState(Pose2d(),p),
+            1.seconds,
+            lqrRef = true,
+            qDiag,
+            r
+        )
+
+        val voltage = io.voltage()
+        io.driveFL = u[0] * 12.0 / voltage
+        io.driveBL = u[1] * 12.0 / voltage
+        io.driveBR = u[2] * 12.0 / voltage
+        io.driveFR = u[3] * 12.0 / voltage
+    }
+
+
     /** Returns the window index selected by the most recent solve() call. */
     fun prevWindowIdx(): Int = MecanumLTVBridge.nativeGetPrevIdx(handle)
+
+    /**
+     * Returns the ETA from the most recent [solveWaypoint] call.
+     *
+     * Computed by forward-simulating the solved control sequence and finding
+     * the step at which the predicted trajectory is closest to the target in
+     * XY. Use this as [tRemaining] on the next [solveWaypoint] call for a
+     * self-consistent, model-derived horizon estimate.
+     *
+     * Returns [Duration.ZERO] before the first [solveWaypoint] call.
+     */
+    fun prevWaypointEta(): Duration = MecanumLTVBridge.nativeGetWaypointEta(handle).seconds
 
     /**
      * Returns the reference state [px, py, theta, vx, vy, omega] for the given window index,
@@ -233,6 +272,68 @@ class LTVClient private constructor(
     }
 
     fun numWindows(): Int = numWindows
+
+    /**
+     * Suspending function that runs a waypoint to completion.
+     *
+     * Repeatedly calls [solveWaypoint], applies controls via [applyControls], and checks
+     * for arrival based on position and velocity tolerances. Returns when the robot arrives
+     * or hits the timeout.
+     *
+     * @param state Current robot state
+     * @param target Desired state (typically with zero velocity)
+     * @param initialTRemaining Initial time horizon for the first solve call
+     * @param applyControls Callback to apply wheel duty cycles and advance the simulation
+     * @param posTol Position arrival tolerance (metres)
+     * @param velTol Velocity arrival tolerance (m/s XY magnitude)
+     * @param minTRemaining Minimum horizon to prevent collapse to a single step
+     * @param timeout Hard per-waypoint timeout — forces return if the robot never converges
+     */
+    suspend fun runWaypointToCompletion(
+        state: MecanumState,
+        target: MecanumState,
+        initialTRemaining: Duration,
+        io: SigmaIO,
+        posTol: Double = 0.05,
+        velTol: Double = 0.05,
+        minTRemaining: Duration = 40.milliseconds,
+        timeout: Duration = 10.seconds,
+    ) {
+        val legStart = io.time()
+        val legDeadlineNs = legStart + timeout
+
+        var tRemaining = initialTRemaining
+
+        while (true) {
+            val u = solveWaypoint(state, target, tRemaining, lqrRef = true)
+
+            val voltage = io.voltage()
+            io.driveFL = u[0] * 12.0 / voltage
+            io.driveBL = u[1] * 12.0 / voltage
+            io.driveBR = u[2] * 12.0 / voltage
+            io.driveFR = u[3] * 12.0 / voltage
+
+            // Update tRemaining from solver's forward-simulated ETA
+            tRemaining = prevWaypointEta().coerceAtLeast(minTRemaining)
+
+            // Check arrival
+            val posErr = hypot(
+                state.pos.v.x - target.pos.v.x,
+                state.pos.v.y - target.pos.v.y,
+            )
+            val velMag = hypot(state.vel.v.x, state.vel.v.y)
+
+            if (posErr < posTol && velMag < velTol) {
+                return  // Arrived
+            }
+
+            if (io.time() > legDeadlineNs) {
+                return  // Timed out
+            }
+
+            yield()  // Suspend to allow other coroutines to run
+        }
+    }
 
     override fun close() {
         MecanumLTVBridge.nativeDestroy(handle)

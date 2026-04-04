@@ -2,9 +2,9 @@ package sigmacorns
 
 import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
-import sigmacorns.constants.Network
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.PollableDispatcher
+import sigmacorns.control.ltv.LTVClient
 import sigmacorns.logic.AimingSystem
 import sigmacorns.logic.IntakeCoordinator
 import sigmacorns.subsystem.Drivetrain
@@ -29,6 +29,8 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     // Logic
     val aim = AimingSystem(this, blue)
     val intakeCoordinator = IntakeCoordinator(this)
+
+    val ltv = LTVClient(drivetrainParameters)
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
@@ -84,5 +86,6 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     override fun close() {
         aim.close()
         limelight?.stop()
+        ltv.close()
     }
 }
