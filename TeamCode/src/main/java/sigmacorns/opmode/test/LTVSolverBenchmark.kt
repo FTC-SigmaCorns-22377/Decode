@@ -6,7 +6,7 @@ import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
 import sigmacorns.control.ltv.QpSolverType
-import sigmacorns.control.mpc.TrajoptLoader
+import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.io.SimIO
 import sigmacorns.opmode.SigmaOpMode
 import java.util.Random

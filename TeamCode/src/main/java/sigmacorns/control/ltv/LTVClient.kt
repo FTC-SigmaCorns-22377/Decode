@@ -1,9 +1,8 @@
 package sigmacorns.control.ltv
 
-import sigmacorns.control.mpc.TrajoptTrajectory
+import sigmacorns.control.trajopt.TrajoptTrajectory
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.MecanumState
-import kotlin.math.floor
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -60,7 +59,7 @@ class LTVClient private constructor(
         horizon: Int = 30,
         dt: Duration = 20.milliseconds,
         qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
-        rDiag: DoubleArray = doubleArrayOf(0.005, 0.005, 0.005, 0.005),
+        rDiag: DoubleArray = doubleArrayOf(0.03, 0.03, 0.03, 0.03),
         qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
         solverType: QpSolverType = QpSolverType.NEON_IPM,
         windowSelConfig: WindowSelConfig = WindowSelConfig()

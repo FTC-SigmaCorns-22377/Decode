@@ -5,7 +5,7 @@ import sigmacorns.Robot
 import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
-import sigmacorns.control.mpc.TrajoptLoader
+import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.io.JoltSimIO
 import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.io.BallColor

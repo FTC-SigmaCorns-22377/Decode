@@ -1,4 +1,4 @@
-package sigmacorns.control.mpc
+package sigmacorns.control.trajopt
 
 import com.google.gson.Gson
 import sigmacorns.opmode.SigmaOpMode.Companion.SIM

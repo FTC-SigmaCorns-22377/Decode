@@ -5,22 +5,24 @@ import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
 import sigmacorns.control.ltv.LTVRerunLogger
-import sigmacorns.control.mpc.TrajoptLoader
+import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
 @TeleOp(group = "test")
-class LTVSimple : LTVTest("Trajectory 1")
+class LTVSimple : LTVTest("simple","Trajectory 1")
 
-open class LTVTest(val trajName: String) : SigmaOpMode() {
+@TeleOp(group = "test")
+class LTV12Ball : LTVTest("test12ball","Trajectory 1")
+
+open class LTVTest(val projName: String, val trajName: String) : SigmaOpMode() {
     override fun runOpMode() {
-        val projectFile = TrajoptLoader.findProjectFile("simple")
+        val projectFile = TrajoptLoader.findProjectFile(projName)
             ?: throw IllegalStateException("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
 
         val traj = TrajoptLoader.loadTrajectory(projectFile, trajName)

@@ -2,7 +2,7 @@ package sigmacorns.control.ltv
 
 import org.joml.Vector3d
 import sigmacorns.State
-import sigmacorns.control.mpc.TrajoptTrajectory
+import sigmacorns.control.trajopt.TrajoptTrajectory
 import sigmacorns.io.RerunLogging
 import sigmacorns.io.SigmaIO
 

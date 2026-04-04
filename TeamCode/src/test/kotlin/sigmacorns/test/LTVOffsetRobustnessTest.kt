@@ -7,8 +7,7 @@ import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
 import sigmacorns.control.ltv.QpSolverType
-import sigmacorns.control.mpc.TrajoptLoader
-import sigmacorns.control.mpc.TrajoptTrajectory
+import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.io.RerunLogging
 import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.io.SimIO
@@ -19,9 +18,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration.Companion.nanoseconds
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
-import kotlin.time.measureTime
 
 /**
  * Tests HPIPM_OCP LTV robustness across a 5×5×5 grid of starting offsets.
