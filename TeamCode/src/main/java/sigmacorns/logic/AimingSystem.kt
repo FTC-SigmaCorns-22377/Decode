@@ -8,6 +8,7 @@ import sigmacorns.constants.ballExitRadius
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.flywheelRadius
 import sigmacorns.constants.turretPos
+import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.aim.Ballistics
 import sigmacorns.control.aim.OmegaMap
 import sigmacorns.control.aim.ShotSolver
@@ -39,9 +40,9 @@ import kotlin.time.Duration
 class AimingSystem(
     private val robot: Robot,
     private val blue: Boolean,
-) {
+) : AutoAim {
     val turret get() = robot.turret
-    lateinit var autoAim: GTSAMEstimator
+    override lateinit var autoAim: GTSAMEstimator
         private set
     var visionTracker: VisionTracker? = null
         private set
@@ -49,25 +50,25 @@ class AimingSystem(
     private lateinit var ballistics: Ballistics
     private lateinit var shotSolver: ShotSolver
 
-    var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
+    override var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
 
-    var positionOverride: Double? = null
+    override var positionOverride: Double? = null
 
     /** Distance from fused pose to goal, updated each [updateVision] call. */
-    var targetDistance: Double = 3.0
+    override var targetDistance: Double = 3.0
         private set
 
     /**
      * Set to true to arm a shot. AimingSystem will fire (TRANSFERRING) as soon as all
      * actuators are within tolerance of the solver target. Cleared automatically after firing.
      */
-    var shotRequested: Boolean = false
+    override var shotRequested: Boolean = false
 
     /**
      * True when turret, hood, and flywheel are all within tolerance of the current solver target.
      * Updated every loop; readable by opmodes for telemetry.
      */
-    var readyToShoot: Boolean = false
+    override var readyToShoot: Boolean = false
         private set
 
     private var lastShotState: Ballistics.ShotState? = null
@@ -75,7 +76,7 @@ class AimingSystem(
     /**
      * Initialize all subsystems. Call once before the main loop.
      */
-    fun init(initialPose: Pose2d, apriltagTracking: Boolean) {
+    override fun init(initialPose: Pose2d, apriltagTracking: Boolean) {
         autoAim = GTSAMEstimator(
             landmarkPositions = FieldLandmarks.landmarks,
             initialPose = initialPose,
@@ -190,7 +191,7 @@ class AimingSystem(
      * Convenience: full pipeline update (vision -> turret inputs -> solver targets).
      * positionOverride is applied last and always wins over solver output.
      */
-    fun update(dt: Duration, aimTurret: Boolean = true) {
+    override fun update(dt: Duration, aimTurret: Boolean) {
         updateVision()
         setTurretInputs(dt)
         setShooterInputs(aimTurret)
@@ -201,13 +202,14 @@ class AimingSystem(
         }
     }
 
-    fun close() {
+    override fun close() {
         autoAim.close()
     }
 }
 
 object AimConfig {
     @JvmField var goalHeight = 1.14
+    @JvmField var g = 9.81
 
     @JvmField var launchEfficiency = 0.3
     val omegaMap = object : OmegaMap {

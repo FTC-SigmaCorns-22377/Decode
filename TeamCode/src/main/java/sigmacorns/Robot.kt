@@ -8,8 +8,10 @@ import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.mpc.ContourSelectionMode
 import sigmacorns.control.mpc.MPCClient
 import sigmacorns.control.mpc.MPCRunner
+import sigmacorns.control.aim.AutoAim
 import sigmacorns.logic.AimingSystem
 import sigmacorns.logic.IntakeCoordinator
+import sigmacorns.logic.NativeAutoAim
 import sigmacorns.subsystem.Drivetrain
 import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
@@ -25,7 +27,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
+class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): AutoCloseable {
     // Subsystems
     val shooter = Shooter(io)
     val drive = Drivetrain()
@@ -34,7 +36,7 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     val turret = Turret(io)
 
     // Logic
-    val aim = AimingSystem(this, blue)
+    val aim: AutoAim = if (useNativeAim) NativeAutoAim(this, blue) else AimingSystem(this, blue)
     val intakeCoordinator = IntakeCoordinator(this)
 
     val dispatcher = PollableDispatcher(io)
