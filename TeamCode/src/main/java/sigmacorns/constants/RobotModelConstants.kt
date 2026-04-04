@@ -26,7 +26,7 @@ val bareMotorStallTorque = 0.14416
 /**
  * goBILDA 5203 planetary gearbox ratio for drive motors (13.7:1 variant)
  */
-val driveGearRatio = 13.7
+val driveGearRatio =  6000.0/435.0*27/24
 
 val driveMotor = LinearDcMotor(bareMotorTopSpeed/driveGearRatio,bareMotorStallTorque*driveGearRatio)
 
@@ -35,11 +35,11 @@ val driveMotor = LinearDcMotor(bareMotorTopSpeed/driveGearRatio,bareMotorStallTo
  */
 val drivetrainParameters = MecanumParameters(
     driveMotor,
-    0.2,
-    0.2,
+    0.148,
+    0.15,
     0.048,
-    14.1,
-    0.5,
+    10.1,
+    0.3,
     0.1,
     0.05
 )
