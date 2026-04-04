@@ -78,27 +78,27 @@ class Auto12Ball : SigmaOpMode() {
 
             // Phase 1: Spin up flywheel then shoot preloads via TRANSFERRING
             robot.aimFlywheel = false
-//            robot.shooter.flywheelTarget = FLYWHEEL_TARGET
-//            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-//            val preShootStart = io.time()
-//            while (opModeIsActive()) {
-//                state.update(io)
-//                val t = (io.time() - preShootStart).toDouble(DurationUnit.SECONDS)
-//
-//                // Spin up for 1s, then transfer for 1.5s to shoot all 3
-//                if (t >= 1.0) {
-////                    robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
-//                }
-//
-//                robot.update()
-//                io.update()
-//                if (SIM) sleep(SIM_UPDATE_TIME.inWholeMilliseconds)
-//                if (t >= 1.0 + shootDuration) break
-//            }
+            robot.shooter.flywheelTarget = FLYWHEEL_TARGET
+            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+            val preShootStart = io.time()
+            while (opModeIsActive()) {
+                state.update(io)
+                val t = (io.time() - preShootStart).toDouble(DurationUnit.SECONDS)
+
+                // Spin up for 1s, then transfer for 1.5s to shoot all 3
+                if (t >= 1.0) {
+//                    robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+                }
+
+                robot.update()
+                io.update()
+                if (SIM) sleep(SIM_UPDATE_TIME.inWholeMilliseconds)
+                if (t >= 1.0 + shootDuration) break
+            }
 
             // Phase 2: Follow trajectory with intake/shoot cycles
-//            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-//            robot.shooter.flywheelTarget = 0.0
+            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+            robot.shooter.flywheelTarget = 0.0
 
             val startTime = io.time()
 
@@ -131,15 +131,15 @@ class Auto12Ball : SigmaOpMode() {
                     elapsedSeconds >= shootTime - spinUpLeadTime && elapsedSeconds < shootTime
                 }
                 robot.aimFlywheel = false
-//                robot.shooter.flywheelTarget = if (shouldSpinUp) FLYWHEEL_TARGET else 0.0
+                robot.shooter.flywheelTarget = if (shouldSpinUp) FLYWHEEL_TARGET else 0.0
 
                 // State machine: intake during intake zones, transfer during shoot windows
                 when {
                     isShooting -> {
-//                        robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+                        robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
                     }
                     traj.isIntakeZone(elapsedSeconds) -> {
-//                        robot.intakeCoordinator.startIntake()
+                        robot.intakeCoordinator.startIntake()
                     }
                     else -> {
                         if (robot.intakeTransfer.state == IntakeTransfer.State.INTAKING ||

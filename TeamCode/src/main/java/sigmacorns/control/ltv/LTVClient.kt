@@ -191,8 +191,8 @@ class LTVClient private constructor(
         target: MecanumState,
         tRemaining: Duration,
         lqrRef: Boolean = false,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 500.0, 1.0, 1.0, 1.0),
-        r: Double = 0.005,
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 20.0, 1.0, 1.0, 1.0),
+        r: Double = 0.020,
     ): DoubleArray {
         val x0 = doubleArrayOf(
             state.pos.v.x, state.pos.v.y, state.pos.rot,
@@ -215,7 +215,7 @@ class LTVClient private constructor(
     fun holdPos(
         io: SigmaIO,
         p: Pose2d,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 500.0, 1.0, 1.0, 1.0),
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
         r: Double = 0.015,
     ) {
         val u = solveWaypoint(
@@ -273,6 +273,30 @@ class LTVClient private constructor(
     }
 
     fun numWindows(): Int = numWindows
+
+    suspend fun runPathToCompletion(traj: TrajoptTrajectory, io: SigmaIO) {
+        loadTrajectory(traj)
+        val legStart = io.time()
+
+        while (true) {
+            val currentState = MecanumState(io.velocity(), io.position())
+            val elapsedTime = (io.time() - legStart)
+
+            val u = solve(currentState, elapsedTime)
+
+            val voltage = io.voltage()
+            io.driveFL = u[0] * 12.0 / voltage
+            io.driveBL = u[1] * 12.0 / voltage
+            io.driveBR = u[2] * 12.0 / voltage
+            io.driveFR = u[3] * 12.0 / voltage
+
+            if (isComplete(elapsedTime)) {
+                return
+            }
+
+            yield()
+        }
+    }
 
     /**
      * Suspending function that runs a waypoint to completion.

@@ -6,11 +6,15 @@ import org.joml.Vector2d
 import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.ShotZone
+import sigmacorns.constants.drivetrainParameters
 import sigmacorns.math.Pose2d
 import sigmacorns.math.closestPointOnConvexPolygon
 import sigmacorns.sim.MecanumState
 import sigmacorns.subsystem.IntakeTransfer
 import kotlin.math.PI
+import kotlin.math.absoluteValue
+import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.time.Duration.Companion.seconds
 
 enum class AutoAction {
@@ -54,8 +58,22 @@ class AutoAuto(
     )
 
     fun shootZone(zone: ShotZone): AutoWaypoint {
-        val p = closestPointOnConvexPolygon(zone.pts, lastPos.v)
-        return AutoWaypoint(Pose2d(p,lastPos.rot), Vector2d(), AutoAction.SHOOT)
+        val robotRadius = hypot(drivetrainParameters.lx,drivetrainParameters.ly)
+        val wallBoundary = 1.8288 - robotRadius
+
+        val adjustedPts = zone.pts.map { pt ->
+            val maxCoord = max(pt.x.absoluteValue, pt.y.absoluteValue)
+            if (maxCoord > wallBoundary) {
+                // Scale point inward to stay within safe zone
+                val scale = wallBoundary / maxCoord
+                Vector2d(pt.x * scale, pt.y * scale)
+            } else {
+                pt
+            }
+        }
+
+        val p = closestPointOnConvexPolygon(adjustedPts, lastPos.v)
+        return AutoWaypoint(Pose2d(p, lastPos.v.angle(p)), Vector2d(), AutoAction.SHOOT)
     }
 
     private var lastPos = pos
@@ -114,6 +132,9 @@ class AutoAuto(
                 }
 
                 hold.cancel()
+
+                robot.aimFlywheel = false
+                robot.aimTurret = false
             }
         }
     }

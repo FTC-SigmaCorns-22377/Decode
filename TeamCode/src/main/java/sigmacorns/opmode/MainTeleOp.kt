@@ -45,7 +45,7 @@ class   MainTeleOp : SigmaOpMode() {
         robot.startApriltag()
 
         // State
-        var autoAimEnabled = false
+        var autoAimEnabled = true
         var flywheelTargetSpeed = 400.0
         val flywheelSpeedStep = 25.0
 
