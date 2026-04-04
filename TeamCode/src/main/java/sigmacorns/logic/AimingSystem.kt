@@ -196,14 +196,18 @@ class AimingSystem(
             var bestShot: Ballistics.ShotState? = null
             var bestError = Double.POSITIVE_INFINITY
 
+            // Compute theta that points at the goal
+            val b = (target.dx) / 1.0 - target.vR.x
+            val c = (target.dy) / 1.0 - target.vR.y
+            val theta = Math.atan2(c, b)
+
             val phiSteps = 20
             for (i in 0..phiSteps) {
                 val phi = ShooterConfig.minAngleDeg + (ShooterConfig.maxAngleDeg - ShooterConfig.minAngleDeg) * i / phiSteps
                 val phiRad = Math.toRadians(phi)
 
-                // Use current turret position for theta
                 val candidate = Ballistics.ShotState(
-                    theta = turret.pos + autoAim.fusedPose.rot,
+                    theta = theta,
                     phi = phiRad,
                     vExit = AimConfig.vMax
                 )

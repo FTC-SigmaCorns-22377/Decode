@@ -9,6 +9,7 @@ import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.subsystem.IntakeTransfer
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
@@ -30,7 +31,7 @@ class Auto12Far: SigmaOpMode() {
         io.setPosition(initialSample.pos)
 
         val robot = Robot(io, blue = false)
-        robot.init(initialSample.pos, apriltagTracking = !SIM)
+        robot.init(initialSample.pos, apriltagTracking = false)
         robot.aimTurret = true
         robot.aimFlywheel = false
 
@@ -43,6 +44,7 @@ class Auto12Far: SigmaOpMode() {
         // Phase 1: Shoot all preloads using aimFlywheel
         robot.aimFlywheel = true
         robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+        var transferStartTime: Duration? = null
 
         while (opModeIsActive()) {
             state.update(io)
@@ -50,7 +52,18 @@ class Auto12Far: SigmaOpMode() {
             io.update()
 
             robot.aim.shotRequested = true
-            if (robot.beamBreak.ballCount == 0) break
+
+            // Track transfer start time
+            if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING && transferStartTime == null) {
+                transferStartTime = io.time()
+            }
+
+            // Only exit if balls are gone AND 2 seconds have passed since transfer started
+            if (robot.beamBreak.ballCount == 0 && transferStartTime != null &&
+                (io.time() - transferStartTime) >= 2.seconds) { // 2 seconds in nanoseconds
+                break
+            }
+
             robot.aimFlywheel = false
         }
 
@@ -81,6 +94,7 @@ class Auto12Far: SigmaOpMode() {
     ) {
         robot.ltv.loadTrajectory(traj)
         val startTime = io.time()
+        var transferStartTime: Duration? = null
 
         while (opModeIsActive()) {
             state.update(io)
@@ -109,18 +123,23 @@ class Auto12Far: SigmaOpMode() {
 
             if (inIntakeZone) {
                 robot.intakeCoordinator.startIntake()
-            } else if (elapsedSeconds >= (traj.waypointTimes.getOrNull(if(last) 1 else 2) ?: Double.MAX_VALUE) &&
-                elapsedSeconds < (traj.waypointTimes.getOrNull(if(last) 2 else 3) ?: Double.MAX_VALUE)
-            ) {
-                // Shoot at waypoint 3
+            } else if (elapsedSeconds >= (traj.waypointTimes.getOrNull(if(last) 1 else 2) ?: Double.MAX_VALUE)) {
                 robot.aimFlywheel = true
-                robot.aim.shotRequested = true
+                if(elapsedSeconds >= 0.9 * traj.totalTime) {
+                    // Shoot at last waypoint (only after 90% of trajectory)
+                    robot.aim.shotRequested = true
+                }
             } else {
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 robot.aimFlywheel = false
             }
 
             robot.update()
+
+            // Track transfer start time
+            if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING && transferStartTime == null) {
+                transferStartTime = io.time()
+            }
 
             telemetry.addData("elapsed", "%.2f / %.2f s".format(elapsedSeconds, traj.totalTime))
             telemetry.addData("state", robot.intakeTransfer.state)
@@ -136,7 +155,14 @@ class Auto12Far: SigmaOpMode() {
 
             if (SIM) sleep(SIM_UPDATE_TIME.inWholeMilliseconds)
 
-            if (elapsedSeconds > traj.totalTime + 1.0) break
+            // Exit only after trajectory completes AND 2 seconds have passed since transfer (if transfer happened)
+            val canExit = if (transferStartTime != null) {
+                (io.time() - transferStartTime) >= 2.seconds // 2 seconds in nanoseconds
+            } else {
+                true
+            }
+
+            if (elapsedSeconds > traj.totalTime + 1.5 && canExit) break
         }
     }
 }
