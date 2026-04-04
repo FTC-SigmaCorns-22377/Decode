@@ -61,8 +61,8 @@ class Ballistics(
 
         if (b*b < 4.0*a*c) return Double.POSITIVE_INFINITY
 
-        // find travel time so the
-        val T = (-b + sqrt(b*b - 4.0*a*c))/(2.0*a)
+        // find travel time, highest root bc lob (since a is negative is - sqrt)
+        val T = (-b - sqrt(b*b - 4.0*a*c))/(2.0*a)
         val xf = target.turret.x + rH*(1.0 - sin(shot.phi))*cos(shot.theta) + T*(shot.vExit*cos(shot.phi)*cos(shot.theta) + target.vR.x)
         val yf = target.turret.y + rH*(1.0 - sin(shot.phi))*sin(shot.theta) + T*(shot.vExit*cos(shot.phi)*sin(shot.theta) + target.vR.y)
 
@@ -321,9 +321,16 @@ class Ballistics(
         }
     }
 
+    fun isLob(s: ShotState, T:Double): Boolean {
+        // lob when the vertical velocity at target point (t=T) is negative
+        val vz = s.vExit * sin(s.phi) - g * T
+
+        return vz < 0
+    }
+
     fun isFeasible(p: Target, T: Double): Boolean {
         val sol = solve(p,T)
-        return 0 <= sol.vExit && sol.vExit <= vMax && phiMin <= sol.phi && sol.phi <= phiMax
+        return 0 <= sol.vExit && sol.vExit <= vMax && phiMin <= sol.phi && sol.phi <= phiMax && isLob(sol, T)
     }
 
     fun tBounds(p: Target, tol: Double): ClosedRange<Double> {
