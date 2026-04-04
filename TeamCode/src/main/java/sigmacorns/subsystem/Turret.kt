@@ -124,7 +124,7 @@ class Turret(val io: SigmaIO) {
 
     /** Convert radians to servo position [0.0, 1.0]. 0 rad = 0.5 (forward). */
     private fun angleToServo(angle: Double): Double {
-        return (0.5 + (angle - TurretServoConfig.servoCenterAngle) / TurretServoConfig.servoTotalRange).coerceIn(0.0, 1.0)
+        return (0.5 + ((angle - TurretServoConfig.servoCenterAngle) / TurretServoConfig.servoTotalRange)).coerceIn(0.0, 1.0)
     }
 }
 
@@ -133,7 +133,7 @@ class Turret(val io: SigmaIO) {
  */
 object TurretServoConfig {
     /** Total physical rotation of the servo in radians (355 degrees) */
-    @JvmField var servoTotalRange = 355.0 * PI / 180.0
+    @JvmField var servoTotalRange = 315.0 * PI / 180.0
 
     /** Minimum turret angle in radians */
     @JvmField var minAngle = -PI/2.0

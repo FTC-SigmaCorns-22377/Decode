@@ -58,7 +58,6 @@ class Auto12Ball : SigmaOpMode() {
         // Sim X axis is negated relative to real field — flip goal for aiming
         if (SIM) {
             robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
-            robot.aim.targeting.goalPosition = robot.aim.goalPosition
         }
 
         val ltv = LTVClient(drivetrainParameters).also { it.loadTrajectory(traj) }

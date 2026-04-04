@@ -227,7 +227,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         cachedBeamBreak3 = beamBreak3Sensor?.state?.not() ?: false
 
         // update analog reading
-        cachedTurretPosition = -((turretEncoder?.voltage ?: 0.0) / 3.3 - 0.5) * TurretServoConfig.servoTotalRange + TurretServoConfig.servoCenterAngle
+        cachedTurretPosition = -((turretEncoder?.voltage ?: 0.0) / 3.3 - 0.5) * PI*2.0
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0

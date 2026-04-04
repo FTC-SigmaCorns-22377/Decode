@@ -36,18 +36,22 @@ class ShotSolver(
         val tMax = bounds.endInclusive
         val tMid = (tMin + tMax) / 2.0
 
-        // Lipschitz bounds for solve() components over [tMin, tMax]
-        val lip = ballistics.lipschitzBounds(target, tMid, tMin, tMax)
+        // Compute Lipschitz constant over [activeLo, activeHi]
+        fun computeL(activeLo: Double, activeHi: Double): Double {
+            val activeMid = (activeLo + activeHi) / 2.0
+            val lip = ballistics.lipschitzBounds(target, activeMid, activeLo, activeHi)
+            val halfWidth = (activeHi - activeLo) / 2.0
+            // Conservative phi/vExit ranges via Lipschitz bounds from midpoint
+            val sMid = ballistics.solve(target, activeMid)
+            val phiRange = (sMid.phi - lip.lPhi * halfWidth)..(sMid.phi + lip.lPhi * halfWidth)
+            val vRange = (sMid.vExit - lip.lVExit * halfWidth)..(sMid.vExit + lip.lVExit * halfWidth)
+            val lOmega = omega.lipschitzBound(phiRange, vRange, lip.lPhi, lip.lVExit)
+            return max(wOmega * lOmega, max(wPhi * lip.lPhi, wTheta * lip.lTheta))
+        }
 
-        // Estimate phi and vExit ranges from endpoints for omega Lipschitz bound
-        val sLo = ballistics.solve(target, tMin)
-        val sHi = ballistics.solve(target, tMax)
-        val phiRange = minOf(sLo.phi, sHi.phi)..maxOf(sLo.phi, sHi.phi)
-        val vRange = minOf(sLo.vExit, sHi.vExit)..maxOf(sLo.vExit, sHi.vExit)
-        val lOmega = omega.lipschitzBound(phiRange, vRange, lip.lPhi, lip.lVExit)
-
-        // Lipschitz constant of T -> moveCost(cur, solve(target, T))
-        val L = max(wOmega * lOmega, max(wPhi * lip.lPhi, wTheta * lip.lTheta))
+        var L = computeL(tMin, tMax)
+        var lipLo = tMin
+        var lipHi = tMax
 
         // Piyavskii-Shubert 1D Lipschitz minimization
         val samples = sortedMapOf<Double, Double>()
@@ -65,8 +69,11 @@ class ShotSolver(
             iter++
 
             // Find interval with lowest lower bound and the T that achieves it
+            // Also track the active range (intervals not pruned by bestCost)
             var lbMin = Double.MAX_VALUE
             var nextT = tMid
+            var activeLo = Double.MAX_VALUE
+            var activeHi = Double.MIN_VALUE
 
             val keys = samples.keys.toList()
             for (i in 0 until keys.size - 1) {
@@ -74,6 +81,10 @@ class ShotSolver(
                 val fa = samples[ta]!!; val fb = samples[tb]!!
                 // Minimum of the sawtooth lower envelope in [ta, tb]
                 val lb = (fa + fb) / 2.0 - L * (tb - ta) / 2.0
+                if (lb < bestCost) {
+                    activeLo = minOf(activeLo, ta)
+                    activeHi = maxOf(activeHi, tb)
+                }
                 if (lb < lbMin) {
                     lbMin = lb
                     nextT = ((ta + tb) / 2.0 + (fa - fb) / (2.0 * L)).coerceIn(ta, tb)
@@ -81,6 +92,26 @@ class ShotSolver(
             }
 
             lbGlobal = lbMin
+
+            // Recompute L on tighter interval if active range shrank to ≤ half
+            if (activeLo < Double.MAX_VALUE && (activeHi - activeLo) <= (lipHi - lipLo) / 2.0) {
+                L = computeL(activeLo, activeHi)
+                lipLo = activeLo
+                lipHi = activeHi
+                // Recompute global lower bound with new L
+                lbGlobal = Double.MAX_VALUE
+                for (i in 0 until keys.size - 1) {
+                    val ta = keys[i]; val tb = keys[i + 1]
+                    if (ta >= activeLo && tb <= activeHi) {
+                        val fa = samples[ta]!!; val fb = samples[tb]!!
+                        val lb = (fa + fb) / 2.0 - L * (tb - ta) / 2.0
+                        lbGlobal = minOf(lbGlobal, lb)
+                    }
+                }
+                if (lbGlobal == Double.MAX_VALUE) lbGlobal = lbMin
+                if (bestCost - lbGlobal <= tol) break
+                continue // re-pick nextT with tighter L
+            }
 
             val cost = eval(nextT)
             if (cost < bestCost) {
@@ -120,9 +151,11 @@ class ShotSolver(
         val lip2 = ballistics.lipschitzBounds(target2, tMid2, tMin2, tMax2)
 
         fun omegaL(lipB: Ballistics.LipschitzBounds, target: Ballistics.Target, tLo: Double, tHi: Double): Double {
-            val sLo = ballistics.solve(target, tLo); val sHi = ballistics.solve(target, tHi)
-            val phiR = minOf(sLo.phi, sHi.phi)..maxOf(sLo.phi, sHi.phi)
-            val vR   = minOf(sLo.vExit, sHi.vExit)..maxOf(sLo.vExit, sHi.vExit)
+            val tMid = (tLo + tHi) / 2.0
+            val halfWidth = (tHi - tLo) / 2.0
+            val sMid = ballistics.solve(target, tMid)
+            val phiR = (sMid.phi - lipB.lPhi * halfWidth)..(sMid.phi + lipB.lPhi * halfWidth)
+            val vR   = (sMid.vExit - lipB.lVExit * halfWidth)..(sMid.vExit + lipB.lVExit * halfWidth)
             return omega.lipschitzBound(phiR, vR, lipB.lPhi, lipB.lVExit)
         }
 
@@ -218,9 +251,11 @@ class ShotSolver(
 
         // Omega Lipschitz bounds — sample endpoints to cover the phi/vExit ranges
         fun omegaL(lipB: Ballistics.LipschitzBounds, target: Ballistics.Target, tLo: Double, tHi: Double): Double {
-            val sLo = ballistics.solve(target, tLo); val sHi = ballistics.solve(target, tHi)
-            val phiR = minOf(sLo.phi, sHi.phi)..maxOf(sLo.phi, sHi.phi)
-            val vR   = minOf(sLo.vExit, sHi.vExit)..maxOf(sLo.vExit, sHi.vExit)
+            val tMid = (tLo + tHi) / 2.0
+            val halfWidth = (tHi - tLo) / 2.0
+            val sMid = ballistics.solve(target, tMid)
+            val phiR = (sMid.phi - lipB.lPhi * halfWidth)..(sMid.phi + lipB.lPhi * halfWidth)
+            val vR   = (sMid.vExit - lipB.lVExit * halfWidth)..(sMid.vExit + lipB.lVExit * halfWidth)
             return omega.lipschitzBound(phiR, vR, lipB.lPhi, lipB.lVExit)
         }
 

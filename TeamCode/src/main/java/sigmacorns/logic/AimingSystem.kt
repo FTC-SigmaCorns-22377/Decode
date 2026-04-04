@@ -14,6 +14,7 @@ import sigmacorns.control.aim.ShotSolver
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
+import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
@@ -141,12 +142,14 @@ class AimingSystem(
     fun setShooterInputs(aimTurret: Boolean) {
         val shooter = robot.shooter
         val fusedPose = autoAim.fusedPose
-        val vel = robot.io.velocity()
+        val odoVel = Vector2d(robot.io.velocity().v)
+
+        val vel = odoVel.rotate(fusedPose.rot - robot.io.position().rot)
 
         val target = Ballistics.Target(
             target = FieldLandmarks.goalPosition3d(blue, AimConfig.goalHeight),
             turret = Vector3d(fusedPose.v.x, fusedPose.v.y, turretPos.z),
-            vR = Vector2d(vel.v.x, vel.v.y),
+            vR = Vector2d(vel.x, vel.y),
         )
 
         val currentVexit = AimConfig.omegaInv(robot.io.flywheelVelocity(),robot.shooter.hoodAngle)
@@ -206,7 +209,7 @@ class AimingSystem(
 object AimConfig {
     @JvmField var goalHeight = 1.14
 
-    @JvmField var launchEfficiency = 0.5
+    @JvmField var launchEfficiency = 0.15
 
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
