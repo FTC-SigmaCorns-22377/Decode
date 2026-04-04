@@ -2,7 +2,9 @@ package sigmacorns
 
 import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
+import sigmacorns.constants.antiWheelieFilter
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.control.AntiWheelieConfig
 import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.ltv.LTVClient
 import sigmacorns.logic.AimingSystem
@@ -21,7 +23,7 @@ import kotlin.time.Duration
 class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     // Subsystems
     val shooter = Shooter(io)
-    val drive = Drivetrain()
+    val drive = Drivetrain(antiWheelieFilter)
     val beamBreak = BeamBreak(io)
     val intakeTransfer = IntakeTransfer(io)
     val turret = Turret(io)

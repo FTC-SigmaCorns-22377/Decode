@@ -34,7 +34,7 @@ class WaypointSquareTest : SigmaOpMode() {
     // Initial tRemaining for the first call of each leg (before any ETA is available)
     private val INITIAL_T_REMAINING = 4.seconds
     // Minimum tRemaining passed to the solver (keeps N_eff >= 2 steps)
-    private val MIN_T_REMAINING = 0.04.seconds
+    private val MIN_T_REMAINING = 0.2.seconds
     // Hard per-leg timeout — forces advance if the robot never converges
     private val LEG_TIMEOUT = 10.seconds
 

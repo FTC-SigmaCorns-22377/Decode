@@ -6,6 +6,7 @@ import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.MecanumState
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -190,8 +191,8 @@ class LTVClient private constructor(
         target: MecanumState,
         tRemaining: Duration,
         lqrRef: Boolean = false,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
-        r: Double = 0.03,
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 500.0, 1.0, 1.0, 1.0),
+        r: Double = 0.005,
     ): DoubleArray {
         val x0 = doubleArrayOf(
             state.pos.v.x, state.pos.v.y, state.pos.rot,
@@ -214,8 +215,8 @@ class LTVClient private constructor(
     fun holdPos(
         io: SigmaIO,
         p: Pose2d,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
-        r: Double = 0.03,
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 500.0, 1.0, 1.0, 1.0),
+        r: Double = 0.015,
     ) {
         val u = solveWaypoint(
             MecanumState(io.velocity(),io.position()),
@@ -290,11 +291,11 @@ class LTVClient private constructor(
      * @param timeout Hard per-waypoint timeout — forces return if the robot never converges
      */
     suspend fun runWaypointToCompletion(
-        state: MecanumState,
         target: MecanumState,
         initialTRemaining: Duration,
         io: SigmaIO,
         posTol: Double = 0.05,
+        headingTol: Double = 0.05,
         velTol: Double = 0.05,
         minTRemaining: Duration = 40.milliseconds,
         timeout: Duration = 10.seconds,
@@ -305,7 +306,8 @@ class LTVClient private constructor(
         var tRemaining = initialTRemaining
 
         while (true) {
-            val u = solveWaypoint(state, target, tRemaining, lqrRef = true)
+            val currentState = MecanumState(io.velocity(), io.position())
+            val u = solveWaypoint(currentState, target, tRemaining, lqrRef = true)
 
             val voltage = io.voltage()
             io.driveFL = u[0] * 12.0 / voltage
@@ -316,14 +318,15 @@ class LTVClient private constructor(
             // Update tRemaining from solver's forward-simulated ETA
             tRemaining = prevWaypointEta().coerceAtLeast(minTRemaining)
 
-            // Check arrival
+            // Check arrival: XY position, heading, and velocity magnitude
             val posErr = hypot(
-                state.pos.v.x - target.pos.v.x,
-                state.pos.v.y - target.pos.v.y,
+                currentState.pos.v.x - target.pos.v.x,
+                currentState.pos.v.y - target.pos.v.y,
             )
-            val velMag = hypot(state.vel.v.x, state.vel.v.y)
+            val headingErr = abs(currentState.pos.rot - target.pos.rot)
+            val velMag = hypot(currentState.vel.v.x, currentState.vel.v.y)
 
-            if (posErr < posTol && velMag < velTol) {
+            if (posErr < posTol && headingErr < headingTol && velMag < velTol) {
                 return  // Arrived
             }
 

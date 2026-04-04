@@ -1,8 +1,6 @@
 package sigmacorns.control.trajopt
 
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import org.joml.Vector2d
 import sigmacorns.Robot
@@ -21,7 +19,7 @@ enum class AutoAction {
     SHOOT
 }
 
-enum class IntakePoints {
+enum class AutoPOI {
     SPIKE_FAR,
     SPIKE_MED,
     SPIKE_CLOSE,
@@ -40,7 +38,7 @@ class AutoAuto(
     val intakeSpeed: Double,
     val intakeStartX: Double,
     val intakeEndX: (FieldLandmarks.Spike) -> Double,
-    sequence: List<IntakePoints>
+    sequence: List<AutoPOI>
 ) {
     fun spikeIntake(spike: FieldLandmarks.Spike) = listOf(
         AutoWaypoint(
@@ -64,14 +62,14 @@ class AutoAuto(
 
     val waypoints: List<AutoWaypoint> = sequence.flatMap {
         val res = when(it) {
-            IntakePoints.SPIKE_FAR -> spikeIntake(FieldLandmarks.Spike.FAR)
-            IntakePoints.SPIKE_MED -> spikeIntake(FieldLandmarks.Spike.MED)
-            IntakePoints.SPIKE_CLOSE -> spikeIntake(FieldLandmarks.Spike.CLOSE)
-            IntakePoints.GATE -> TODO()
-            IntakePoints.HUMAN -> TODO()
-            IntakePoints.PRELOAD -> listOf(AutoWaypoint(pos, Vector2d(), AutoAction.SHOOT))
-            IntakePoints.LAUNCH_CLOSE -> listOf(shootZone(ShotZone.CLOSE))
-            IntakePoints.LAUNCH_FAR -> listOf(shootZone(ShotZone.FAR))
+            AutoPOI.SPIKE_FAR -> spikeIntake(FieldLandmarks.Spike.FAR)
+            AutoPOI.SPIKE_MED -> spikeIntake(FieldLandmarks.Spike.MED)
+            AutoPOI.SPIKE_CLOSE -> spikeIntake(FieldLandmarks.Spike.CLOSE)
+            AutoPOI.GATE -> TODO()
+            AutoPOI.HUMAN -> TODO()
+            AutoPOI.PRELOAD -> listOf(AutoWaypoint(pos, Vector2d(), AutoAction.SHOOT))
+            AutoPOI.LAUNCH_CLOSE -> listOf(shootZone(ShotZone.CLOSE))
+            AutoPOI.LAUNCH_FAR -> listOf(shootZone(ShotZone.FAR))
         }
 
         res.lastOrNull()?.let {
@@ -84,7 +82,6 @@ class AutoAuto(
     suspend fun run(robot: Robot, waypoint: AutoWaypoint) {
         val path: suspend ()->Unit = suspend {
             robot.ltv.runWaypointToCompletion(
-                MecanumState(robot.io.velocity(),robot.io.position()),
                 MecanumState(Pose2d(waypoint.v,0.0),waypoint.p),
                 5.seconds,
                 robot.io
