@@ -186,6 +186,8 @@ class LTVClient private constructor(
         target: MecanumState,
         tRemaining: Duration,
         lqrRef: Boolean = false,
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
+        r: Double = 0.03,
     ): DoubleArray {
         val x0 = doubleArrayOf(
             state.pos.v.x, state.pos.v.y, state.pos.rot,
@@ -199,7 +201,7 @@ class LTVClient private constructor(
         MecanumLTVBridge.nativeSolveWaypoint(
             handle, dtSeconds, x0, xTarget,
             maxOf(0.0, tRemaining.toDouble(DurationUnit.SECONDS)),
-            lqrRef, uOut,
+            lqrRef, qDiag, r, uOut,
         )
         // JNI order: [FL, FR, RL, RR] → SigmaIO order: [FL, BL, BR, FR]
         return doubleArrayOf(uOut[0], uOut[2], uOut[3], uOut[1])

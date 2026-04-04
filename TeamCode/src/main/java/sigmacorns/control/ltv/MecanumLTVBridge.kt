@@ -56,6 +56,9 @@ object MecanumLTVBridge {
     /** Returns the window index selected by the most recent solve() call. */
     @JvmStatic external fun nativeGetPrevIdx(handle: Long): Int
 
+    /** Returns the ETA (seconds) computed by the most recent solveWaypoint() call. */
+    @JvmStatic external fun nativeGetWaypointEta(handle: Long): Double
+
     /** Fills xRefOut[6] with x_ref_0 for windowIdx. Returns false on bad index. */
     @JvmStatic external fun nativeGetWindowRef(handle: Long, windowIdx: Int, xRefOut: DoubleArray): Boolean
 
@@ -85,6 +88,8 @@ object MecanumLTVBridge {
         xTarget: DoubleArray,
         tRemaining: Double,
         lqrRef: Boolean,
+        qDiag: DoubleArray,
+        r: Double,
         uOut: DoubleArray,
     ): Int
 }
