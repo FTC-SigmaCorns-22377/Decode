@@ -209,8 +209,7 @@ class AimingSystem(
 object AimConfig {
     @JvmField var goalHeight = 1.14
 
-    @JvmField var launchEfficiency = 0.15
-
+    @JvmField var launchEfficiency = 0.3
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
             vExit / (flywheelRadius * launchEfficiency)
