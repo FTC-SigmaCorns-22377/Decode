@@ -36,9 +36,9 @@ object EstimatorConfig {
     @JvmField var k3 = 0.178259
     @JvmField var p1 = 0.000360
     @JvmField var p2 = 0.002753
-    @JvmField var cameraOffsetX = 0.18312971
+    @JvmField var cameraOffsetX = 0.143044
     @JvmField var cameraOffsetY = 0.0
-    @JvmField var cameraOffsetZ = 0.32448638
+    @JvmField var cameraOffsetZ = 0.317345
     @JvmField var cameraRoll = -Math.toRadians(80.0)
     @JvmField var cameraPitch = 0.0
     @JvmField var cameraYaw = -PI / 2.0

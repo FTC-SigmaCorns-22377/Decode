@@ -66,7 +66,7 @@ class TurretPIDTuner : SigmaOpMode() {
             tel.addData("Servo Position", robot.turret.currentServoPosition)
             tel.addData("Servo L", io.turretLeft)
             tel.addData("Servo R", io.turretRight)
-            tel.addData("Slew Rate", TurretServoConfig.slewRate)
+            tel.addData("Aligned", robot.turret.aligned)
             tel.update()
 
             false

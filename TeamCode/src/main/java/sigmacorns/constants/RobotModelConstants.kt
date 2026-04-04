@@ -1,8 +1,8 @@
 package sigmacorns.constants
 
 import org.joml.Vector2d
+import org.joml.Vector3d
 import sigmacorns.control.MotorRangeMapper
-import sigmacorns.opmode.tune.FlywheelDeadbeatConfig
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
@@ -44,12 +44,15 @@ val drivetrainParameters = MecanumParameters(
     0.05
 )
 
+val flywheelEfficiency = 5650.0 / 6000.0
 
-val drivetrainCenter = Vector2d(0.03996203, 0.0)
-
-val flywheelGearRatio = 1.0
 // Two motors geared 1:1 to flywheel — double the torque
-val flywheelMotor = LinearDcMotor(bareMotorTopSpeed/flywheelGearRatio, 2*bareMotorStallTorque*flywheelGearRatio)
+val flywheelMotor = LinearDcMotor(
+    bareMotorTopSpeed*flywheelEfficiency,
+    2*bareMotorStallTorque*flywheelEfficiency
+)
+
+val flywheelRadius = 0.072
 
 val intakeGearRatio = 3.0
 val intakeMotor = LinearDcMotor(bareMotorTopSpeed/intakeGearRatio, bareMotorStallTorque*intakeGearRatio)
@@ -57,20 +60,20 @@ val intakeMotor = LinearDcMotor(bareMotorTopSpeed/intakeGearRatio, bareMotorStal
 /**
  * Parameters of the dual-motor flywheel used in the simulator
  */
+/** Flywheel inertia in kg*m^2: ½mr² = 0.5 * 0.38709252 kg * (0.046 m)² */
+const val FLYWHEEL_INERTIA = 0.000410
+
 val flywheelParameters = FlywheelParameters(
     flywheelMotor,
-    FlywheelDeadbeatConfig.inertia,
+    FLYWHEEL_INERTIA,
     0.0001,
 )
 
-/**
- * Default launch angle of the projectile measured from the floor plane.
- */
-const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0
-
 val turretTicksPerRad = (1.0 + (46.0 / 11.0)) * 28.0 / (2*PI) * 76 / 19
-val turretRange = MotorRangeMapper(
-    limits = -PI..PI,           // turret can rotate +/- 180 degrees
-    limitsTick = -PI*turretTicksPerRad..PI*turretTicksPerRad,
-    slowdownDist = 0.3           // slow down within 0.3 rad of limits
+
+// turret center, at at the height of the flywheel center (ballistics assumes turret center is position the ball arc is straight up)
+val turretPos = Vector3d(
+    -0.05007500, 0.0, 0.313
 )
+
+val ballExitRadius = 0.0785

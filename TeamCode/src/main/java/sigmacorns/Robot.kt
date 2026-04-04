@@ -2,32 +2,33 @@ package sigmacorns
 
 import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
-import sigmacorns.constants.flywheelMotor
-import sigmacorns.constants.flywheelParameters
+import sigmacorns.constants.Network
+import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.PollableDispatcher
-import sigmacorns.subsystem.AimingSystem
-import sigmacorns.subsystem.DriveController
-import sigmacorns.subsystem.Flywheel
+import sigmacorns.logic.AimingSystem
+import sigmacorns.logic.IntakeCoordinator
+import sigmacorns.subsystem.Drivetrain
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.BeamBreak
-import sigmacorns.subsystem.Hood
-import sigmacorns.subsystem.Intake
-import sigmacorns.subsystem.Transfer
+import sigmacorns.subsystem.IntakeTransfer
+import sigmacorns.subsystem.Shooter
 import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
 import kotlin.time.Duration
 
-class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoCloseable {
-    val aim = AimingSystem(this, blue, shotDataPath)
-    val flywheel = Flywheel(flywheelMotor, flywheelParameters.inertia, io)
-    val drive = DriveController()
-    val beamBreak = BeamBreak(this)
-    val intake = Intake(this)
-    val transfer = Transfer(this)
-    val turret = Turret(this)
-    val hood = Hood(this)
+class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
+    // Subsystems
+    val shooter = Shooter(io)
+    val drive = Drivetrain()
+    val beamBreak = BeamBreak(io)
+    val intakeTransfer = IntakeTransfer(io)
+    val turret = Turret(io)
+
+    // Logic
+    val aim = AimingSystem(this, blue)
+    val intakeCoordinator = IntakeCoordinator(this)
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
@@ -66,29 +67,18 @@ class Robot(val io: SigmaIO, blue: Boolean, shotDataPath: String? = null): AutoC
             turret.targetAngle = 0.0
         }
 
-        // Update subsystems
+        // 1. Read sensors
         beamBreak.update()
-        intake.update(dt)
-        transfer.update(dt)
 
-        // Update flywheel controller
-        if (aimFlywheel) {
-            flywheel.update(io.flywheelVelocity(), dt)
-        }
-
-        // Update hood (continuously adjusts launch angle)
-        hood.update(dt)
-
-        // Update aiming system (vision + turret)
+        // 2. Logic coordination (sets subsystem inputs)
+        // Aim runs first: updates vision/fusion so coordinators see fresh data
         aim.update(dt, aimTurret)
+        intakeCoordinator.update()
 
-        if (aimFlywheel) {
-            val recommended = aim.getRecommendedFlywheelVelocity()
-            flywheel.target = recommended ?: 0.0
-        }
-        if (dt > Duration.ZERO) {
-            flywheel.update(io.flywheelVelocity(), dt)
-        }
+        // 3. Subsystem updates (write IO)
+        intakeTransfer.update(dt, t)
+        shooter.update(dt)
+        turret.update(dt)
     }
 
     override fun close() {

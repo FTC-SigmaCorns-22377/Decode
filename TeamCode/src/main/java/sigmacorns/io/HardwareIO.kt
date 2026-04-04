@@ -3,6 +3,7 @@ package sigmacorns.io
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver
 import com.qualcomm.hardware.limelightvision.Limelight3A
 import com.qualcomm.hardware.lynx.LynxModule
+import com.qualcomm.robotcore.hardware.AnalogInput
 import com.qualcomm.robotcore.hardware.DcMotor
 import com.qualcomm.robotcore.hardware.DcMotorEx
 import com.qualcomm.robotcore.hardware.DcMotorSimple
@@ -14,7 +15,11 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.joml.Vector2d
 import sigmacorns.math.Pose2d
+import sigmacorns.subsystem.TurretServoConfig
 import sigmacorns.math.toPose2d
+import sigmacorns.subsystem.IntakeTransfer
+import sigmacorns.subsystem.Shooter
+import sigmacorns.subsystem.ShooterConfig
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -28,10 +33,10 @@ typealias FTCPose2d = org.firstinspires.ftc.robotcore.external.navigation.Pose2D
 // import odometry from some library
 class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //drive motor declarations
-    private val driveFLMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveFL")
-    private val driveBLMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveBL")
-    private val driveFRMotor: DcMotor = hardwareMap.get(DcMotor::class.java, "driveFR")
-    private val driveBRMotor: DcMotor = hardwareMap.get(DcMotor::class.java,"driveBR")
+    private val driveFLMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java,"driveFL")
+    private val driveBLMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java, "driveBL")
+    private val driveFRMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java, "driveFR")
+    private val driveBRMotor: DcMotorEx = hardwareMap.get(DcMotorEx::class.java,"driveBR")
 
     //shooter
     private val flywheel1: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"shooter1")
@@ -39,11 +44,12 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     //intake
     private val intake1Motor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"intake1")
     //intake
-    private val intake2Motor: DcMotor? = hardwareMap.tryGet(DcMotor::class.java,"intake2")
+    private val intake2Motor: DcMotorEx? = hardwareMap.tryGet(DcMotorEx::class.java,"intake2")
 
     // turret servos (dual-servo geared turret)
     private val turretLeftServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretLeft")
     private val turretRightServo: Servo? = hardwareMap.tryGet(Servo::class.java, "turretRight")
+    private val turretEncoder: AnalogInput? = hardwareMap.tryGet(AnalogInput::class.java, "turretEncoder")
 
     // hood servo
     private val hoodServo: Servo? = hardwareMap.tryGet(Servo::class.java, "hood")
@@ -60,11 +66,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
 
     //odometry
+    // TODO: thread pinpoint
     var pinpoint: GoBildaPinpointDriver? = hardwareMap.tryGet(GoBildaPinpointDriver::class.java,"pinpoint")
 
-    val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
+    private val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
 
-    private val allHubs: MutableList<LynxModule> = hardwareMap.getAll(LynxModule::class.java)
+    private val chub: LynxModule = hardwareMap.getAll<LynxModule>(LynxModule::class.java).find {
+        it.isParent
+    }!!
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -77,12 +86,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var turret: Double = 0.0
     override var turretLeft: Double = 0.5
     override var turretRight: Double = 0.5
-    override var hood: Double = 0.5
-    override var blocker: Double = 0.0
+    override var hood: Double = ShooterConfig.minServo
+    override var blocker: Double = IntakeTransfer.BLOCKER_DISENGAGED
 
     private var savedVoltage: Double = 12.0
-
-    var turretOffset = 0.0
 
     // Cached motor values
     private var cachedFlywheelVelocity: Double = 0.0
@@ -151,11 +158,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun turretPosition(): Double {
-        return cachedTurretPosition + turretOffset
-    }
-
-    override fun setTurretPosition(Offset: Double) {
-        turretOffset = Offset //change
+        return cachedTurretPosition
     }
 
     var posOffset = Pose2d()
@@ -223,11 +226,15 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         cachedBeamBreak2 = beamBreak2Sensor?.state?.not() ?: false
         cachedBeamBreak3 = beamBreak3Sensor?.state?.not() ?: false
 
+        // update analog reading
+        cachedTurretPosition = -((turretEncoder?.voltage ?: 0.0) / 3.3 - 0.5) * PI*2.0
+
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
-        cachedFlywheelVelocity = (flywheel1?.getVelocity(AngleUnit.RADIANS) ?: 0.0) * 28.0 * 2 * PI
-        cachedIntake1RPM = (intake1Motor?.velocity ?: 0.0) / 145.1 * 60
-        allHubs.map { it.clearBulkCache() }
+        // our encoders are plugged into drive motor ports so we only have to bulk read from the chub
+        cachedFlywheelVelocity = (driveBRMotor?.velocity ?: 0.0) / 28.0 * 2 * PI
+        cachedIntake1RPM = (driveFRMotor?.velocity ?: 0.0) / 145.1 * 60
+        chub.clearBulkCache()
     }
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
@@ -242,15 +249,15 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         pinpoint?.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD)
 
         pinpoint?.setOffsets(
-            -92.00000,
-            137.74906,
+            sigmacorns.constants.PinpointConfig.X_OFFSET_MM,
+            sigmacorns.constants.PinpointConfig.Y_OFFSET_MM,
             DistanceUnit.MM
         )
 
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(
             GoBildaPinpointDriver.EncoderDirection.FORWARD,
-            GoBildaPinpointDriver.EncoderDirection.FORWARD
+            GoBildaPinpointDriver.EncoderDirection.REVERSED
         )
 
         //resetting the positions for the IMU
@@ -294,6 +301,12 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         intake1Motor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
         intake2Motor?.mode = DcMotor.RunMode.RUN_WITHOUT_ENCODER
 
+        flywheel1?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+        flywheel2?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+
+        intake1Motor?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+        intake2Motor?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+
         // Turret servos: left = FORWARD, right = REVERSE (mirrored mounting, geared together)
         // Both servos receive the same position value; reversing the right servo
         // makes both physical shafts rotate the same direction.
@@ -308,9 +321,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         // configuring pinpoint
         configurePinpoint()
 
-        for (hub in allHubs) {
-            hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL)
-        }
+        chub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL)
     }
 
 }

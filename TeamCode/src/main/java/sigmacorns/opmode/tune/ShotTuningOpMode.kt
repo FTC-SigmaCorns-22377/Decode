@@ -1,8 +1,8 @@
 package sigmacorns.opmode.tune
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
-import kotlinx.coroutines.launch
 import sigmacorns.Robot
+import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.control.aim.tune.AdaptiveTuner
 import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.math.Pose2d
@@ -31,12 +31,17 @@ class ShotTuningOpMode : SigmaOpMode() {
     private var hoodAngleDeg = 45.0
     @Volatile private var shootRequested = false
 
+    companion object {
+        /** How long to run the transfer motor after a shot request. */
+        const val SHOT_DURATION_MS = 1500L
+    }
+
     override fun runOpMode() {
         val robot = Robot(io, blue = false)
         robot.init(Pose2d(), apriltagTracking = false)
         robot.aimTurret = false
         robot.aimFlywheel = false
-        robot.hood.autoAdjust = false
+        robot.shooter.autoAdjust = false
 
         val dataStore = ShotDataStore()
         dataStore.load()
@@ -50,9 +55,9 @@ class ShotTuningOpMode : SigmaOpMode() {
                 flywheelRPM = io.flywheelVelocity() * 60.0 / (2.0 * PI),
                 flywheelPower = io.flywheel,
                 hoodAngle = hoodAngleDeg,
-                hoodServo = robot.hood.currentServoPosition,
+                hoodServo = robot.shooter.hoodServoPosition,
                 distance = tuningDistance,
-                isShooting = robot.transfer.isRunning,
+                isShooting = robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING,
                 ballCount = robot.beamBreak.ballCount
             )
 
@@ -85,22 +90,26 @@ class ShotTuningOpMode : SigmaOpMode() {
 
         waitForStart()
 
+        var shotStartTime = io.time()
+        var shotActive = false
+
         ioLoop { state, dt ->
-            // Apply flywheel target
-            robot.flywheel.target = flywheelTarget
-            robot.flywheel.update(io.flywheelVelocity(), dt)
+            // Apply flywheel target (manual, bypassing aim system)
+            robot.shooter.flywheelTarget = flywheelTarget
 
             // Apply hood angle (manual from web UI)
-            robot.hood.manualAngle = Math.toRadians(hoodAngleDeg)
+            robot.shooter.manualHoodAngle = Math.toRadians(hoodAngleDeg)
 
-            // Handle shoot request from web UI
+            // Handle shoot request from web UI (timestamp-based, no coroutines)
             if (shootRequested) {
                 shootRequested = false
-                robot.scope.launch {
-                    robot.transfer.startTransfer()
-                    kotlinx.coroutines.delay(1500)
-                    robot.transfer.stopTransfer()
-                }
+                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+                shotStartTime = io.time()
+                shotActive = true
+            }
+            if (shotActive && (io.time() - shotStartTime).inWholeMilliseconds >= SHOT_DURATION_MS) {
+                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                shotActive = false
             }
 
             // Update subsystems
@@ -150,7 +159,7 @@ class ShotTuningOpMode : SigmaOpMode() {
             telemetry.addData("FW RPM", "%.0f", flywheelRPM)
             telemetry.addData("FW Power", "%.3f", io.flywheel)
             telemetry.addData("Hood Angle", "%.1f°", hoodAngleDeg)
-            telemetry.addData("Hood Servo", "%.3f", robot.hood.currentServoPosition)
+            telemetry.addData("Hood Servo", "%.3f", robot.shooter.hoodServoPosition)
             telemetry.addData("Balls", robot.beamBreak.ballCount)
             telemetry.addData("Data Points", tuner.pointCount())
             telemetry.addLine("")
