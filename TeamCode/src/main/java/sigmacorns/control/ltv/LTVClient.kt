@@ -40,7 +40,7 @@ enum class QpSolverType(val nativeId: Int) {
 class LTVClient private constructor(
     private val handle: Long,
     private var dtSeconds: Double,
-    private var solverType: QpSolverType = QpSolverType.FISTA,
+    private var solverType: QpSolverType = QpSolverType.NEON_IPM,
 ) : AutoCloseable {
 
     private var numWindows: Int = 0
