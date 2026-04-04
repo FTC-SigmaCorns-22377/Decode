@@ -157,6 +157,54 @@ class LTVClient private constructor(
         return doubleArrayOf(fl, rl, rr, fr) // [FL, BL, BR, FR]
     }
 
+    /**
+     * Solve to a waypoint without a preloaded trajectory.
+     *
+     * Generates a Hermite-interpolated reference from the current state to [target]
+     * over [tRemaining] and solves via NEON_IPM. No precomputation — target can
+     * change every loop with zero overhead.
+     *
+     * Requires the constructor to have been called (model params + config), but NOT
+     * [loadTrajectory]. Can be used alongside or instead of trajectory tracking.
+     *
+     * @param state      Current robot state
+     * @param target     Desired state when [tRemaining] reaches zero
+     * @param tRemaining Time until the waypoint should be reached
+     * @param lqrRef     true  → constant reference = [target] for all steps. The
+     *                           Riccati sweep solves the exact discrete LQR problem,
+     *                           finding the dynamically-optimal path. Best for
+     *                           zero-velocity arrival (stop at a point).
+     *                   false → Hermite-interpolated reference that matches position
+     *                           and velocity at both endpoints. Better when arriving
+     *                           with nonzero velocity. (default)
+     *                   Both modes shorten the horizon to ceil(tRemaining/dt) so
+     *                   Qf lands exactly on the deadline.
+     * @return           [FL, BL, BR, FR] duty cycles
+     */
+    fun solveWaypoint(
+        state: MecanumState,
+        target: MecanumState,
+        tRemaining: Duration,
+        lqrRef: Boolean = false,
+    ): DoubleArray {
+        val x0 = doubleArrayOf(
+            state.pos.v.x, state.pos.v.y, state.pos.rot,
+            state.vel.v.x, state.vel.v.y, state.vel.rot,
+        )
+        val xTarget = doubleArrayOf(
+            target.pos.v.x, target.pos.v.y, target.pos.rot,
+            target.vel.v.x, target.vel.v.y, target.vel.rot,
+        )
+        val uOut = DoubleArray(4)
+        MecanumLTVBridge.nativeSolveWaypoint(
+            handle, dtSeconds, x0, xTarget,
+            maxOf(0.0, tRemaining.toDouble(DurationUnit.SECONDS)),
+            lqrRef, uOut,
+        )
+        // JNI order: [FL, FR, RL, RR] → SigmaIO order: [FL, BL, BR, FR]
+        return doubleArrayOf(uOut[0], uOut[2], uOut[3], uOut[1])
+    }
+
     /** Returns the window index selected by the most recent solve() call. */
     fun prevWindowIdx(): Int = MecanumLTVBridge.nativeGetPrevIdx(handle)
 

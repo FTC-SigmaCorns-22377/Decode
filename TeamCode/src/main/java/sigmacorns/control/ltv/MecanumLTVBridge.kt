@@ -68,4 +68,23 @@ object MecanumLTVBridge {
 
     /** Check if a solver type is available in this build. */
     @JvmStatic external fun nativeIsSolverAvailable(type: Int): Boolean
+
+    /**
+     * Solve to a target state without a preloaded trajectory.
+     * x0 and xTarget are [px, py, theta, vx, vy, omega] (length 6).
+     * dt:      control timestep in seconds — used if loadTrajectory has not been called.
+     * lqrRef:  true = constant reference at x_target (LQR-optimal, best for zero-velocity
+     *          arrival); false = Hermite-interpolated reference (better for nonzero velocity).
+     * uOut receives 4 controls [V1, V2, V3, V4] for the first timestep.
+     * Returns 0 on success, -1 on error.
+     */
+    @JvmStatic external fun nativeSolveWaypoint(
+        handle: Long,
+        dt: Double,
+        x0: DoubleArray,
+        xTarget: DoubleArray,
+        tRemaining: Double,
+        lqrRef: Boolean,
+        uOut: DoubleArray,
+    ): Int
 }
