@@ -2,9 +2,11 @@ package sigmacorns
 
 import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
+import sigmacorns.constants.antiWheelieConfig
 import sigmacorns.constants.antiWheelieFilter
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.AntiWheelieConfig
+import sigmacorns.control.AntiWheelieFilter
 import sigmacorns.control.PollableDispatcher
 import sigmacorns.control.ltv.LTVClient
 import sigmacorns.logic.AimingSystem
@@ -13,11 +15,13 @@ import sigmacorns.subsystem.Drivetrain
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
+import sigmacorns.sim.MecanumDynamics
 import sigmacorns.subsystem.BeamBreak
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.Shooter
 import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
+import kotlin.math.max
 import kotlin.time.Duration
 
 class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
@@ -32,7 +36,11 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     val aim = AimingSystem(this, blue)
     val intakeCoordinator = IntakeCoordinator(this)
 
-    val ltv = LTVClient(drivetrainParameters)
+    val ltv = LTVClient(
+        drivetrainParameters,
+        aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd),
+        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight)
+    )
 
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)

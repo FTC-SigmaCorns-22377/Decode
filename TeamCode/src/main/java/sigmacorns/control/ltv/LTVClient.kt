@@ -67,7 +67,13 @@ class LTVClient private constructor(
         rDiag: DoubleArray = doubleArrayOf(0.03, 0.03, 0.03, 0.03),
         qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
         solverType: QpSolverType = QpSolverType.NEON_IPM,
-        windowSelConfig: WindowSelConfig = WindowSelConfig()
+        windowSelConfig: WindowSelConfig = WindowSelConfig(),
+        /** Anti-tip X acceleration limit (m/s²) in robot body frame. 0 = disabled.
+         *  Typical value: g * (half fore-aft wheelbase) / h_com */
+        aTipX: Double = 0.0,
+        /** Anti-tip Y acceleration limit (m/s²) in robot body frame. 0 = disabled.
+         *  Typical value: g * (half lateral track width) / h_com */
+        aTipY: Double = 0.0,
     ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS)) {
         MecanumLTVBridge.nativeSetModelParams(
             handle,
@@ -81,7 +87,7 @@ class LTVClient private constructor(
             stallTorque = parameters.motor.stallTorque,
             freeSpeed = parameters.motor.freeSpeed,
         )
-        MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0)
+        MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0, aTipX, aTipY)
         this.solverType = solverType
         MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
         setWindowSelConfig(windowSelConfig)
