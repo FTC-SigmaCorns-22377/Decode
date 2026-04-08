@@ -23,7 +23,7 @@ import kotlin.time.Duration
 class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     // Subsystems
     val shooter = Shooter(io)
-    val drive = Drivetrain(antiWheelieFilter)
+    val drive = Drivetrain()
     val beamBreak = BeamBreak(io)
     val intakeTransfer = IntakeTransfer(io)
     val turret = Turret(io)
