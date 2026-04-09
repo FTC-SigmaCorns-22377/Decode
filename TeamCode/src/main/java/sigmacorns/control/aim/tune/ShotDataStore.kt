@@ -11,6 +11,7 @@ import java.io.File
 class ShotDataStore(private val dataFile: String = DEFAULT_DATA_FILE) {
     companion object {
         private const val DEFAULT_DATA_FILE = "/sdcard/FIRST/shot_tuning_data.json"
+        private const val CSV_FILE = "/sdcard/FIRST/shot_tuning_data.csv"
     }
 
     private val points = mutableListOf<SpeedPoint>()
@@ -54,6 +55,21 @@ class ShotDataStore(private val dataFile: String = DEFAULT_DATA_FILE) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        saveCsv()
+    }
+
+    private fun saveCsv() {
+        try {
+            val csvFile = File(CSV_FILE)
+            val sb = StringBuilder("distance_m,speed_rad_s,speed_rpm,hood_angle_deg\n")
+            for (p in points) {
+                val rpm = p.speed * 60.0 / (2.0 * Math.PI)
+                sb.append("%.3f,%.1f,%.0f,%.1f\n".format(p.distance, p.speed, rpm, p.hoodAngle))
+            }
+            csvFile.writeText(sb.toString())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     @Synchronized
@@ -72,6 +88,16 @@ class ShotDataStore(private val dataFile: String = DEFAULT_DATA_FILE) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    @Synchronized
+    fun exportCsv(): String {
+        val sb = StringBuilder("distance_m,speed_rad_s,speed_rpm,hood_angle_deg\n")
+        for (p in points.sortedBy { it.distance }) {
+            val rpm = p.speed * 60.0 / (2.0 * Math.PI)
+            sb.append("%.3f,%.1f,%.0f,%.1f\n".format(p.distance, p.speed, rpm, p.hoodAngle))
+        }
+        return sb.toString()
     }
 
     @Synchronized

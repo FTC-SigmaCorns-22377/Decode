@@ -26,6 +26,7 @@ class ShotTuningServer(
         fun deletePoint(index: Int)
         fun getPoints(): String
         fun saveToFile()
+        fun exportCsv(): String
     }
 
     data class ShotTuningState(
@@ -114,6 +115,9 @@ class ShotTuningServer(
             writer.print("Access-Control-Allow-Headers: Content-Type\r\n")
             writer.print("Connection: close\r\n")
             writer.print("Content-Length: ${responseBody.toByteArray().size}\r\n")
+            if (contentType == "text/csv") {
+                writer.print("Content-Disposition: attachment; filename=\"shot_tuning_data.csv\"\r\n")
+            }
             writer.print("\r\n")
             writer.print(responseBody)
             writer.flush()
@@ -169,6 +173,9 @@ class ShotTuningServer(
             path == "/api/save-file" && method == "POST" -> {
                 handler.saveToFile()
                 Triple("200 OK", "application/json", """{"ok":true}""")
+            }
+            path == "/api/export-csv" && method == "GET" -> {
+                Triple("200 OK", "text/csv", handler.exportCsv())
             }
             else -> Triple("404 Not Found", "text/plain", "Not Found")
         }
@@ -236,6 +243,7 @@ td { padding:6px; border-bottom:1px solid #1a1a2e; }
       <button onclick="shoot()" id="shootBtn">SHOOT</button>
       <button class="secondary" onclick="savePoint()">Save Data Point</button>
       <button class="secondary" onclick="saveFile()">Save to File</button>
+      <button class="secondary" onclick="exportCsv()">Export CSV</button>
     </div>
   </div>
 
@@ -318,6 +326,7 @@ function shoot() { api('/api/shoot', { method:'POST' }); }
 function savePoint() { api('/api/save-point', { method:'POST' }).then(() => loadPoints()); }
 function saveFile() { api('/api/save-file', { method:'POST' }); }
 function deletePoint(i) { api('/api/point/' + i, { method:'DELETE' }).then(() => loadPoints()); }
+function exportCsv() { window.location.href = BASE + '/api/export-csv'; }
 
 async function loadPoints() {
   const pts = await api('/api/points');
