@@ -14,6 +14,8 @@ class Drivetrain(val antiWheelieFilter: AntiWheelieFilter? = null) {
     private val mecanumDynamics = MecanumDynamics(drivetrainParameters)
     private var speedMultiplier = 1.0
     var fieldCentric = true
+    /** Heading (radians) used for field-centric rotation. Set each loop from fused localization. */
+    var fieldCentricHeading: Double? = null
 
     /**
      * Process gamepad input and update drivetrain.
@@ -32,7 +34,7 @@ class Drivetrain(val antiWheelieFilter: AntiWheelieFilter? = null) {
         var inputY = -gamepad.left_stick_x.toDouble() * speedMultiplier
 
         if (fieldCentric) {
-            val heading = io.position().rot
+            val heading = fieldCentricHeading ?: io.position().rot
             val rotated = Matrix2d().rotate(-heading).transform(org.joml.Vector2d(inputX, inputY))
             inputX = rotated.x
             inputY = rotated.y
