@@ -52,6 +52,9 @@ import kotlin.math.hypot
 @TeleOp(name = "Turret Planner Debug", group = "Test")
 class TurretPlannerDebugOpMode : SigmaOpMode() {
 
+    // Which output drives the applied targets
+    private enum class TargetSource { ZONE1, ZONE2, POINT }
+
     // ─────────── geometry constants ───────────────────────────────────────────
 
     companion object {
@@ -161,7 +164,6 @@ class TurretPlannerDebugOpMode : SigmaOpMode() {
         var lastBtnX = false
 
         // Which output drives the applied targets
-        enum class TargetSource { ZONE1, ZONE2, POINT }
         var targetSource = TargetSource.ZONE1
 
         // Warm-start T* for point solver

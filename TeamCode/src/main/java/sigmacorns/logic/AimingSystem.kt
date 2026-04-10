@@ -228,6 +228,34 @@ object AimConfig {
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
     @JvmField var shotTolerance = 0.03 // m
+
+    // Expected flywheel speed drop (rad/s) between consecutive shots. When > 0,
+    // NativeAutoAim uses the robust shot planner so the first shot's parameters
+    // leave the flywheel at a speed compatible with the next shot after losing
+    // this amount. Set to 0 to fall back to single-shot optimal aim.
+    @JvmField var flywheelDrop = 0.0
+
+    // Approach prepositioning: when > 0, NativeAutoAim predicts the robot's
+    // near-future trajectory via constant-velocity mecanum kinematics and
+    // uses computeRobustPreposition() while the robot is outside a shooting
+    // zone (see launchZone* below), with tAvailable set to the predicted
+    // half-plane crossing time.
+    @JvmField var prepositionHorizon    = 0.0   // seconds; 0 = disabled
+    @JvmField var prepositionSteps      = 6
+    @JvmField var prepositionLambda     = 0.5   // weight decay e^(-lambda*i)
+    @JvmField var prepositionTAvailable = 1.0   // fallback slew time (s) when not approaching
+
+    // Launch zone half-plane `nx·x + ny·y >= d` (field frame).
+    //
+    // When (launchZoneNx, launchZoneNy) is non-zero the shooting logic splits:
+    //   - outside the zone: robust preposition with tAvailable = time until entry
+    //   - inside the zone : robustAdjust — minimize total time to fire two balls
+    // When the normal is the zero vector the feature is inert and NativeAutoAim
+    // falls back to its single-shot / robustShot behavior regardless of pose.
+    @JvmField var launchZoneNx = 0.0
+    @JvmField var launchZoneNy = 0.0
+    @JvmField var launchZoneD  = 0.0
+
 }
 
 object ShotSolverConfig {

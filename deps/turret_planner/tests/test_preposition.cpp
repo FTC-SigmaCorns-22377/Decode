@@ -155,11 +155,98 @@ void test_no_feasible_samples() {
     printf("PASS no_feasible_samples\n");
 }
 
+// -------------------------------------------------------------------------
+// test 5: preposition_robust_compute runs cleanly over a feasible path and
+// produces a feasible target. θ is largely determined by target position,
+// so it should roughly agree with plain preposition; φ and ω can differ
+// because the two functions minimize different objectives per sample
+// (plain: τ from current state; robust: transition cost to next shot).
+// -------------------------------------------------------------------------
+void test_robust_feasibility() {
+    printf("\n=== test_robust_feasibility ===\n");
+    OmegaMapParams om_rich{{800.f, 40.f, 50.f, 0.f, 0.f, 0.f}};
+
+    const int K = 4;
+    PathSample path[K];
+    for (int i = 0; i < K; ++i) {
+        path[i].t = i * 0.1f;
+        path[i].x = 3.f + 0.1f * i;
+        path[i].y = 0.2f * i;
+        path[i].vx = path[i].vy = 0.f;
+    }
+
+    TurretState cur{0.f, 0.3f, 500.f};
+
+    PrepositionResult plain = preposition_compute(
+        path, K, 0,0,0, 0,0, 1.f,
+        cur, 10.f, 0.f, K, weights, bounds, cfg, om_rich);
+    PrepositionResult rob0 = preposition_robust_compute(
+        path, K, 0,0,0, 0,0, 1.f,
+        cur, 10.f, 0.f, K, /*omega_drop=*/0.f, weights, bounds, cfg, om_rich);
+
+    printf("plain theta=%.4f phi=%.4f om=%.2f\n",
+        plain.target.theta, plain.target.phi, plain.target.omega_flywheel);
+    printf("rob0  theta=%.4f phi=%.4f om=%.2f\n",
+        rob0.target.theta, rob0.target.phi, rob0.target.omega_flywheel);
+
+    // θ is driven by target geometry more than by the objective, so the
+    // two should agree closely.
+    assert(std::abs(rob0.target.theta - plain.target.theta) < 0.05f);
+    // φ is inside its bounds.
+    assert(rob0.target.phi >= bounds.phi_min && rob0.target.phi <= bounds.phi_max);
+    // ω is non-negative and within its bound.
+    assert(rob0.target.omega_flywheel >= 0.f
+        && rob0.target.omega_flywheel <= bounds.omega_max);
+    printf("PASS robust_feasibility\n");
+}
+
+// -------------------------------------------------------------------------
+// test 6: a non-zero omega_drop should produce a different preposition
+// (sanity check that the drop parameter actually flows through).
+// -------------------------------------------------------------------------
+void test_robust_drop_shifts_target() {
+    printf("\n=== test_robust_drop_shifts_target ===\n");
+    OmegaMapParams om_rich{{800.f, 40.f, 50.f, 0.f, 0.f, 0.f}};
+
+    const int K = 4;
+    PathSample path[K];
+    for (int i = 0; i < K; ++i) {
+        path[i].t = i * 0.1f;
+        path[i].x = 3.f + 0.1f * i;
+        path[i].y = 0.2f * i;
+        path[i].vx = path[i].vy = 0.f;
+    }
+    TurretState cur{0.f, 0.3f, 500.f};
+
+    PrepositionResult r0 = preposition_robust_compute(
+        path, K, 0,0,0, 0,0, 1.f,
+        cur, 10.f, 0.f, K, 0.f, weights, bounds, cfg, om_rich);
+    PrepositionResult r1 = preposition_robust_compute(
+        path, K, 0,0,0, 0,0, 1.f,
+        cur, 10.f, 0.f, K, 30.f, weights, bounds, cfg, om_rich);
+
+    printf("drop=0  theta=%.4f phi=%.4f om=%.2f\n",
+        r0.target.theta, r0.target.phi, r0.target.omega_flywheel);
+    printf("drop=30 theta=%.4f phi=%.4f om=%.2f\n",
+        r1.target.theta, r1.target.phi, r1.target.omega_flywheel);
+
+    // Something (theta, phi, or omega) should differ meaningfully.
+    float d_theta = std::abs(r0.target.theta - r1.target.theta);
+    float d_phi   = std::abs(r0.target.phi   - r1.target.phi);
+    float d_om    = std::abs(r0.target.omega_flywheel - r1.target.omega_flywheel);
+    printf("|dtheta|=%.4f  |dphi|=%.4f  |dom|=%.4f\n", d_theta, d_phi, d_om);
+    assert(d_theta + d_phi + d_om > 1e-3f
+           && "non-zero omega_drop should change the preposition target");
+    printf("PASS robust_drop_shifts_target\n");
+}
+
 int main() {
     test_stationary_target();
     test_clamped_by_t_available();
     test_exponential_weighting();
     test_no_feasible_samples();
+    test_robust_feasibility();
+    test_robust_drop_shifts_target();
     printf("\nDone.\n");
     return 0;
 }

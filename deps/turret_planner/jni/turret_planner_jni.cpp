@@ -4,6 +4,7 @@
 
 #include "turret_planner/ballistics.h"
 #include "turret_planner/flight_time.h"
+#include "turret_planner/robust_shot.h"
 #include "turret_planner/path_scan.h"
 #include "turret_planner/preposition.h"
 #include "turret_planner/zone_tracker.h"
@@ -245,6 +246,137 @@ Java_sigmacorns_aim_TurretPlannerBridge_computePreposition(
         robotVx, robotVy, targetZ,
         unpack_turret(curTheta, curPhi, curOmega),
         tAvailable, lambdaDecay, (int)kSamples,
+        unpack_weights(w), unpack_bounds(b), unpack_physics(ph), unpack_omega(om));
+
+    float buf[4] = {r.target.theta, r.target.phi, r.target.omega_flywheel,
+                    r.expected_earliest_t};
+    return make_result(env, buf, 4);
+}
+
+// ---------------------------------------------------------------------------
+// JNI: robustShot
+// Returns [feasible, T1, T2, J,
+//          s1.theta, s1.phi, s1.vExit, s1.omega,
+//          s2.theta, s2.phi, s2.vExit, s2.omega]
+// ---------------------------------------------------------------------------
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_sigmacorns_aim_TurretPlannerBridge_robustShot(
+    JNIEnv* env, jobject,
+    jfloat turretX, jfloat turretY, jfloat turretZ,
+    jfloat t1X, jfloat t1Y, jfloat t1Z,
+    jfloat t2X, jfloat t2Y, jfloat t2Z,
+    jfloat robotVx, jfloat robotVy,
+    jfloat omegaDrop,
+    jfloatArray jWeights,
+    jfloatArray jBounds,
+    jfloatArray jPhys,
+    jfloatArray jOmega,
+    jfloat tol,
+    jint   maxIter)
+{
+    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+                        ph(env, jPhys),   om(env, jOmega);
+    if (!w || !b || !ph || !om) return nullptr;
+
+    RobustShotResult r = flight_time_robust(
+        turretX, turretY, turretZ,
+        t1X, t1Y, t1Z,
+        t2X, t2Y, t2Z,
+        robotVx, robotVy, omegaDrop,
+        unpack_weights(w), unpack_bounds(b),
+        unpack_physics(ph), unpack_omega(om),
+        tol, (int)maxIter);
+
+    float buf[12] = {
+        r.feasible ? 1.f : 0.f,
+        r.T1, r.T2, r.J,
+        r.s1.theta, r.s1.phi, r.s1.v_exit, r.s1.omega_flywheel,
+        r.s2.theta, r.s2.phi, r.s2.v_exit, r.s2.omega_flywheel
+    };
+    return make_result(env, buf, 12);
+}
+
+// ---------------------------------------------------------------------------
+// JNI: robustAdjust
+// Same return shape as robustShot. Minimizes
+//   J = J_Δ(cur → s1) + J_Δ(s1_reduced → s2)
+// so the caller can plan a pair of shots that minimize total time to fire
+// both balls from a known current turret state.
+// ---------------------------------------------------------------------------
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_sigmacorns_aim_TurretPlannerBridge_robustAdjust(
+    JNIEnv* env, jobject,
+    jfloat turretX, jfloat turretY, jfloat turretZ,
+    jfloat t1X, jfloat t1Y, jfloat t1Z,
+    jfloat t2X, jfloat t2Y, jfloat t2Z,
+    jfloat robotVx, jfloat robotVy,
+    jfloat curTheta, jfloat curPhi, jfloat curOmega,
+    jfloat omegaDrop,
+    jfloatArray jWeights,
+    jfloatArray jBounds,
+    jfloatArray jPhys,
+    jfloatArray jOmega,
+    jfloat tol,
+    jint   maxIter)
+{
+    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+                        ph(env, jPhys),   om(env, jOmega);
+    if (!w || !b || !ph || !om) return nullptr;
+
+    RobustShotResult r = flight_time_robust_adjust(
+        turretX, turretY, turretZ,
+        t1X, t1Y, t1Z,
+        t2X, t2Y, t2Z,
+        robotVx, robotVy,
+        unpack_turret(curTheta, curPhi, curOmega),
+        omegaDrop,
+        unpack_weights(w), unpack_bounds(b),
+        unpack_physics(ph), unpack_omega(om),
+        tol, (int)maxIter);
+
+    float buf[12] = {
+        r.feasible ? 1.f : 0.f,
+        r.T1, r.T2, r.J,
+        r.s1.theta, r.s1.phi, r.s1.v_exit, r.s1.omega_flywheel,
+        r.s2.theta, r.s2.phi, r.s2.v_exit, r.s2.omega_flywheel
+    };
+    return make_result(env, buf, 12);
+}
+
+// ---------------------------------------------------------------------------
+// JNI: computeRobustPreposition
+// Same return shape as computePreposition: [theta, phi, omega, expectedEarliestT]
+// ---------------------------------------------------------------------------
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_sigmacorns_aim_TurretPlannerBridge_computeRobustPreposition(
+    JNIEnv* env, jobject,
+    jfloatArray jPath, jint nSamples,
+    jfloat turretX, jfloat turretY, jfloat turretZ,
+    jfloat robotVx, jfloat robotVy,
+    jfloat targetZ,
+    jfloat curTheta, jfloat curPhi, jfloat curOmega,
+    jfloat tAvailable,
+    jfloat lambdaDecay,
+    jint   kSamples,
+    jfloat omegaDrop,
+    jfloatArray jWeights,
+    jfloatArray jBounds,
+    jfloatArray jPhys,
+    jfloatArray jOmega)
+{
+    ScopedArray<jfloat> path(env, jPath);
+    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+                        ph(env, jPhys),   om(env, jOmega);
+    if (!path || !w || !b || !ph || !om) return nullptr;
+
+    const PathSample* samples = reinterpret_cast<const PathSample*>(path.ptr);
+
+    PrepositionResult r = preposition_robust_compute(
+        samples, (int)nSamples,
+        turretX, turretY, turretZ,
+        robotVx, robotVy, targetZ,
+        unpack_turret(curTheta, curPhi, curOmega),
+        tAvailable, lambdaDecay, (int)kSamples, omegaDrop,
         unpack_weights(w), unpack_bounds(b), unpack_physics(ph), unpack_omega(om));
 
     float buf[4] = {r.target.theta, r.target.phi, r.target.omega_flywheel,

@@ -1,6 +1,7 @@
 #pragma once
 #include "types.h"
 #include "flight_time.h"
+#include "robust_shot.h"
 
 // ---------------------------------------------------------------------------
 // Robust pre-positioning before path entry.
@@ -28,6 +29,33 @@ PrepositionResult preposition_compute(
     float t_available,
     float lambda_decay,
     int   k_samples,
+    const TurretWeights& weights,
+    const TurretBounds& bounds,
+    const PhysicsConfig& cfg,
+    const OmegaMapParams& omega
+);
+
+// Robust variant: each sample's shot is solved as the FIRST half of a
+// robust pair against the next path sample (flight_time_robust with the
+// given omega_drop), so the preposition is biased toward turret states
+// that make the *following* shot easy under flywheel loss. The last
+// sample (or any single-sample path) falls back to flight_time_cold.
+//
+// Note: this is NOT equivalent to preposition_compute even when
+// omega_drop == 0, because the two functions optimize different
+// objectives per sample. preposition_compute minimizes τ from the
+// current turret state to the shot (fastest shot to slew to), while
+// this function minimizes the transition between consecutive shots.
+PrepositionResult preposition_robust_compute(
+    const PathSample* path, int n_samples,
+    float turret_x, float turret_y, float turret_z,
+    float robot_vx, float robot_vy,
+    float target_z,
+    const TurretState& current,
+    float t_available,
+    float lambda_decay,
+    int   k_samples,
+    float omega_drop,
     const TurretWeights& weights,
     const TurretBounds& bounds,
     const PhysicsConfig& cfg,

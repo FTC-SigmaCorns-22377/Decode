@@ -60,6 +60,22 @@ class TurretPlannerBridge {
         const val EXPECTED_EARLIEST  = 3
     }
 
+    /** Index constants for the 12-element array from [robustShot]. */
+    object RobustShotIdx {
+        const val FEASIBLE  = 0   // 1f = feasible, 0f = infeasible
+        const val T1        = 1
+        const val T2        = 2
+        const val J         = 3   // best objective value
+        const val S1_THETA  = 4
+        const val S1_PHI    = 5
+        const val S1_V_EXIT = 6
+        const val S1_OMEGA  = 7
+        const val S2_THETA  = 8
+        const val S2_PHI    = 9
+        const val S2_V_EXIT = 10
+        const val S2_OMEGA  = 11
+    }
+
     /** Index constants for the 8-element array from [updateZoneTracker]. */
     object ZoneTrackerIdx {
         const val URGENCY          = 0
@@ -127,6 +143,63 @@ class TurretPlannerBridge {
         omegaCoeffs: FloatArray
     ): FloatArray
 
+    /**
+     * Plan a pair of consecutive shots (target1 then target2) that are robust
+     * to an expected flywheel speed drop [omegaDrop] between them.
+     *
+     * Minimizes `J(T1, T2) = max(w_theta·|Δθ|, w_phi·|Δφ|, w_omega·|Δω_adj|)`
+     * where Δω_adj accounts for subtracting [omegaDrop] from shot 1's required
+     * flywheel speed (modeling energy loss after firing).
+     *
+     * @return FloatArray(12): [feasible, T1, T2, J,
+     *                          s1.theta, s1.phi, s1.vExit, s1.omega,
+     *                          s2.theta, s2.phi, s2.vExit, s2.omega]  (see [RobustShotIdx])
+     */
+    external fun robustShot(
+        turretX: Float, turretY: Float, turretZ: Float,
+        target1X: Float, target1Y: Float, target1Z: Float,
+        target2X: Float, target2Y: Float, target2Z: Float,
+        robotVx: Float, robotVy: Float,
+        omegaDrop: Float,
+        weights: FloatArray,
+        bounds: FloatArray,
+        physConfig: FloatArray,
+        omegaCoeffs: FloatArray,
+        tol: Float = 5e-4f,
+        maxIter: Int = 40
+    ): FloatArray
+
+    /**
+     * Plan a pair of consecutive shots from a known current turret state,
+     * minimizing *total* time to fire both balls:
+     *
+     *   J(T1, T2) = J_Δ(cur → s1(T1))  +  J_Δ(s1(T1)_reduced → s2(T2))
+     *
+     * The first term is the slew cost from the current turret state to the
+     * first shot; the second is the cost of transitioning from shot 1 (with
+     * its flywheel speed reduced by [omegaDrop]) to shot 2. Same return shape
+     * as [robustShot] — see [RobustShotIdx].
+     *
+     * Use when the robot is already inside a shooting zone and you want the
+     * fastest two-shot burst from right now.
+     *
+     * @return FloatArray(12): same layout as [robustShot], see [RobustShotIdx]
+     */
+    external fun robustAdjust(
+        turretX: Float, turretY: Float, turretZ: Float,
+        target1X: Float, target1Y: Float, target1Z: Float,
+        target2X: Float, target2Y: Float, target2Z: Float,
+        robotVx: Float, robotVy: Float,
+        curTheta: Float, curPhi: Float, curOmega: Float,
+        omegaDrop: Float,
+        weights: FloatArray,
+        bounds: FloatArray,
+        physConfig: FloatArray,
+        omegaCoeffs: FloatArray,
+        tol: Float = 5e-4f,
+        maxIter: Int = 40
+    ): FloatArray
+
     // ------------------------------------------------------------------
     // Path scan
     // ------------------------------------------------------------------
@@ -172,6 +245,37 @@ class TurretPlannerBridge {
         tAvailable: Float,
         lambdaDecay: Float,
         kSamples: Int,
+        weights: FloatArray,
+        bounds: FloatArray,
+        physConfig: FloatArray,
+        omegaCoeffs: FloatArray
+    ): FloatArray
+
+    /**
+     * Robust variant of [computePreposition]: for each path sample, the shot is
+     * solved as the first half of a robust pair against the next sample
+     * (see [robustShot]), biasing the pre-position toward turret states that
+     * make the *following* shot easy under an expected flywheel drop
+     * [omegaDrop].
+     *
+     * Note: this is NOT equivalent to [computePreposition] even when
+     * `omegaDrop == 0`, because the two functions optimize different objectives
+     * per sample — [computePreposition] minimizes τ from the current turret
+     * state to the shot, while this minimizes the transition between
+     * consecutive shots.
+     *
+     * @return FloatArray(4): [theta, phi, omega, expectedEarliestT]  (see [PrepositionIdx])
+     */
+    external fun computeRobustPreposition(
+        path: FloatArray, nSamples: Int,
+        turretX: Float, turretY: Float, turretZ: Float,
+        robotVx: Float, robotVy: Float,
+        targetZ: Float,
+        curTheta: Float, curPhi: Float, curOmega: Float,
+        tAvailable: Float,
+        lambdaDecay: Float,
+        kSamples: Int,
+        omegaDrop: Float,
         weights: FloatArray,
         bounds: FloatArray,
         physConfig: FloatArray,
