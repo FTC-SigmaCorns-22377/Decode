@@ -1,5 +1,6 @@
 package sigmacorns.subsystem
 
+import sigmacorns.Robot
 import sigmacorns.constants.FLYWHEEL_INERTIA
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.io.SigmaIO
@@ -24,7 +25,7 @@ import kotlin.time.DurationUnit
  * Input properties [hoodAngle] and [flywheelTarget] are set by AimingSystem each loop.
  */
 class Shooter(
-    val io: SigmaIO
+    val robot: Robot
 ) {
 
     // --- Flywheel state ---
@@ -59,7 +60,7 @@ class Shooter(
      * Update both flywheel and hood. Call once per loop.
      */
     fun update(dt: Duration) {
-        updateFlywheel(io.flywheelVelocity(), dt)
+        updateFlywheel(robot.io.flywheelVelocity(), dt)
         updateHood(dt)
     }
 
@@ -71,12 +72,12 @@ class Shooter(
         if (dt <= Duration.ZERO) return
 
         if (flywheelTarget == 0.0) {
-            io.flywheel = 0.0
+            robot.io.flywheel = 0.0
             return
         }
 
-        io.flywheel = calculateFlywheelSpeed(
-            io.voltage(),
+        robot.io.flywheel = calculateFlywheelSpeed(
+            robot.io.voltage(),
             flywheelTarget,
             curV,
             dt.toDouble(DurationUnit.SECONDS)
@@ -105,7 +106,7 @@ class Shooter(
         if (hubVoltage <= 0.0) return 0.0
 
         val q = 1.0 // q
-        val r = 120.0 // r
+        val r = if (robot.io.intake > 0.0) { 20.0 } else { 120.0 } // r
 
         val inertia = FLYWHEEL_INERTIA
         val referenceVoltage = 12.0
@@ -185,7 +186,7 @@ class Shooter(
         val angle = if (autoAdjust) hoodAngle else manualHoodAngle
         computedHoodAngle = angle
         hoodServoPosition = hoodAngleToServo(angle)
-        io.hood = hoodServoPosition
+        robot.io.hood = hoodServoPosition
     }
 
     private fun hoodAngleToServo(angle: Double): Double {
