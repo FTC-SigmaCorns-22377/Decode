@@ -43,7 +43,8 @@ class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): Auto
     val ltv = LTVClient(
         drivetrainParameters,
         aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd),
-        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight)
+        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight),
+        aTipTau = 0.2
     )
 
     val dispatcher = PollableDispatcher(io)

@@ -78,6 +78,12 @@ class LTVClient private constructor(
         /** Anti-tip Y acceleration limit (m/s²) in robot body frame. 0 = disabled.
          *  Typical value: g * (half lateral track width) / h_com */
         aTipY: Double = 0.0,
+        /** Low-pass time constant (s) for the sustained-acceleration tip constraint.
+         *  0 (default) → per-step instantaneous barrier (original).
+         *  Values ~half the robot's pitch period (e.g. 0.15–0.4 s) allow brief
+         *  transient accelerations while preventing sustained tip-inducing deceleration,
+         *  eliminating mid-path chattering without sacrificing end-of-path protection. */
+        aTipTau: Double = 0.0,
     ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS),qDiag=qDiag, qfDiag=qfDiag, rDiag=rDiag) {
         MecanumLTVBridge.nativeSetModelParams(
             handle,
@@ -91,7 +97,7 @@ class LTVClient private constructor(
             stallTorque = parameters.motor.stallTorque,
             freeSpeed = parameters.motor.freeSpeed,
         )
-        MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0, aTipX, aTipY)
+        MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0, aTipX, aTipY, aTipTau)
         this.solverType = solverType
         MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
         setWindowSelConfig(windowSelConfig)

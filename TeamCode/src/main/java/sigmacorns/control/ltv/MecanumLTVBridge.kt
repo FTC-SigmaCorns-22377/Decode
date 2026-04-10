@@ -31,7 +31,7 @@ object MecanumLTVBridge {
         N: Int,
         qDiag: DoubleArray, rDiag: DoubleArray, qfDiag: DoubleArray,
         uMin: Double, uMax: Double,
-        aTipX: Double, aTipY: Double,
+        aTipX: Double, aTipY: Double, aTipTau: Double,
     )
 
     /** Load trajectory as flat array of [t, px, py, theta, vx, vy, omega] per sample. Returns number of windows. */
