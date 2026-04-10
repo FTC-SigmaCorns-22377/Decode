@@ -1,6 +1,7 @@
 package sigmacorns.opmode.test
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
+import sigmacorns.Robot
 import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
@@ -35,8 +36,6 @@ class WaypointSquareTest : SigmaOpMode() {
     private val INITIAL_T_REMAINING = 4.seconds
     // Minimum tRemaining passed to the solver (keeps N_eff >= 2 steps)
     private val MIN_T_REMAINING = 0.2.seconds
-    // Hard per-leg timeout — forces advance if the robot never converges
-    private val LEG_TIMEOUT = 10.seconds
 
     override fun runOpMode() {
         // 1m square corners, heading held at 0° throughout
@@ -47,77 +46,73 @@ class WaypointSquareTest : SigmaOpMode() {
             Pose2d(0.0, 0.0, 0.0),
         )
 
-        // Large Qf on velocity so zero-velocity arrival is well-penalised.
-        // No loadTrajectory() needed — solveWaypoint works from constructor alone.
-        val ltv = LTVClient(
-            parameters = drivetrainParameters,
-            qfDiag = doubleArrayOf(500.0, 500.0, 500.0, 10.0, 10.0, 10.0),
-        )
+        val robot = Robot(io,false)
 
-        ltv.use {
-            val state = State(io)
-            io.setPosition(Pose2d(0.0, 0.0, 0.0))
+        val state = State(io)
+        io.setPosition(Pose2d(0.0, 0.0, 0.0))
 
-            waitForStart()
-            io.setPosition(Pose2d(0.0, 0.0, 0.0))
+        waitForStart()
+        io.setPosition(Pose2d(0.0, 0.0, 0.0))
 
-            for ((idx, corner) in corners.withIndex()) {
-                val target      = MecanumState(vel = Pose2d(), pos = corner)
-                val legStart    = io.time()
-                val legDeadline = legStart + LEG_TIMEOUT
+        for ((idx, corner) in corners.withIndex()) {
+            val target      = MecanumState(vel = Pose2d(), pos = corner)
+            val legStart    = io.time()
 
-                // tRemaining for the first call — ETA not yet available
-                var tRemaining: Duration = INITIAL_T_REMAINING
+            // tRemaining for the first call — ETA not yet available
+            var tRemaining: Duration = INITIAL_T_REMAINING
 
-                while (opModeIsActive()) {
-                    state.update(io)
+            while (opModeIsActive()) {
+                state.update(io)
 
-                    var u = doubleArrayOf(0.0, 0.0, 0.0, 0.0)
-                    val solveNs = measureNanoTime {
-                        u = ltv.solveWaypoint(state.mecanumState, target, tRemaining, lqrRef = true)
-                    }
-
-                    // Update tRemaining from the solver's own forward-simulated ETA.
-                    // Clamp from below so the horizon never collapses to a single step.
-                    tRemaining = ltv.prevWaypointEta().coerceAtLeast(MIN_T_REMAINING)
-
-                    val voltage = io.voltage()
-                    io.driveFL = u[0] * 12.0 / voltage
-                    io.driveBL = u[1] * 12.0 / voltage
-                    io.driveBR = u[2] * 12.0 / voltage
-                    io.driveFR = u[3] * 12.0 / voltage
-
-                    val posErr = hypot(
-                        state.driveTrainPosition.v.x - corner.v.x,
-                        state.driveTrainPosition.v.y - corner.v.y,
-                    )
-                    val velMag = hypot(
-                        state.driveTrainVelocity.v.x,
-                        state.driveTrainVelocity.v.y,
-                    )
-
-                    telemetry.addData("leg", "${idx + 1} / ${corners.size}  →  (%.2f, %.2f)".format(corner.v.x, corner.v.y))
-                    telemetry.addData("pos", "(%.3f, %.3f, %.1f°)".format(
-                        state.driveTrainPosition.v.x,
-                        state.driveTrainPosition.v.y,
-                        Math.toDegrees(state.driveTrainPosition.rot),
-                    ))
-                    telemetry.addData("posErr",    "%.3f m".format(posErr))
-                    telemetry.addData("velMag",    "%.3f m/s".format(velMag))
-                    telemetry.addData("eta",       "%.2f s".format(tRemaining.toDouble(DurationUnit.SECONDS)))
-                    telemetry.addData("legElapsed","%.2f s".format((io.time() - legStart).toDouble(DurationUnit.SECONDS)))
-                    telemetry.addData("solveTime", "%.2f ms".format(solveNs / 1_000_000.0))
-                    telemetry.update()
-
-                    io.update()
-
-                    if (SIM) sleep(SIM_UPDATE_TIME.inWholeMilliseconds)
-
-                    val arrived  = posErr < POS_TOL && velMag < VEL_TOL
-                    val timedOut = io.time() > legDeadline
-                    if(idx == 3) continue
-                    if (arrived) break
+                var u = doubleArrayOf(0.0, 0.0, 0.0, 0.0)
+                val solveNs = measureNanoTime {
+                    u = robot.ltv.solveWaypoint(state.mecanumState, target, tRemaining, lqrRef = true)
                 }
+
+                // Update tRemaining from the solver's own forward-simulated ETA.
+                // Clamp from below so the horizon never collapses to a single step.
+                tRemaining = robot.ltv.prevWaypointEta().coerceAtLeast(MIN_T_REMAINING)
+
+                val voltage = io.voltage()
+                io.driveFL = u[0] * 12.0 / voltage
+                io.driveBL = u[1] * 12.0 / voltage
+                io.driveBR = u[2] * 12.0 / voltage
+                io.driveFR = u[3] * 12.0 / voltage
+
+                val posErr = hypot(
+                    state.driveTrainPosition.v.x - corner.v.x,
+                    state.driveTrainPosition.v.y - corner.v.y,
+                )
+                val velMag = hypot(
+                    state.driveTrainVelocity.v.x,
+                    state.driveTrainVelocity.v.y,
+                )
+
+                telemetry.addData("leg", "${idx + 1} / ${corners.size}  →  (%.2f, %.2f)".format(corner.v.x, corner.v.y))
+                telemetry.addData("pos", "(%.3f, %.3f, %.1f°)".format(
+                    state.driveTrainPosition.v.x,
+                    state.driveTrainPosition.v.y,
+                    Math.toDegrees(state.driveTrainPosition.rot),
+                ))
+                telemetry.addData("posErr",    "%.3f m".format(posErr))
+                telemetry.addData("velMag",    "%.3f m/s".format(velMag))
+                telemetry.addData("eta",       "%.2f s".format(tRemaining.toDouble(DurationUnit.SECONDS)))
+                telemetry.addData("legElapsed","%.2f s".format((io.time() - legStart).toDouble(DurationUnit.SECONDS)))
+                telemetry.addData("solveTime", "%.2f ms".format(solveNs / 1_000_000.0))
+                telemetry.update()
+
+                io.update()
+
+                if (SIM) sleep(SIM_UPDATE_TIME.inWholeMilliseconds)
+
+                val arrived  = posErr < POS_TOL && velMag < VEL_TOL
+                if(idx == 3) {
+                    if(arrived) {
+                        robot.ltv.holdPos(io, target.pos)
+                    }
+                    continue
+                }
+                if (arrived) break
             }
 
             // Stop all motors

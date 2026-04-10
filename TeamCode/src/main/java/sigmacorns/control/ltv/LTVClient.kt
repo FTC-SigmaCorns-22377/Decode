@@ -45,6 +45,9 @@ class LTVClient private constructor(
     private val handle: Long,
     private var dtSeconds: Double,
     private var solverType: QpSolverType = QpSolverType.NEON_IPM,
+    val qDiag: DoubleArray,
+    val qfDiag: DoubleArray,
+    val rDiag: DoubleArray
 ) : AutoCloseable {
 
     private var numWindows: Int = 0
@@ -56,6 +59,7 @@ class LTVClient private constructor(
 
     val dt: Duration get() = dtSeconds.seconds
 
+
     /**
      * Primary constructor: configure model params + MPC tuning, then call [loadTrajectory].
      */
@@ -63,9 +67,9 @@ class LTVClient private constructor(
         parameters: MecanumParameters,
         horizon: Int = 30,
         dt: Duration = 20.milliseconds,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
-        rDiag: DoubleArray = doubleArrayOf(0.03, 0.03, 0.03, 0.03),
-        qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 400.0, 1.0, 1.0, 1.0),
+        rDiag: DoubleArray = doubleArrayOf(0.05, 0.05, 0.05, 0.05),
+        qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 400.0, 2.0, 2.0, 2.0),
         solverType: QpSolverType = QpSolverType.NEON_IPM,
         windowSelConfig: WindowSelConfig = WindowSelConfig(),
         /** Anti-tip X acceleration limit (m/s²) in robot body frame. 0 = disabled.
@@ -74,7 +78,7 @@ class LTVClient private constructor(
         /** Anti-tip Y acceleration limit (m/s²) in robot body frame. 0 = disabled.
          *  Typical value: g * (half lateral track width) / h_com */
         aTipY: Double = 0.0,
-    ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS)) {
+    ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS),qDiag=qDiag, qfDiag=qfDiag, rDiag=rDiag) {
         MecanumLTVBridge.nativeSetModelParams(
             handle,
             mass = parameters.weight,
@@ -197,7 +201,6 @@ class LTVClient private constructor(
         target: MecanumState,
         tRemaining: Duration,
         lqrRef: Boolean = false,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 20.0, 1.0, 1.0, 1.0),
         r: Double = 0.020,
     ): DoubleArray {
         val x0 = doubleArrayOf(
@@ -221,16 +224,12 @@ class LTVClient private constructor(
     fun holdPos(
         io: SigmaIO,
         p: Pose2d,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
-        r: Double = 0.015,
     ) {
         val u = solveWaypoint(
             MecanumState(io.velocity(),io.position()),
             MecanumState(Pose2d(),p),
             1.seconds,
-            lqrRef = true,
-            qDiag,
-            r
+            lqrRef = true
         )
 
         val voltage = io.voltage()
