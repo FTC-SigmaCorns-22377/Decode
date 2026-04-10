@@ -1,8 +1,10 @@
 package sigmacorns.io
 
+import sigmacorns.constants.ballExitRadius
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.intakeMotor
+import sigmacorns.constants.turretPos
 import sigmacorns.constants.turretTicksPerRad
 import sigmacorns.subsystem.ShooterConfig
 import sigmacorns.subsystem.TurretServoConfig
@@ -87,11 +89,6 @@ class JoltSimIO(
     override fun intake1RPM(): Double = intakeRollerState.omega
 
     override fun turretPosition(): Double = turretAngleRad + turretOffset
-
-    override fun setTurretPosition(offset: Double) {
-        turretOffset = offset
-    }
-
     override fun setPosition(p: Pose2d) {
         JoltNative.nativeSetRobotPose(handle, p.v.x.toFloat(), p.v.y.toFloat(), p.rot.toFloat())
     }
@@ -229,18 +226,19 @@ class JoltSimIO(
         val horizontalSpeed = exitSpeed * cos(hoodAngleRad)
         val verticalSpeed = exitSpeed * sin(hoodAngleRad)
 
-        val vx = horizontalSpeed * cos(launchHeading)
-        val vy = horizontalSpeed * sin(launchHeading)
+        val vx = horizontalSpeed * cos(launchHeading) + robotState[3]
+        val vy = horizontalSpeed * sin(launchHeading) + robotState[4]
         val vz = verticalSpeed
 
         // Start at the shooter position on the robot (offset along robot heading)
-        val shooterX = robotX + SHOOTER_FORWARD_OFFSET * cos(robotTheta)
-        val shooterY = robotY + SHOOTER_FORWARD_OFFSET * sin(robotTheta)
-        val shooterZ = ROBOT_HEIGHT + SHOOTER_HEIGHT
+        val shooterX = robotX + turretPos.x * cos(robotTheta)
+        val shooterY = robotY + turretPos.x * sin(robotTheta)
+        val shooterZ = turretPos.z
 
-        val spawnX = shooterX
-        val spawnY = shooterY
-        val spawnZ = shooterZ
+        // hood angle correction
+        val spawnX = shooterX + cos(launchHeading)*(1.0 - sin(hoodAngleRad))*ballExitRadius
+        val spawnY = shooterY + sin(launchHeading)*(1.0 - sin(hoodAngleRad))*ballExitRadius
+        val spawnZ = shooterZ + cos(hoodAngleRad)*ballExitRadius
 
         JoltNative.nativeSpawnShotBall(handle,
             spawnX.toFloat(), spawnY.toFloat(), spawnZ.toFloat(),
@@ -349,13 +347,6 @@ class JoltSimIO(
         // Robot geometry (must match C++ jolt_world.h)
         const val ROBOT_HEIGHT = 0.15
         const val ROBOT_LENGTH = 0.4
-
-        // Shooter geometry (~1/4 robot volume: 0.2 x 0.2 x 0.15)
-        const val SHOOTER_WIDTH = 0.2
-        const val SHOOTER_LENGTH = 0.2
-        const val SHOOTER_HEIGHT = 0.15
-        // Shooter center is 2/3 back from the front of the robot
-        const val SHOOTER_FORWARD_OFFSET = ROBOT_LENGTH / 2.0 - (2.0 / 3.0) * ROBOT_LENGTH // ≈ -0.067
 
         // Flywheel: front of the hooded shooter, gives exit speed
         const val FLYWHEEL_WHEEL_RADIUS = 0.05 // 50mm contact wheel

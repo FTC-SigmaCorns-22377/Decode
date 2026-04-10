@@ -1,10 +1,10 @@
 package sigmacorns.subsystem
 
 import sigmacorns.constants.FLYWHEEL_INERTIA
+import sigmacorns.constants.flywheelMotor
 import sigmacorns.io.SigmaIO
 import kotlin.math.PI
 import kotlin.math.absoluteValue
-import kotlin.math.atan2
 import kotlin.math.exp
 import kotlin.math.sqrt
 import kotlin.time.Duration
@@ -18,11 +18,10 @@ import kotlin.time.DurationUnit
  * and write their respective outputs each loop.
  *
  * Flywheel uses a discrete-time LQR controller to reach the target velocity.
- * Hood computes the optimal launch angle from distance and flywheel velocity,
- * preferring interpolated tuning data over trig fallback.
+ * Hood angle is set directly by AimingSystem via [hoodAngle] (solver output),
+ * or manually via [manualHoodAngle] when [autoAdjust] is false.
  *
- * Input properties [targetDistance], [recommendedHoodAngleDeg], and [flywheelTarget]
- * are set by the AimingSystem each loop.
+ * Input properties [hoodAngle] and [flywheelTarget] are set by AimingSystem each loop.
  */
 class Shooter(
     val io: SigmaIO
@@ -35,28 +34,21 @@ class Shooter(
 
     // --- Hood state ---
 
-    /** Whether the hood auto-adjusts based on distance/speed. */
+    /** Whether the hood uses the solver-set [hoodAngle] (true) or [manualHoodAngle] (false). */
     var autoAdjust: Boolean = true
 
     /** Manual override angle in radians (used when autoAdjust is false). */
     var manualHoodAngle: Double = Math.toRadians(ShooterConfig.defaultAngleDeg)
 
-    /** Distance from robot to goal (set by AimingSystem). */
-    var targetDistance: Double = 3.0
+    /** Hood angle in radians set directly by AimingSystem from ShotSolver output. */
+    var hoodAngle: Double = Math.toRadians(ShooterConfig.defaultAngleDeg)
 
-    /** Recommended hood angle in degrees from adaptive tuner (set by AimingSystem, null if no data). */
-    var recommendedHoodAngleDeg: Double? = null
-
-    /** The computed optimal hood angle in radians (for telemetry). */
+    /** The commanded hood angle in radians (for telemetry). */
     var computedHoodAngle: Double = Math.toRadians(ShooterConfig.defaultAngleDeg)
         private set
 
     /** Current hood servo position (for telemetry). */
     var hoodServoPosition: Double = 0.5
-        private set
-
-    /** Whether we used saved data or trig fallback (for telemetry). */
-    var usingInterpolatedData: Boolean = false
         private set
 
     // ========================================================================
@@ -117,11 +109,10 @@ class Shooter(
 
         val inertia = FLYWHEEL_INERTIA
         val referenceVoltage = 12.0
-        val stallTorque = 1.47 * 0.0980665 // 1.47 kg·cm -> N·m
-        val freeSpeed = 5650.0 * (12/12.41) / 60 * 2 * PI // rad/s
+        val stallTorque = flywheelMotor.stallTorque
+        val freeSpeed = flywheelMotor.freeSpeed
 
-        // encoder position resolution
-        val encoderRes = 2*PI/28.0
+        val encoderTickPerRad = 28.0/(2.0*PI)
 
         /**
          * Chub uses period measurement:
@@ -154,7 +145,7 @@ class Shooter(
 
         val dTimer = 0.00000558204
 
-        val velResolution = (28.0 * currentVelocity*currentVelocity * dTimer)/ (2.0*PI)
+        val velResolution = encoderTickPerRad * currentVelocity*currentVelocity * dTimer
 
         var xErr = currentVelocity - targetVelocity
 
@@ -191,65 +182,10 @@ class Shooter(
     // ========================================================================
 
     private fun updateHood(dt: Duration) {
-        val angle = if (autoAdjust) {
-            computeHoodAngle(
-                distance = targetDistance,
-                flywheelVelocity = io.flywheelVelocity()
-            )
-        } else {
-            manualHoodAngle
-        }
-
+        val angle = if (autoAdjust) hoodAngle else manualHoodAngle
         computedHoodAngle = angle
         hoodServoPosition = hoodAngleToServo(angle)
         io.hood = hoodServoPosition
-    }
-
-    /**
-     * Compute the hood angle. Prefers saved tuning data (interpolated),
-     * falls back to projectile motion trig.
-     */
-    fun computeHoodAngle(distance: Double, flywheelVelocity: Double): Double {
-        val interpolatedDeg = recommendedHoodAngleDeg
-        if (interpolatedDeg != null) {
-            usingInterpolatedData = true
-            return Math.toRadians(interpolatedDeg)
-        }
-
-        usingInterpolatedData = false
-        return computeOptimalAngleTrig(distance, flywheelVelocity)
-    }
-
-    /**
-     * Compute optimal launch angle using projectile motion.
-     * theta = atan((v^2 - sqrt(v^4 - g(g*d^2 + 2h*v^2))) / (g*d))
-     */
-    fun computeOptimalAngleTrig(distance: Double, flywheelVelocity: Double): Double {
-        val v = flywheelVelocity * ShooterConfig.flywheelRadius * ShooterConfig.launchEfficiency
-        val d = distance
-        val h = ShooterConfig.goalHeight - ShooterConfig.launchHeight
-        val g = ShooterConfig.gravity
-
-        if (v < 0.5 || d < 0.1) {
-            return Math.toRadians(ShooterConfig.defaultAngleDeg)
-        }
-
-        val v2 = v * v
-        val v4 = v2 * v2
-        val discriminant = v4 - g * (g * d * d + 2.0 * h * v2)
-
-        if (discriminant < 0.0) {
-            return Math.toRadians(ShooterConfig.maxAngleDeg)
-        }
-
-        val numerator = v2 - sqrt(discriminant)
-        val denominator = g * d
-        val angle = atan2(numerator, denominator)
-
-        return angle.coerceIn(
-            Math.toRadians(ShooterConfig.minAngleDeg),
-            Math.toRadians(ShooterConfig.maxAngleDeg)
-        )
     }
 
     private fun hoodAngleToServo(angle: Double): Double {
@@ -266,22 +202,10 @@ class Shooter(
         return minRad + t * (maxRad - minRad)
     }
 
-    companion object {
-        /** Calculate target RPM based on distance. */
-        fun calculateTargetRPM(dist: Double): Double {
-            // TODO: add these calculations
-            return 5000.0
-        }
-    }
 }
 
 object ShooterConfig {
-    @JvmField var goalHeight = 0.75
-    @JvmField var launchHeight = 0.22
-    @JvmField var gravity = 9.81
-    @JvmField var flywheelRadius = 0.05
-    @JvmField var launchEfficiency = 0.3
-    @JvmField var minAngleDeg = 15.0
+    @JvmField var minAngleDeg = 28.441752
     @JvmField var maxAngleDeg = 70.0
     @JvmField var defaultAngleDeg = 45.0
     @JvmField var minServo = 0.29

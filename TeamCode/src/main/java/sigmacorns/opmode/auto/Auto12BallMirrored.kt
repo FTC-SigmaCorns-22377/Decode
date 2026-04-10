@@ -5,7 +5,7 @@ import sigmacorns.Robot
 import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
-import sigmacorns.control.mpc.TrajoptLoader
+import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.io.JoltSimIO
 import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.io.BallColor
@@ -42,7 +42,6 @@ class Auto12BallMirrored : SigmaOpMode() {
 
         if (SIM) {
             robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
-            robot.aim.targeting.goalPosition = robot.aim.goalPosition
         }
 
         val ltv = LTVClient(drivetrainParameters).also { it.loadTrajectory(traj) }

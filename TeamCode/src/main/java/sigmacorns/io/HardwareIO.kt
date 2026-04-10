@@ -66,11 +66,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     val limelight: Limelight3A? = hardwareMap.tryGet(Limelight3A::class.java, "limelight")
 
     //odometry
+    // TODO: thread pinpoint
     var pinpoint: GoBildaPinpointDriver? = hardwareMap.tryGet(GoBildaPinpointDriver::class.java,"pinpoint")
 
-    val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
+    private val voltageSensor = hardwareMap.voltageSensor.iterator().let { if(it.hasNext()) it.next() else null }
 
-    private val allHubs: MutableList<LynxModule> = hardwareMap.getAll(LynxModule::class.java)
+    private val chub: LynxModule = hardwareMap.getAll<LynxModule>(LynxModule::class.java).find {
+        it.isParent
+    }!!
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -87,8 +90,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var blocker: Double = IntakeTransfer.BLOCKER_DISENGAGED
 
     private var savedVoltage: Double = 12.0
-
-    var turretOffset = 0.0
 
     // Cached motor values
     private var cachedFlywheelVelocity: Double = 0.0
@@ -157,11 +158,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     }
 
     override fun turretPosition(): Double {
-        return cachedTurretPosition + turretOffset
-    }
-
-    override fun setTurretPosition(Offset: Double) {
-        turretOffset = Offset //change
+        return cachedTurretPosition
     }
 
     var posOffset = Pose2d()
@@ -230,14 +227,14 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         cachedBeamBreak3 = beamBreak3Sensor?.state?.not() ?: false
 
         // update analog reading
-        cachedTurretPosition = (turretEncoder?.voltage ?: 0.0) / 3.3 * TurretServoConfig.servoTotalRange - TurretServoConfig.servoCenterAngle
+        cachedTurretPosition = -((turretEncoder?.voltage ?: 0.0) / 3.3 - 0.5) * PI*2.0
 
         pinpoint?.update()
         savedVoltage = voltageSensor?.voltage ?: 12.0
         // our encoders are plugged into drive motor ports so we only have to bulk read from the chub
         cachedFlywheelVelocity = (driveBRMotor?.velocity ?: 0.0) / 28.0 * 2 * PI
         cachedIntake1RPM = (driveFRMotor?.velocity ?: 0.0) / 145.1 * 60
-        allHubs.map { it.clearBulkCache() }
+        chub.clearBulkCache()
     }
 
     val startTime: ComparableTimeMark = TimeSource.Monotonic.markNow()
@@ -260,7 +257,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         //setting the directions of the ododmetry pods
         pinpoint?.setEncoderDirections(
             GoBildaPinpointDriver.EncoderDirection.FORWARD,
-            GoBildaPinpointDriver.EncoderDirection.FORWARD
+            GoBildaPinpointDriver.EncoderDirection.REVERSED
         )
 
         //resetting the positions for the IMU
@@ -307,6 +304,9 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         flywheel1?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
         flywheel2?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
 
+        intake1Motor?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+        intake2Motor?.zeroPowerBehavior = DcMotor.ZeroPowerBehavior.FLOAT
+
         // Turret servos: left = FORWARD, right = REVERSE (mirrored mounting, geared together)
         // Both servos receive the same position value; reversing the right servo
         // makes both physical shafts rotate the same direction.
@@ -321,9 +321,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
         // configuring pinpoint
         configurePinpoint()
 
-        for (hub in allHubs) {
-            hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL)
-        }
+        chub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL)
     }
 
 }

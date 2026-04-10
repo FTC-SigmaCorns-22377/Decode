@@ -7,6 +7,7 @@ import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Full-featured competition TeleOp.
@@ -15,6 +16,11 @@ import kotlin.math.abs
  *   Left stick          - Translate (mecanum drive)
  *   Right stick X       - Rotate
  *   D-pad up/down       - Speed mode toggle (full / precision)
+ *
+ *   Left trigger         - Hold to intake balls
+ *   B                    - Hold to reverse intake (spit balls out)
+ *   Right trigger        - Hold to shoot (flywheel + transfer)
+ *   Left bumper          - Hold to spin up flywheel (without shooting)
  *
  * GAMEPAD 2 (Operator - all subsystem controls):
  *   Left trigger         - Hold to intake balls
@@ -31,7 +37,7 @@ import kotlin.math.abs
  *   D-pad right          - Increase flywheel target speed (+25 rad/s)
  */
 @TeleOp(name = "Main TeleOp", group = "Competition")
-class MainTeleOp : SigmaOpMode() {
+class   MainTeleOp : SigmaOpMode() {
 
     override fun runOpMode() {
         val robot = Robot(io, blue = false)
@@ -39,13 +45,12 @@ class MainTeleOp : SigmaOpMode() {
         robot.startApriltag()
 
         // State
-        var autoAimEnabled = false
+        var autoAimEnabled = true
         var flywheelTargetSpeed = 400.0
         val flywheelSpeedStep = 25.0
 
         // Toggle debounce flags (GP2)
         var lastA2 = false
-        var lastX2 = false
         var lastY2 = false
         var lastDpadUp2 = false
         var lastDpadLeft2 = false
@@ -80,9 +85,9 @@ class MainTeleOp : SigmaOpMode() {
             lastDpadRight2 = gamepad2.dpad_right
 
             // --- Intake: hold left trigger ---
-            if (gamepad2.left_trigger > 0.1 && gamepad2.right_trigger <= 0.1) {
+            if ( (max(gamepad2.left_trigger,gamepad1.left_trigger) > 0.1 && max(gamepad2.right_trigger,gamepad1.right_trigger) <= 0.1) ) {
                 robot.intakeCoordinator.startIntake()
-            } else if (!gamepad2.b) {
+            } else if (!gamepad2.b || !gamepad1.b) {
                 if (robot.intakeTransfer.state == IntakeTransfer.State.INTAKING ||
                     robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
@@ -90,7 +95,7 @@ class MainTeleOp : SigmaOpMode() {
             }
 
             // --- Outtake: hold B to reverse intake ---
-            if (gamepad2.b) {
+            if (gamepad2.b || gamepad1.b) {
                 robot.intakeTransfer.state = IntakeTransfer.State.REVERSING
             } else if (robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
@@ -101,12 +106,6 @@ class MainTeleOp : SigmaOpMode() {
                 autoAimEnabled = !autoAimEnabled
             }
             lastA2 = gamepad2.a
-
-            // --- Toggle: Shoot-while-move (X button) ---
-            if (gamepad2.x && !lastX2) {
-                robot.aim.shootWhileMoveEnabled = !robot.aim.shootWhileMoveEnabled
-            }
-            lastX2 = gamepad2.x
 
             // --- Toggle: Auto-shoot zones (Y button) ---
             if (gamepad2.y && !lastY2) {
@@ -147,20 +146,27 @@ class MainTeleOp : SigmaOpMode() {
 //            robot.io.flywheel = if (gamepad2.right_trigger > 0.1) { 0.88 } else { 0.0 }
 
             // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
-            if (gamepad2.right_trigger > 0.1) {
+            if (max(gamepad2.right_trigger, gamepad1.right_trigger) > 0.1) {
                 // Shooting: spin flywheel + transfer (blocker delay handled by state machine)
-                robot.shooter.flywheelTarget = flywheelTargetSpeed
-                robot.aimFlywheel = false
-                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
-            } else if (gamepad2.left_bumper) {
+                if(autoAimEnabled) {
+                    robot.aimFlywheel = true
+                    robot.aim.shotRequested = true
+                } else {
+                    robot.shooter.flywheelTarget = flywheelTargetSpeed
+                    robot.aimFlywheel = false
+                    robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+                }
+            } else if (gamepad2.left_bumper || gamepad1.left_bumper) {
                 // Spin-up only: flywheel on, blocker stays engaged
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = false
+                robot.aim.shotRequested = false
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             } else {
                 // Idle: stop flywheel, only reset transfer (not intake/reverse)
                 robot.shooter.flywheelTarget = 0.0
                 robot.aimFlywheel = false
+                robot.aim.shotRequested = false
                 if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 }
@@ -202,7 +208,7 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addData("Flywheel Vel", "%.1f rad/s", flywheelVel)
             telemetry.addData("Flywheel Target", "%.1f rad/s (GP2 D-pad L/R)", robot.shooter.flywheelTarget)
             telemetry.addData("Hood Angle", "%.1f°", Math.toDegrees(robot.shooter.computedHoodAngle))
-            telemetry.addData("Hood", "${if (robot.shooter.autoAdjust) "AUTO" else "MANUAL"} ${if (robot.shooter.usingInterpolatedData) "(data)" else "(trig)"}")
+            telemetry.addData("Hood", if (robot.shooter.autoAdjust) "AUTO" else "MANUAL")
             telemetry.addData("Hood Servo", "%.3f", robot.shooter.hoodServoPosition)
 
             telemetry.addLine("")
@@ -211,7 +217,6 @@ class MainTeleOp : SigmaOpMode() {
             telemetry.addData("Turret Target", "%.1f°", Math.toDegrees(robot.turret.effectiveTargetAngle))
             telemetry.addData("Turret Servo", "%.3f", robot.turret.currentServoPosition)
             telemetry.addData("Field-Relative", robot.turret.fieldRelativeMode)
-            telemetry.addData("Shoot-While-Move", if (robot.aim.shootWhileMoveEnabled) "ON" else "OFF")
 
             telemetry.addLine("")
             telemetry.addLine("=== SUBSYSTEMS ===")

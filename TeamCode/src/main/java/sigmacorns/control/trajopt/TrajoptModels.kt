@@ -1,4 +1,4 @@
-package sigmacorns.control.mpc
+package sigmacorns.control.trajopt
 
 import sigmacorns.math.Pose2d
 
