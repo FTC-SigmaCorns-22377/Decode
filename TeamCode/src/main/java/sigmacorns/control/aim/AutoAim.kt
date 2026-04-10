@@ -46,6 +46,26 @@ interface AutoAim : AutoCloseable {
      */
     var positionOverride: Double?
 
+    /**
+     * Most recent solver/preposition target as a ballistic shot state
+     * (theta, phi, vExit in field frame). Null when no feasible solve has been
+     * produced yet. Exposed for visualization/telemetry only.
+     */
+    val primaryShotState: Ballistics.ShotState?
+
+    /**
+     * Second leg of the most recent robust solve (theta, phi, vExit). Non-null only
+     * while a robust solver branch is active ([isRobustActive]). Exposed for
+     * visualization/telemetry only.
+     */
+    val secondaryShotState: Ballistics.ShotState?
+
+    /** True when the most recent update produced a robust (two-shot) solve. */
+    val isRobustActive: Boolean
+
+    /** True when the most recent update produced an approach-preposition target. */
+    val isPrepositionActive: Boolean
+
     /** Called once before the main loop. Initialises GTSAM with the robot's starting pose. */
     fun init(initialPose: Pose2d, apriltagTracking: Boolean)
 

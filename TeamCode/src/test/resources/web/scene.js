@@ -435,6 +435,87 @@ function updateBalls(balls) {
     }
 }
 
+// ---- Shot visualization (goal marker + ballistic trajectories) ----
+const goalMarker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xff3333 })
+);
+goalMarker.visible = false;
+scene.add(goalMarker);
+
+// One persistent line per kind. Materials are fixed at construction so we
+// don't allocate per frame. Dashed lines need computeLineDistances() after
+// each geometry update.
+const TRAJECTORY_KINDS = {
+    current:     { color: 0x00ccff, dashed: false },
+    target:      { color: 0xffaa00, dashed: false },
+    secondary:   { color: 0xffaa00, dashed: true  },
+    preposition: { color: 0xffaa00, dashed: false },
+};
+
+const trajectoryLines = {};
+for (const [kind, cfg] of Object.entries(TRAJECTORY_KINDS)) {
+    const mat = cfg.dashed
+        ? new THREE.LineDashedMaterial({
+            color: cfg.color,
+            transparent: true,
+            opacity: 0.6,
+            dashSize: 0.05,
+            gapSize: 0.04,
+        })
+        : new THREE.LineBasicMaterial({
+            color: cfg.color,
+            transparent: true,
+            opacity: 0.6,
+        });
+    const geo = new THREE.BufferGeometry();
+    const line = new THREE.Line(geo, mat);
+    line.frustumCulled = false;
+    line.visible = false;
+    trajectoryLines[kind] = line;
+    scene.add(line);
+}
+
+function updateShotViz(shotViz) {
+    if (!shotViz) {
+        goalMarker.visible = false;
+        for (const line of Object.values(trajectoryLines)) line.visible = false;
+        return;
+    }
+
+    const goal = shotViz.goal;
+    if (goal) {
+        goalMarker.position.set(-goal.y, goal.z, goal.x);
+        goalMarker.visible = true;
+    } else {
+        goalMarker.visible = false;
+    }
+
+    const seen = new Set();
+    const trajs = shotViz.trajectories || [];
+    for (const t of trajs) {
+        const line = trajectoryLines[t.kind];
+        if (!line) continue;
+        const pts = t.points || [];
+        if (pts.length < 2) { line.visible = false; continue; }
+        const v3 = new Array(pts.length);
+        for (let i = 0; i < pts.length; i++) {
+            const p = pts[i]; // [x, y, z] in sim frame
+            v3[i] = new THREE.Vector3(-p[1], p[2], p[0]);
+        }
+        line.geometry.setFromPoints(v3);
+        if (line.material.isLineDashedMaterial) {
+            line.computeLineDistances();
+        }
+        line.visible = true;
+        seen.add(t.kind);
+    }
+
+    for (const kind of Object.keys(trajectoryLines)) {
+        if (!seen.has(kind)) trajectoryLines[kind].visible = false;
+    }
+}
+
 // Resize handler
 window.addEventListener('resize', () => {
     const w = container.clientWidth;
@@ -468,4 +549,4 @@ function updateGoals(goals) {
     updateScoreSprite(blueGoal, 'RED', goals.blueScore || 0, 'rgba(180,40,40,0.8)');
 }
 
-export { updateRobot, updateBalls, updateGoals };
+export { updateRobot, updateBalls, updateGoals, updateShotViz };

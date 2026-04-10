@@ -71,7 +71,11 @@ class AimingSystem(
     override var readyToShoot: Boolean = false
         private set
 
-    private var lastShotState: Ballistics.ShotState? = null
+    override var primaryShotState: Ballistics.ShotState? = null
+        private set
+    override val secondaryShotState: Ballistics.ShotState? get() = null
+    override val isRobustActive: Boolean get() = false
+    override val isPrepositionActive: Boolean get() = false
 
     /**
      * Initialize all subsystems. Call once before the main loop.
@@ -174,7 +178,7 @@ class AimingSystem(
             return
         }
 
-        lastShotState = shotState
+        primaryShotState = shotState
 
         if (aimTurret) {
             turret.fieldRelativeMode = true

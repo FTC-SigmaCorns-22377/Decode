@@ -8,6 +8,7 @@ import sigmacorns.constants.flywheelRadius
 import sigmacorns.constants.turretPos
 import sigmacorns.control.aim.ApproachPrepositioner
 import sigmacorns.control.aim.AutoAim
+import sigmacorns.control.aim.Ballistics
 import sigmacorns.control.aim.TurretPlannerBridge
 import sigmacorns.control.aim.TurretPlannerBridge.OptimalTIdx
 import sigmacorns.control.aim.TurretPlannerBridge.PrepositionIdx
@@ -75,6 +76,20 @@ class NativeAutoAim(
     private var lastTheta: Float = 0f
     private var lastPhi:   Float = 0f
     private var lastOmega: Float = 0f
+
+    /** Second-shot leg for the most recent robust solve. */
+    private var lastTheta2: Float = 0f
+    private var lastPhi2:   Float = 0f
+    private var lastOmega2: Float = 0f
+
+    override var primaryShotState: Ballistics.ShotState? = null
+        private set
+    override var secondaryShotState: Ballistics.ShotState? = null
+        private set
+    override var isRobustActive: Boolean = false
+        private set
+    override var isPrepositionActive: Boolean = false
+        private set
 
     // ------------------------------------------------------------------
     // Native config arrays (built once in init, constant thereafter)
@@ -220,8 +235,11 @@ class NativeAutoAim(
         val inZone = zoneZ0 >= 0.0
 
         var solved = false
+        var robustSolved = false
 
         var prepositioned = false
+        isRobustActive = false
+        isPrepositionActive = false
         if (zoneDefined && !inZone) {
             // ── Outside the launch zone: preposition with t_until_zone ────
             // Half-plane approach time: z0 = n·p − d, z0(t) = z0 + (n·v)·t.
@@ -256,6 +274,7 @@ class NativeAutoAim(
                 lastPhi   = prep[PrepositionIdx.PHI]
                 lastOmega = prep[PrepositionIdx.OMEGA]
                 prepositioned = true
+                isPrepositionActive = true
                 // `solved` stays false — preposition is a pre-aim, not a shot.
             }
         } else if (zoneDefined) {
@@ -275,7 +294,11 @@ class NativeAutoAim(
                     lastTheta = r[RobustShotIdx.S1_THETA]
                     lastPhi   = r[RobustShotIdx.S1_PHI]
                     lastOmega = r[RobustShotIdx.S1_OMEGA]
+                    lastTheta2 = r[RobustShotIdx.S2_THETA]
+                    lastPhi2   = r[RobustShotIdx.S2_PHI]
+                    lastOmega2 = r[RobustShotIdx.S2_OMEGA]
                     solved = true
+                    robustSolved = true
                 }
             } catch (e: Exception) {
                 // fall through — leaves last* untouched, readyToShoot=false below
@@ -298,7 +321,11 @@ class NativeAutoAim(
                         lastTheta = r[RobustShotIdx.S1_THETA]
                         lastPhi   = r[RobustShotIdx.S1_PHI]
                         lastOmega = r[RobustShotIdx.S1_OMEGA]
+                        lastTheta2 = r[RobustShotIdx.S2_THETA]
+                        lastPhi2   = r[RobustShotIdx.S2_PHI]
+                        lastOmega2 = r[RobustShotIdx.S2_OMEGA]
                         solved = true
+                        robustSolved = true
                     }
                 } else {
                     val tStar = lastTStar
@@ -337,7 +364,26 @@ class NativeAutoAim(
             // No feasible solve this tick and no preposition update — bail out.
             lastTStar = null
             readyToShoot = false
+            primaryShotState = null
+            secondaryShotState = null
             return
+        }
+
+        // Expose the active target(s) as ShotState(theta, phi, vExit) for viz.
+        primaryShotState = Ballistics.ShotState(
+            theta = lastTheta.toDouble(),
+            phi   = lastPhi.toDouble(),
+            vExit = lastOmega.toDouble() * flywheelRadius * AimConfig.launchEfficiency,
+        )
+        if (robustSolved) {
+            isRobustActive = true
+            secondaryShotState = Ballistics.ShotState(
+                theta = lastTheta2.toDouble(),
+                phi   = lastPhi2.toDouble(),
+                vExit = lastOmega2.toDouble() * flywheelRadius * AimConfig.launchEfficiency,
+            )
+        } else {
+            secondaryShotState = null
         }
 
         if (aimTurret) {

@@ -280,7 +280,6 @@ class Auto12BallDiagnosticTest {
 
         // Flip goal for sim coordinates (same as auto opmodes do)
         robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
-        robot.aim.targeting.goalPosition = robot.aim.goalPosition
 
         val goalPos = robot.aim.goalPosition
         println("Goal position: (${goalPos.x}, ${goalPos.y})")
@@ -325,7 +324,6 @@ class Auto12BallDiagnosticTest {
         robot.aimTurret = true
 
         robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
-        robot.aim.targeting.goalPosition = robot.aim.goalPosition
 
         val goalPos = robot.aim.goalPosition
         println("Goal: (${goalPos.x}, ${goalPos.y}), Robot: (0.5, -1.0)")

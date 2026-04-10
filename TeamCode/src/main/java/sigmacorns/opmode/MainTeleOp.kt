@@ -41,6 +41,7 @@ class   MainTeleOp : SigmaOpMode() {
 
     override fun runOpMode() {
         val robot = Robot(io, blue = false)
+        robotRef = robot
         robot.init(Pose2d(), apriltagTracking = true)
         robot.startApriltag()
 

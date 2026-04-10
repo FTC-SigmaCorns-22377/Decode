@@ -53,6 +53,55 @@ class Ballistics(
         return atan2(c, b)
     }
 
+    /**
+     * Sample a launched ball's parabolic path for visualization.
+     *
+     * Launch point and initial velocity match [sigmacorns.io.JoltSimIO.shootBall]:
+     *   launch = turretPos + rH · ((1 − sin φ)·cos θ, (1 − sin φ)·sin θ, cos φ)
+     *   v0 = vExit · (cos φ·cos θ, cos φ·sin θ, sin φ) + (robotVel.x, robotVel.y, 0)
+     *
+     * Integration steps at [dt] until the ball descends below [stopZ] or
+     * exceeds [maxT].
+     */
+    fun sampleTrajectory(
+        turretPos: Vector3d,
+        robotVel: Vector2d,
+        shot: ShotState,
+        stopZ: Double,
+        dt: Double = 0.02,
+        maxT: Double = 2.5,
+    ): List<Vector3d> {
+        val theta = shot.theta
+        val phi = shot.phi
+        val vExit = shot.vExit
+        val cosPhi = cos(phi)
+        val sinPhi = sin(phi)
+        val cosTheta = cos(theta)
+        val sinTheta = sin(theta)
+
+        val x0 = turretPos.x + rH * (1.0 - sinPhi) * cosTheta
+        val y0 = turretPos.y + rH * (1.0 - sinPhi) * sinTheta
+        val z0 = turretPos.z + rH * cosPhi
+
+        val vx = vExit * cosPhi * cosTheta + robotVel.x
+        val vy = vExit * cosPhi * sinTheta + robotVel.y
+        val vz = vExit * sinPhi
+
+        val points = ArrayList<Vector3d>()
+        points.add(Vector3d(x0, y0, z0))
+        var t = dt
+        while (t <= maxT) {
+            val x = x0 + vx * t
+            val y = y0 + vy * t
+            val z = z0 + vz * t - 0.5 * g * t * t
+            points.add(Vector3d(x, y, z))
+            // Stop after we pass stopZ on the way down.
+            if (z < stopZ && (vz - g * t) < 0.0) break
+            t += dt
+        }
+        return points
+    }
+
     fun shotError(shot: ShotState, target: Target): Double {
         // -1/2 * g * T^2 + T * v_exit * sin(phi) - Delta_z = 0
         val a = -0.5 * g
