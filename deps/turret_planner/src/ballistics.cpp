@@ -202,9 +202,10 @@ bool ballistics_is_feasible(
         if (theta_rel < bounds.theta_min || theta_rel > bounds.theta_max) return false;
     }
 
-    // Lob check: vertical velocity at T must be ≤ 0 (ball descending at target).
+    // Lob check: vertical velocity at T must be < 0 (ball descending at target).
+    // Matches Kotlin isLob: vz < 0 (strictly negative; horizontal at impact is not a lob).
     float vz_at_T = p.v_exit * std::sin(p.phi) - cfg.g * T;
-    return vz_at_T <= 0.f;
+    return vz_at_T < 0.f;
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +373,7 @@ TInterval ballistics_feasible_interval(
 {
     // Upper bound on T: the trajectory that maximizes height.
     // At phi=45° approximately the maximum range case; use vMax at phi=pi/4.
-    // Matches Kotlin tBounds: solve -g/2*T^2 + vMax/sqrt(2)*T - (dz + r_h/sqrt(2)) = 0
+    // Matches Kotlin tBounds: solve g/2*T^2 - vMax/sqrt(2)*T + (dz - r_h/sqrt(2)) = 0
     float a_coef = cfg.g / 2.f;
     float b_coef = -bounds.v_exit_max / 1.41421356f;
     float c_coef =  dz - cfg.r_h / 1.41421356f;
