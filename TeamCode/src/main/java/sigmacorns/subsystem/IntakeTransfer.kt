@@ -57,7 +57,7 @@ class IntakeTransfer(val io: SigmaIO) {
         const val TRANSFER_POWER = 1.0
         const val BLOCKER_ENGAGED = 0.23
         const val BLOCKER_DISENGAGED = 0.45
-        val BLOCKER_MOVE_DELAY = 1500.milliseconds
+        val BLOCKER_MOVE_DELAY = 400.milliseconds
     }
 
     /** Whether the blocker has had enough time to physically open. */

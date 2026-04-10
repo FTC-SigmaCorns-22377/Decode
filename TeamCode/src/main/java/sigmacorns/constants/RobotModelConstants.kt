@@ -81,6 +81,9 @@ val turretPos = Vector3d(
 
 val ballExitRadius = 0.0785
 
+/** Physical robot dimensions (metres): x = depth (front-back), y = width (left-right). */
+val robotSize = Vector2d(0.367, 0.365)
+
 
 //176.819 mm - 57.32500 mm - 248.30000 mm /2
 /**

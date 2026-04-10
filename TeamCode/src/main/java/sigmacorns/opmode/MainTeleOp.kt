@@ -75,6 +75,7 @@ class   MainTeleOp : SigmaOpMode() {
             if (gamepad1.x && !lastX1) robot.drive.fieldCentric = !robot.drive.fieldCentric
             lastX1 = gamepad1.x
 
+            robot.drive.fieldCentricHeading = robot.aim.autoAim.fusedPose.rot - 0.5*PI
             robot.drive.update(gamepad1, io)
 
             // ============================================================
@@ -239,6 +240,7 @@ class   MainTeleOp : SigmaOpMode() {
             telemetry.addData("Transfer", if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) "RUNNING" else "IDLE")
             telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
             telemetry.addData("Auto-Shoot", if (robot.intakeCoordinator.autoShootEnabled) "ON" else "OFF")
+            telemetry.addData("In Shoot Zone", robot.intakeCoordinator.inShootingZone)
             telemetry.addData("Speed Mode", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
             telemetry.addData("Field-Centric", if (robot.drive.fieldCentric) "ON" else "OFF")
             telemetry.addData("Loop Time", "%d ms", dt.inWholeMilliseconds)
