@@ -136,7 +136,6 @@ const CONTROLLER_MAPPINGS = {
     "BDA Xbox ONE Enhanced Controller": {
         buttons: { 0:0, 1:1, 2:2, 3:3, 4:4, 5:5, 8:6, 9:7, 10:9, 11:10, 16:8 },
         axes: { 0:0, 1:1, 2:3, 3:4, },
-        invertAxes: [0,2],
         buttonFromAxis: { 6: [2,0.1], 7: [5,0.1], 12: [7, -0.5], 13: [7, 0.5], 14: [6, -0.5], 15: [6, 0.5], }
     }
     // Example (edit for your off-brand Xbox clone):

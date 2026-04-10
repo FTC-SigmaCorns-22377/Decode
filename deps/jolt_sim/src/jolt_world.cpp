@@ -1,6 +1,7 @@
 #include "jolt_world.h"
 
 #include <Jolt/Physics/Body/BodyInterface.h>
+#include <Jolt/Physics/Body/BodyLockInterface.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
 
@@ -687,6 +688,15 @@ int JoltWorld::spawnBall(float x, float y, float z, float vx, float vy, float vz
 int JoltWorld::spawnShotBall(float x, float y, float z, float vx, float vy, float vz, int color) {
     int idx = spawnBall(x, y, z, vx, vy, vz, color);
     if (idx >= 0) {
+        // Shot balls are in free flight — scale down the ground-rolling damping
+        // that spawnBall sets so they follow near-ballistic trajectories while
+        // retaining a small amount of air drag.
+        JPH::BodyLockWrite lock(physicsSystem_->GetBodyLockInterface(), balls_[idx].bodyId);
+        if (lock.Succeeded()) {
+            auto* mp = lock.GetBody().GetMotionProperties();
+            mp->SetLinearDamping(mp->GetLinearDamping() * 0.15f);
+            mp->SetAngularDamping(mp->GetAngularDamping() * 0.15f);
+        }
         shotImmunity_.push_back({balls_[idx].bodyId, 0.5f}); // 0.5s immunity
     }
     return idx;

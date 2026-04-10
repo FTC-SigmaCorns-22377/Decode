@@ -40,13 +40,13 @@ import kotlin.math.max
 class   MainTeleOp : SigmaOpMode() {
 
     override fun runOpMode() {
-        val robot = Robot(io, blue = false)
+        val robot = Robot(io, blue = false, useNativeAim = true)
         robotRef = robot
-        robot.init(Pose2d(), apriltagTracking = true)
+        robot.init(Pose2d(), apriltagTracking = !SIM)
         robot.startApriltag()
 
         // State
-        var autoAimEnabled = false
+        var autoAimEnabled = true
         var flywheelTargetSpeed = 400.0
         val flywheelSpeedStep = 25.0
 

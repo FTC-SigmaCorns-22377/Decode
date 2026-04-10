@@ -76,7 +76,7 @@ static jfloatArray make_result(JNIEnv* env, const float* buf, int n) {
 // Returns [theta, phi, vExit, omega]
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_solve(
+Java_sigmacorns_control_aim_TurretPlannerBridge_solve(
     JNIEnv* env, jobject,
     jfloat turretX, jfloat turretY, jfloat turretZ,
     jfloat targetX, jfloat targetY, jfloat targetZ,
@@ -106,7 +106,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_solve(
 // Returns [T*, tau, theta, phi, vExit, omega, feasible(0|1)]
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_optimalTCold(
+Java_sigmacorns_control_aim_TurretPlannerBridge_optimalTCold(
     JNIEnv* env, jobject,
     jfloat turretX, jfloat turretY, jfloat turretZ,
     jfloat targetX, jfloat targetY, jfloat targetZ,
@@ -142,7 +142,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_optimalTCold(
 // Returns [T*, tau, theta, phi, vExit, omega, feasible(0|1)]
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_optimalTWarm(
+Java_sigmacorns_control_aim_TurretPlannerBridge_optimalTWarm(
     JNIEnv* env, jobject,
     jfloat turretX, jfloat turretY, jfloat turretZ,
     jfloat targetX, jfloat targetY, jfloat targetZ,
@@ -178,7 +178,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_optimalTWarm(
 // Returns [found(0|1), tPath, T*, theta, phi, vExit, omega]
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_findEarliestShot(
+Java_sigmacorns_control_aim_TurretPlannerBridge_findEarliestShot(
     JNIEnv* env, jobject,
     jfloatArray jPath, jint nSamples,
     jfloat turretX, jfloat turretY, jfloat turretZ,
@@ -218,7 +218,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_findEarliestShot(
 // Returns [theta, phi, omega, expectedEarliestT]
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_computePreposition(
+Java_sigmacorns_control_aim_TurretPlannerBridge_computePreposition(
     JNIEnv* env, jobject,
     jfloatArray jPath, jint nSamples,
     jfloat turretX, jfloat turretY, jfloat turretZ,
@@ -260,7 +260,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_computePreposition(
 //          s2.theta, s2.phi, s2.vExit, s2.omega]
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_robustShot(
+Java_sigmacorns_control_aim_TurretPlannerBridge_robustShot(
     JNIEnv* env, jobject,
     jfloat turretX, jfloat turretY, jfloat turretZ,
     jfloat t1X, jfloat t1Y, jfloat t1Z,
@@ -304,7 +304,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_robustShot(
 // both balls from a known current turret state.
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_robustAdjust(
+Java_sigmacorns_control_aim_TurretPlannerBridge_robustAdjust(
     JNIEnv* env, jobject,
     jfloat turretX, jfloat turretY, jfloat turretZ,
     jfloat t1X, jfloat t1Y, jfloat t1Z,
@@ -348,7 +348,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_robustAdjust(
 // Same return shape as computePreposition: [theta, phi, omega, expectedEarliestT]
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_computeRobustPreposition(
+Java_sigmacorns_control_aim_TurretPlannerBridge_computeRobustPreposition(
     JNIEnv* env, jobject,
     jfloatArray jPath, jint nSamples,
     jfloat turretX, jfloat turretY, jfloat turretZ,
@@ -389,7 +389,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_computeRobustPreposition(
 // ---------------------------------------------------------------------------
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_createZoneTracker(
+Java_sigmacorns_control_aim_TurretPlannerBridge_createZoneTracker(
     JNIEnv* env, jobject,
     jfloatArray jZone,
     jfloatArray jWeights,
@@ -413,7 +413,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_createZoneTracker(
 
 // Returns [urgency, urgencyFiltered, effort, tau, targetTheta, targetPhi, targetOmega, shouldFire(0|1)]
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_updateZoneTracker(
+Java_sigmacorns_control_aim_TurretPlannerBridge_updateZoneTracker(
     JNIEnv* env, jobject,
     jlong handle,
     jfloat robotX,   jfloat robotY,   jfloat robotHeading,
@@ -439,7 +439,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_updateZoneTracker(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_resetZoneTracker(
+Java_sigmacorns_control_aim_TurretPlannerBridge_resetZoneTracker(
     JNIEnv*, jobject,
     jlong handle)
 {
@@ -448,7 +448,7 @@ Java_sigmacorns_aim_TurretPlannerBridge_resetZoneTracker(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_sigmacorns_aim_TurretPlannerBridge_destroyZoneTracker(
+Java_sigmacorns_control_aim_TurretPlannerBridge_destroyZoneTracker(
     JNIEnv*, jobject,
     jlong handle)
 {

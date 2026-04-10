@@ -45,16 +45,15 @@ target_include_directories(turret_planner PUBLIC include/)
 option(TURRET_PLANNER_JNI "Build JNI shared library (requires JNI headers)" OFF)
 
 if(TURRET_PLANNER_JNI)
-    # On Android the NDK toolchain injects JNI headers automatically.
-    # On a host build the caller passes JNI_INCLUDE_DIR / JNI_PLATFORM_INCLUDE_DIR
-    # (see scripts/build_host_jni.sh).
     add_library(turret_planner_jni SHARED jni/turret_planner_jni.cpp)
     target_link_libraries(turret_planner_jni PRIVATE turret_planner)
 
-    if(DEFINED JNI_INCLUDE_DIR)
-        target_include_directories(turret_planner_jni PRIVATE
-            "${JNI_INCLUDE_DIR}"
-            "${JNI_PLATFORM_INCLUDE_DIR}")
+    # On Android the NDK sysroot provides jni.h on the default include path.
+    # On a host build we locate a JDK via CMake's FindJNI module, which
+    # searches JAVA_HOME, common /usr/lib/jvm/* layouts, Homebrew, etc.
+    if(NOT ANDROID)
+        find_package(JNI REQUIRED)
+        target_include_directories(turret_planner_jni PRIVATE ${JNI_INCLUDE_DIRS})
     endif()
 
     # -fno-rtti is already in the flags from the ARM/host blocks above.

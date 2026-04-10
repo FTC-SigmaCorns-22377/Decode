@@ -6,6 +6,8 @@ import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.intakeMotor
 import sigmacorns.constants.turretPos
 import sigmacorns.constants.turretTicksPerRad
+import sigmacorns.logic.AimConfig
+import sigmacorns.logic.AimingSystem
 import sigmacorns.subsystem.ShooterConfig
 import sigmacorns.subsystem.TurretServoConfig
 import sigmacorns.sim.FlywheelParameters
@@ -15,6 +17,7 @@ import sigmacorns.sim.FlywheelDynamics
 import sigmacorns.sim.FlywheelState
 import sigmacorns.sim.JoltNative
 import sigmacorns.sim.MecanumDynamics
+import sigmacorns.subsystem.IntakeTransfer
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -46,15 +49,12 @@ class JoltSimIO(
     private var flywheelState = FlywheelState()
     private var intakeRollerState = FlywheelState()
     private var turretAngleRad = 0.0
-    private var turretVelocityRad = 0.0
     private var turretOffset = 0.0
     private var hoodAngleRad = Math.toRadians(ShooterConfig.defaultAngleDeg)
 
     val heldBalls = mutableListOf<BallColor>()
     private var autoShootTimer = 0.0
 
-    /** Hood servo input: 0.0 = horizontal, 1.0 = 70 degrees */
-    var hoodInput: Double = DEFAULT_BALL_LAUNCH_ANGLE_DEGREES / 70.0
 
     override var driveFL: Double = 0.0
     override var driveBL: Double = 0.0
@@ -66,7 +66,6 @@ class JoltSimIO(
     override var turretLeft: Double = 0.5
     override var turretRight: Double = 0.5
     override var hood: Double = 0.5
-        set(value) { field = value; hoodInput = value }
     override var blocker: Double = 0.0
 
     override fun position(): Pose2d {
@@ -127,11 +126,12 @@ class JoltSimIO(
         JoltNative.nativeSetIntakeRollerOmega(handle, intakeRollerState.omega.toFloat())
 
         // Turret servo simulation: convert servo position to angle.
-        // Turret.kt writes turretLeft where 0.5 = center (servoCenterAngle).
-        // angle = (servoPos - 0.5) * servoTotalRange + servoCenterAngle
-        val targetTurretAngle = ((turretLeft - 0.5) * TurretServoConfig.servoTotalRange +
+        // Turret.kt writes turretRight as the direct position and
+        // turretLeft = 1.0 - currentServoPosition (hardware-reversed on the
+        // real robot). Read turretRight so the sim sees the intended angle.
+        val targetTurretAngle = ((turretRight - 0.5) * TurretServoConfig.servoTotalRange +
             TurretServoConfig.servoCenterAngle)
-            .coerceIn(-TURRET_ANGLE_LIMIT, TURRET_ANGLE_LIMIT)
+            .coerceIn(TurretServoConfig.servoCenterAngle - TurretServoConfig.servoTotalRange/2, TurretServoConfig.servoCenterAngle + TurretServoConfig.servoTotalRange/2)
 
         // Smooth servo response (first-order with time constant)
         val servoAlpha = 1.0 - kotlin.math.exp(-dtSeconds / SERVO_TIME_CONSTANT)
@@ -140,13 +140,14 @@ class JoltSimIO(
         // Integrate hood servo
         // Shooter maps [minAngleDeg, maxAngleDeg] → [0, 1], so invert:
         // angle = minAngle + servoPos * (maxAngle - minAngle)
-        val hoodMinRad = Math.toRadians(ShooterConfig.minAngleDeg)
-        val hoodMaxRad = Math.toRadians(ShooterConfig.maxAngleDeg)
-        val hoodTarget = (hoodMinRad + hoodInput.coerceIn(0.0, 1.0) * (hoodMaxRad - hoodMinRad))
+        val minHoodRad = Math.toRadians(ShooterConfig.minAngleDeg)
+        val maxHoodRad = Math.toRadians(ShooterConfig.maxAngleDeg)
+        val tHood = (hood - ShooterConfig.minServo) / (ShooterConfig.maxServo - ShooterConfig.minServo)
+        val hoodTarget = minHoodRad + tHood * (maxHoodRad - minHoodRad)
         val hoodError = hoodTarget - hoodAngleRad
         val hoodVel = (SERVO_K * hoodError).coerceIn(-SERVO_MAX_SPEED, SERVO_MAX_SPEED)
         hoodAngleRad += hoodVel * dtSeconds
-        hoodAngleRad = hoodAngleRad.coerceIn(hoodMinRad, hoodMaxRad)
+        hoodAngleRad = hoodAngleRad.coerceIn(minHoodRad, maxHoodRad)
 
         // Physics-based intake: C++ removes balls and returns their colors
         val maxPickup = (3 - heldBalls.size).coerceAtLeast(0)
@@ -167,7 +168,7 @@ class JoltSimIO(
         // Auto-shoot: when blocker is disengaged and transfer motor is running,
         // the ball path to the flywheel is open. If flywheel is spinning fast enough,
         // shoot one ball per transfer cycle (~200ms between shots).
-        if (blocker > 0.5 && intake > 0.5 && heldBalls.isNotEmpty()) {
+        if (blocker == IntakeTransfer.BLOCKER_DISENGAGED && intake > 0.5 && heldBalls.isNotEmpty()) {
             autoShootTimer += dtSeconds
             if (autoShootTimer >= AUTO_SHOOT_INTERVAL) {
                 autoShootTimer = 0.0
@@ -205,7 +206,7 @@ class JoltSimIO(
             return
         }
 
-        val exitSpeed = abs(flywheelState.omega) * FLYWHEEL_WHEEL_RADIUS * LAUNCH_EFFICIENCY
+        val exitSpeed = AimConfig.omegaInv(flywheelState.omega, hoodAngleRad)
         if (exitSpeed < 0.1) {
             println("shootBall: flywheel too slow (${abs(flywheelState.omega).toInt()} rad/s)")
             return
@@ -244,6 +245,9 @@ class JoltSimIO(
             spawnX.toFloat(), spawnY.toFloat(), spawnZ.toFloat(),
             vx.toFloat(), vy.toFloat(), vz.toFloat(),
             color.joltId)
+
+        // slow down flywheel
+        flywheelState.omega *= 0.8
     }
 
     // --- Intake/Hood getters ---
@@ -343,30 +347,9 @@ class JoltSimIO(
 
         /** Time between auto-shot attempts when transfer motor is running (seconds). */
         const val AUTO_SHOOT_INTERVAL = 0.2
+        const val LAUNCH_EFFICIENCY = 0.3
 
-        // Robot geometry (must match C++ jolt_world.h)
-        const val ROBOT_HEIGHT = 0.15
-        const val ROBOT_LENGTH = 0.4
-
-        // Flywheel: front of the hooded shooter, gives exit speed
-        const val FLYWHEEL_WHEEL_RADIUS = 0.05 // 50mm contact wheel
-        const val LAUNCH_EFFICIENCY = 0.3      // energy transfer to ball
-
-        // Turret (DC motor model matching hardware)
-        // Uses the same bare motor specs with a turret-specific gear ratio
-        private const val TURRET_GEAR_RATIO = (1.0 + 46.0 / 11.0) * 76.0 / 19.0
-        val TURRET_MOTOR = LinearDcMotor(
-            sigmacorns.constants.bareMotorTopSpeed / TURRET_GEAR_RATIO,
-            sigmacorns.constants.bareMotorStallTorque * TURRET_GEAR_RATIO
-        )
-        const val TURRET_INERTIA = 0.005 // kg·m^2, turret assembly inertia
-        const val TURRET_DAMPING = 0.5 // viscous damping coefficient
-        /** Servo first-order response time constant (seconds). */
         const val SERVO_TIME_CONSTANT = 0.05
-        val TURRET_ANGLE_LIMIT = Math.PI // ±180° range matching turretRange limits
-
-        // Default hood angle
-        const val DEFAULT_BALL_LAUNCH_ANGLE_DEGREES = 45.0
 
         // Flywheel inertia: ½mr² = 0.5 * 0.38709252 kg * (0.046 m)²
         const val SIM_FLYWHEEL_INERTIA = 0.000410 // kg·m^2
@@ -375,13 +358,7 @@ class JoltSimIO(
         // Intake roller dynamics (reuses FlywheelDynamics with different parameters)
         const val INTAKE_ROLLER_INERTIA = 0.0005 // kg·m^2
         val INTAKE_ROLLER_PARAMS = FlywheelParameters(intakeMotor, INTAKE_ROLLER_INERTIA, 0.0001)
-
-        // Servo model constants
-        const val SERVO_TURRET_RANGE = 2 * Math.PI // rad, full range of servo
         const val SERVO_K = 10.0 // proportional gain (1/s)
         const val SERVO_MAX_SPEED = Math.PI // rad/s, max angular velocity
-
-        // Hood servo (controls launch angle)
-        val HOOD_RANGE = Math.toRadians(70.0)  // 0 to 70 degrees
     }
 }
