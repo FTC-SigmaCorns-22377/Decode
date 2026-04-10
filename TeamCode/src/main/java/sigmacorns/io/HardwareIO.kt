@@ -94,7 +94,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     // Cached motor values
     private var cachedFlywheelVelocity: Double = 0.0
     private var cachedIntake1RPM: Double = 0.0
-    private var cachedTurretPosition: Double = 0.0
+    private var cachedTurretPosition: Double = turretLeft
 
     // Cached beam break values (true = beam broken = ball present)
     private var cachedBeamBreak1: Boolean = false
@@ -108,7 +108,6 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     private var lastDriveBR: Double = Double.NaN
     private var lastFlywheel: Double = Double.NaN
     private var lastIntake: Double = Double.NaN
-    private var lastTurret: Double = Double.NaN
     private var lastTurretLeft: Double = Double.NaN
     private var lastTurretRight: Double = Double.NaN
     private var lastHood: Double = Double.NaN

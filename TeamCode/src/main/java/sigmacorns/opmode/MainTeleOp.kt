@@ -16,6 +16,7 @@ import kotlin.math.max
  *   Left stick          - Translate (mecanum drive)
  *   Right stick X       - Rotate
  *   D-pad up/down       - Speed mode toggle (full / precision)
+ *   X                    - Toggle field-centric drive
  *
  *   Left trigger         - Hold to intake balls
  *   B                    - Hold to reverse intake (spit balls out)
@@ -49,6 +50,9 @@ class   MainTeleOp : SigmaOpMode() {
         var flywheelTargetSpeed = 400.0
         val flywheelSpeedStep = 25.0
 
+        // Toggle debounce flags (GP1)
+        var lastX1 = false
+
         // Toggle debounce flags (GP2)
         var lastA2 = false
         var lastY2 = false
@@ -67,6 +71,10 @@ class   MainTeleOp : SigmaOpMode() {
             // ============================================================
 
             // Drivetrain: left stick = translate, right stick x = rotate, dpad = speed mode
+            // X button toggles field-centric mode
+            if (gamepad1.x && !lastX1) robot.drive.fieldCentric = !robot.drive.fieldCentric
+            lastX1 = gamepad1.x
+
             robot.drive.update(gamepad1, io)
 
             // ============================================================
@@ -215,7 +223,8 @@ class   MainTeleOp : SigmaOpMode() {
             telemetry.addLine("=== TURRET ===")
             telemetry.addData("Turret Angle", "%.1f°", Math.toDegrees(robot.turret.pos))
             telemetry.addData("Turret Target", "%.1f°", Math.toDegrees(robot.turret.effectiveTargetAngle))
-            telemetry.addData("Turret Servo", "%.3f", robot.turret.currentServoPosition)
+            telemetry.addData("Turret Servo Actual", "%.3f", robot.turret.currentServoPosition)
+            telemetry.addData("Turret Servo Target", "%.3f", robot.io.turretRight)
             telemetry.addData("Field-Relative", robot.turret.fieldRelativeMode)
 
             telemetry.addLine("")
@@ -231,6 +240,7 @@ class   MainTeleOp : SigmaOpMode() {
             telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
             telemetry.addData("Auto-Shoot", if (robot.intakeCoordinator.autoShootEnabled) "ON" else "OFF")
             telemetry.addData("Speed Mode", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
+            telemetry.addData("Field-Centric", if (robot.drive.fieldCentric) "ON" else "OFF")
             telemetry.addData("Loop Time", "%d ms", dt.inWholeMilliseconds)
             telemetry.update()
 

@@ -13,6 +13,7 @@ import sigmacorns.sim.MecanumDynamics
 class Drivetrain(val antiWheelieFilter: AntiWheelieFilter? = null) {
     private val mecanumDynamics = MecanumDynamics(drivetrainParameters)
     private var speedMultiplier = 1.0
+    var fieldCentric = true
 
     /**
      * Process gamepad input and update drivetrain.
@@ -27,10 +28,19 @@ class Drivetrain(val antiWheelieFilter: AntiWheelieFilter? = null) {
             speedMultiplier = 0.5  // Precision mode
         }
 
-        // Mecanum drive calculation
+        var inputX = -gamepad.left_stick_y.toDouble() * speedMultiplier
+        var inputY = -gamepad.left_stick_x.toDouble() * speedMultiplier
+
+        if (fieldCentric) {
+            val heading = io.position().rot
+            val rotated = Matrix2d().rotate(-heading).transform(org.joml.Vector2d(inputX, inputY))
+            inputX = rotated.x
+            inputY = rotated.y
+        }
+
         val robotPower = Pose2d(
-            -gamepad.left_stick_y.toDouble() * speedMultiplier,
-            -gamepad.left_stick_x.toDouble() * speedMultiplier,
+            inputX,
+            inputY,
             -gamepad.right_stick_x.toDouble() * speedMultiplier
         )
 
