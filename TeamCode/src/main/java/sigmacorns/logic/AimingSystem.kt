@@ -183,12 +183,17 @@ class AimingSystem(
             }
 
             val elapsed = robot.io.time() - shotRequestedTime!!
-            val shouldFire = curShotErr < AimConfig.shotTolerance || elapsed >= 2.seconds
+            val shouldFire = curShotErr < AimConfig.shotTolerance && robot.intakeCoordinator.inShootingZone
+            val keepFiring = robot.intakeCoordinator.inShootingZone &&
+                robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING
 
-            if (shouldFire) {
+            if (shouldFire || keepFiring) {
                 shotRequested = false
                 shotRequestedTime = null
                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+            } else {
+                // Not in zone or waiting for aim — pre-open blocker and stop transfer.
+                robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
             }
         }
 
