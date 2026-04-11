@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.hardware.Gamepad
 import com.qualcomm.robotcore.robocol.TelemetryMessage
 import org.firstinspires.ftc.robotcore.internal.opmode.OpModeServices
 import org.firstinspires.ftc.robotcore.internal.opmode.TelemetryImpl
+import sigmacorns.Robot
 import sigmacorns.State
 import sigmacorns.constants.Network
 import sigmacorns.io.HardwareIO
@@ -25,6 +26,13 @@ abstract class SigmaOpMode(
     val io: SigmaIO by lazy {
         providedIO ?: (if (SIM) simIO else null) ?: hardwareMap?.let { HardwareIO(it) } ?: SimIO()
     }
+
+    /**
+     * Test instrumentation: when an opmode constructs its [Robot], it should
+     * stash it here so sim harnesses can attach viz / probe internal state.
+     * Null when no robot has been created yet (or the opmode doesn't expose one).
+     */
+    @Volatile var robotRef: Robot? = null
 
     private val internalState = OpModeReflection(this)
 
