@@ -10,7 +10,7 @@ object MecanumLTVBridge {
             if (resolvedPath != null) {
                 System.load(resolvedPath)
             } else {
-                System.loadLibrary("rerun")
+                System.loadLibrary("mecanum_ltv_jni")
             }
         }
     }

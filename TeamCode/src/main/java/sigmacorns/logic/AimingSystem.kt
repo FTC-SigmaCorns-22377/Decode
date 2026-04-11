@@ -276,7 +276,7 @@ object AimConfig {
     /** Time (seconds) from when shot is requested until ball leaves shooter */
     @JvmField var transferDelay = 0.2
 
-    @JvmField var launchEfficiency = 0.20
+    @JvmField var launchEfficiency = 0.195
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
             vExit / (flywheelRadius * launchEfficiency)
@@ -298,7 +298,7 @@ object AimConfig {
     // NativeAutoAim uses the robust shot planner so the first shot's parameters
     // leave the flywheel at a speed compatible with the next shot after losing
     // this amount. Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var flywheelDrop = 100.0
+    @JvmField var flywheelDrop = 20.0
 
     // Approach prepositioning: when > 0, NativeAutoAim predicts the robot's
     // near-future trajectory via constant-velocity mecanum kinematics and

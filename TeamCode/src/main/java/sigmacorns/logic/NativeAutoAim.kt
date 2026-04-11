@@ -4,6 +4,7 @@ import org.joml.Vector2d
 import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.ballExitRadius
+import sigmacorns.constants.flywheelMotor
 import sigmacorns.constants.flywheelRadius
 import sigmacorns.constants.turretPos
 import sigmacorns.control.aim.ApproachPrepositioner
@@ -126,8 +127,8 @@ class NativeAutoAim(
 
         autoAim.enabled = true
 
-        val vMax = AimConfig.vMax
-        val omegaMax = vMax / (flywheelRadius * AimConfig.launchEfficiency)
+        val omegaMax = flywheelMotor.freeSpeed
+        val vMax = omegaMax*flywheelRadius* AimConfig.launchEfficiency
 
         physConfig = floatArrayOf(
             AimConfig.g.toFloat(),
@@ -303,7 +304,9 @@ class NativeAutoAim(
                         solved = true
                         robustSolved = true
                     }
-                } else {
+                }
+
+                if(!robustSolved){
                     val tStar = lastTStar
                     val result = if (tStar != null) {
                         bridge.optimalTWarm(

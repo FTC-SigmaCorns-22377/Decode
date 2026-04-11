@@ -1,5 +1,8 @@
 package sigmacorns.control.aim
 
+import dev.frozenmilk.sinister.util.NativeLibraryLoader
+import sigmacorns.opmode.SigmaOpMode.Companion.SIM
+
 /**
  * JNI bridge to the native turret_planner library (libturret_planner_jni.so).
  *
@@ -329,7 +332,15 @@ class TurretPlannerBridge {
 
     companion object {
         init {
-            System.loadLibrary("turret_planner_jni")
+
+            if(SIM) System.loadLibrary("turret_planner_jni") else {
+                val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("turret_planner_jni")
+                if (resolvedPath != null) {
+                    System.load(resolvedPath)
+                } else {
+                    System.loadLibrary("mecanum_ltv_jni")
+                }
+            }
         }
 
         /** Encode a path for [findEarliestShot] / [computePreposition]. */

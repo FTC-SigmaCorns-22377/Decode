@@ -51,17 +51,23 @@ static inline TurretState unpack_turret(float theta, float phi, float omega) {
     return TurretState{theta, phi, omega};
 }
 
-// Scoped array accessor: releases on destruction.
-template<typename T>
+// Scoped float-array accessor.
+//
+// NOTE: we intentionally use GetFloatArrayElements / ReleaseFloatArrayElements
+// rather than GetPrimitiveArrayCritical. The critical variants forbid any
+// other JNI calls while the region is held, which is incompatible with
+// allocating the result array (NewFloatArray) before releasing inputs.
+// GetFloatArrayElements returns a pinned (or copied) pointer that remains
+// valid across other JNI calls.
 struct ScopedArray {
-    JNIEnv*  env;
-    jarray   arr;
-    T*       ptr;
+    JNIEnv*     env;
+    jfloatArray arr;
+    jfloat*     ptr;
     ScopedArray(JNIEnv* e, jfloatArray a)
         : env(e), arr(a)
-        , ptr(reinterpret_cast<T*>(e->GetPrimitiveArrayCritical(a, nullptr))) {}
-    ~ScopedArray() { if (ptr) env->ReleasePrimitiveArrayCritical(arr, ptr, JNI_ABORT); }
-    operator T*() const { return ptr; }
+        , ptr(a ? e->GetFloatArrayElements(a, nullptr) : nullptr) {}
+    ~ScopedArray() { if (ptr) env->ReleaseFloatArrayElements(arr, ptr, JNI_ABORT); }
+    operator jfloat*() const { return ptr; }
 };
 
 // Create a float array result on the JVM heap and fill it from a local buffer.
@@ -85,8 +91,8 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_solve(
     jfloatArray jPhys,
     jfloatArray jOmega)
 {
-    ScopedArray<jfloat> phys(env, jPhys);
-    ScopedArray<jfloat> omC(env, jOmega);
+    ScopedArray phys(env, jPhys);
+    ScopedArray omC(env, jOmega);
     if (!phys || !omC) return nullptr;
 
     PhysicsConfig  cfg = unpack_physics(phys);
@@ -118,7 +124,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_optimalTCold(
     jfloatArray jOmega,
     jfloat tol)
 {
-    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+    ScopedArray w(env, jWeights), b(env, jBounds),
                         ph(env, jPhys),   om(env, jOmega);
     if (!w || !b || !ph || !om) return nullptr;
 
@@ -154,7 +160,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_optimalTWarm(
     jfloatArray jPhys,
     jfloatArray jOmega)
 {
-    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+    ScopedArray w(env, jWeights), b(env, jBounds),
                         ph(env, jPhys),   om(env, jOmega);
     if (!w || !b || !ph || !om) return nullptr;
 
@@ -191,8 +197,8 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_findEarliestShot(
     jfloatArray jPhys,
     jfloatArray jOmega)
 {
-    ScopedArray<jfloat> path(env, jPath);
-    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+    ScopedArray path(env, jPath);
+    ScopedArray w(env, jWeights), b(env, jBounds),
                         ph(env, jPhys),   om(env, jOmega);
     if (!path || !w || !b || !ph || !om) return nullptr;
 
@@ -233,8 +239,8 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_computePreposition(
     jfloatArray jPhys,
     jfloatArray jOmega)
 {
-    ScopedArray<jfloat> path(env, jPath);
-    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+    ScopedArray path(env, jPath);
+    ScopedArray w(env, jWeights), b(env, jBounds),
                         ph(env, jPhys),   om(env, jOmega);
     if (!path || !w || !b || !ph || !om) return nullptr;
 
@@ -274,7 +280,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robustShot(
     jfloat tol,
     jint   maxIter)
 {
-    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+    ScopedArray w(env, jWeights), b(env, jBounds),
                         ph(env, jPhys),   om(env, jOmega);
     if (!w || !b || !ph || !om) return nullptr;
 
@@ -319,7 +325,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robustAdjust(
     jfloat tol,
     jint   maxIter)
 {
-    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+    ScopedArray w(env, jWeights), b(env, jBounds),
                         ph(env, jPhys),   om(env, jOmega);
     if (!w || !b || !ph || !om) return nullptr;
 
@@ -364,8 +370,8 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_computeRobustPreposition(
     jfloatArray jPhys,
     jfloatArray jOmega)
 {
-    ScopedArray<jfloat> path(env, jPath);
-    ScopedArray<jfloat> w(env, jWeights), b(env, jBounds),
+    ScopedArray path(env, jPath);
+    ScopedArray w(env, jWeights), b(env, jBounds),
                         ph(env, jPhys),   om(env, jOmega);
     if (!path || !w || !b || !ph || !om) return nullptr;
 
@@ -397,7 +403,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_createZoneTracker(
     jfloatArray jPhys,
     jfloatArray jOmega)
 {
-    ScopedArray<jfloat> z(env, jZone), w(env, jWeights),
+    ScopedArray z(env, jZone), w(env, jWeights),
                         b(env, jBounds), ph(env, jPhys), om(env, jOmega);
     if (!z || !w || !b || !ph || !om) return 0L;
 
