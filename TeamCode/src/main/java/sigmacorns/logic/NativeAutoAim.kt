@@ -197,6 +197,8 @@ class NativeAutoAim(
         val turret  = robot.turret
         val fusedPose = autoAim.fusedPose
 
+        val nBalls = robot.beamBreak.ballCount
+
         // Robot velocity in field frame
         val odoVel = Vector2d(robot.io.velocity().v)
         val vel = odoVel.rotate(fusedPose.rot - robot.io.position().rot)
@@ -219,7 +221,7 @@ class NativeAutoAim(
         val curPhi   = shooter.computedHoodAngle.toFloat()
         val curOmega = robot.io.flywheelVelocity().toFloat()
 
-        val flywheelDrop = AimConfig.flywheelDrop.toFloat()
+        val flywheelDrop = (nBalls-1)*AimConfig.flywheelDrop.toFloat()
 
         // ── Launch-zone split ─────────────────────────────────────────────
         // Half-plane: nx*x + ny*y >= d means "inside the launch zone".
@@ -277,35 +279,9 @@ class NativeAutoAim(
                 isPrepositionActive = true
                 // `solved` stays false — preposition is a pre-aim, not a shot.
             }
-        } else if (zoneDefined) {
-            // ── Inside the launch zone: robustAdjust for fastest two-ball burst
-            try {
-                val r = bridge.robustAdjust(
-                    tX, tY, tZ,
-                    gX, gY, gZ,
-                    gX, gY, gZ,
-                    robotVx, robotVy,
-                    curTheta, curPhi, curOmega,
-                    flywheelDrop,
-                    weights, bounds, physConfig, omegaCoeffs
-                )
-                if (r[RobustShotIdx.FEASIBLE] > 0.5f) {
-                    lastTStar = r[RobustShotIdx.T1]
-                    lastTheta = r[RobustShotIdx.S1_THETA]
-                    lastPhi   = r[RobustShotIdx.S1_PHI]
-                    lastOmega = r[RobustShotIdx.S1_OMEGA]
-                    lastTheta2 = r[RobustShotIdx.S2_THETA]
-                    lastPhi2   = r[RobustShotIdx.S2_PHI]
-                    lastOmega2 = r[RobustShotIdx.S2_OMEGA]
-                    solved = true
-                    robustSolved = true
-                }
-            } catch (e: Exception) {
-                // fall through — leaves last* untouched, readyToShoot=false below
-            }
         } else {
             // ── No launch zone defined: legacy behavior ───────────────────
-            val useRobust = flywheelDrop > 0f
+            val useRobust = flywheelDrop > 0 && robot.intakeTransfer.state != IntakeTransfer.State.TRANSFERRING
             try {
                 if (useRobust) {
                     val r = bridge.robustShot(

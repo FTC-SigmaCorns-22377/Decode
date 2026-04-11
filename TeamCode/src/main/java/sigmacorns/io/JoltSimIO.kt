@@ -3,15 +3,12 @@ package sigmacorns.io
 import sigmacorns.constants.ballExitRadius
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.constants.flywheelMotor
+import sigmacorns.constants.flywheelRadius
 import sigmacorns.constants.intakeMotor
 import sigmacorns.constants.turretPos
-import sigmacorns.constants.turretTicksPerRad
-import sigmacorns.logic.AimConfig
-import sigmacorns.logic.AimingSystem
 import sigmacorns.subsystem.ShooterConfig
 import sigmacorns.subsystem.TurretServoConfig
 import sigmacorns.sim.FlywheelParameters
-import sigmacorns.sim.LinearDcMotor
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.FlywheelDynamics
 import sigmacorns.sim.FlywheelState
@@ -206,7 +203,7 @@ class JoltSimIO(
             return
         }
 
-        val exitSpeed = AimConfig.omegaInv(flywheelState.omega, hoodAngleRad)
+        val exitSpeed = flywheelState.omega* flywheelRadius*LAUNCH_EFFICIENCY
         if (exitSpeed < 0.1) {
             println("shootBall: flywheel too slow (${abs(flywheelState.omega).toInt()} rad/s)")
             return
@@ -346,8 +343,8 @@ class JoltSimIO(
         val SIM_UPDATE_TIME = 5.milliseconds
 
         /** Time between auto-shot attempts when transfer motor is running (seconds). */
-        const val AUTO_SHOOT_INTERVAL = 0.2
-        const val LAUNCH_EFFICIENCY = 0.3
+        const val AUTO_SHOOT_INTERVAL = 0.3
+        const val LAUNCH_EFFICIENCY = 0.27
 
         const val SERVO_TIME_CONSTANT = 0.05
 

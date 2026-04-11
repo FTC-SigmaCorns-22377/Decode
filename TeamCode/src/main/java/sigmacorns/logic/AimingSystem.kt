@@ -19,7 +19,6 @@ import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
-import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.time.Duration
 
@@ -237,7 +236,7 @@ object AimConfig {
     // NativeAutoAim uses the robust shot planner so the first shot's parameters
     // leave the flywheel at a speed compatible with the next shot after losing
     // this amount. Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var flywheelDrop = 50.0
+    @JvmField var flywheelDrop = 100.0
 
     // Approach prepositioning: when > 0, NativeAutoAim predicts the robot's
     // near-future trajectory via constant-velocity mecanum kinematics and
@@ -263,7 +262,7 @@ object AimConfig {
 }
 
 object ShotSolverConfig {
-    @JvmField var wOmega = 0.1   // s per rad/s flywheel change
+    @JvmField var wOmega = 0.01   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
     @JvmField var wPhi = 0.05      // s per rad hood change
     @JvmField var tolerance = 0.05
