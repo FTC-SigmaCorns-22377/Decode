@@ -10,6 +10,7 @@
 TeamCode/src/test/jniLibs
 TeamCode/lets-plot-images
 *.rrd
+.cache
 
 # Files for the ART/Dalvik VM
 *.dex

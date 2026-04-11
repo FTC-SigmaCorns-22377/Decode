@@ -8,9 +8,11 @@ import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.AntiWheelieConfig
 import sigmacorns.control.AntiWheelieFilter
 import sigmacorns.control.PollableDispatcher
+import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.ltv.LTVClient
 import sigmacorns.logic.AimingSystem
 import sigmacorns.logic.IntakeCoordinator
+import sigmacorns.logic.NativeAutoAim
 import sigmacorns.subsystem.Drivetrain
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
@@ -23,8 +25,10 @@ import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
 import kotlin.math.max
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
-class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
+class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): AutoCloseable {
     // Subsystems
     val shooter = Shooter(this)
     val drive = Drivetrain()
@@ -33,7 +37,7 @@ class Robot(val io: SigmaIO, blue: Boolean): AutoCloseable {
     val turret = Turret(io)
 
     // Logic
-    val aim = AimingSystem(this, blue)
+    val aim: AutoAim = if (useNativeAim) NativeAutoAim(this, blue) else AimingSystem(this, blue)
     val intakeCoordinator = IntakeCoordinator(this)
 
     val ltv = LTVClient(

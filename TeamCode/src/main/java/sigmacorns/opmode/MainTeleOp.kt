@@ -41,8 +41,9 @@ import kotlin.math.max
 class   MainTeleOp : SigmaOpMode() {
 
     override fun runOpMode() {
-        val robot = Robot(io, blue = false)
-        robot.init(Pose2d(), apriltagTracking = true)
+        val robot = Robot(io, blue = false, useNativeAim = true)
+        robotRef = robot
+        robot.init(Pose2d(), apriltagTracking = !SIM)
         robot.startApriltag()
 
         // State

@@ -64,11 +64,11 @@ const robotMesh = new THREE.Mesh(robotGeo, robotMat);
 robotMesh.position.y = ROBOT_HEIGHT / 2;
 scene.add(robotMesh);
 
-// Direction indicator on robot (yellow cone pointing forward)
+// Direction indicator on robot (yellow cone pointing forward = local +Z)
 const arrowGeo = new THREE.ConeGeometry(0.04, 0.1, 8);
 const arrowMat = new THREE.MeshStandardMaterial({ color: 0xffcc00 });
 const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
-arrowMesh.rotation.x = -Math.PI / 2;
+arrowMesh.rotation.x = Math.PI / 2;
 arrowMesh.position.set(0, ROBOT_HEIGHT / 2, ROBOT_SIZE / 2 - 0.02);
 robotMesh.add(arrowMesh);
 
@@ -92,7 +92,7 @@ shooterGroup.add(shooterMesh);
 const shooterArrowGeo = new THREE.ConeGeometry(0.02, 0.06, 6);
 const shooterArrowMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
 const shooterArrowMesh = new THREE.Mesh(shooterArrowGeo, shooterArrowMat);
-shooterArrowMesh.rotation.x = -Math.PI / 2;
+shooterArrowMesh.rotation.x = Math.PI / 2;
 shooterArrowMesh.position.set(0, SHOOTER_HEIGHT / 2, SHOOTER_LENGTH / 2);
 shooterGroup.add(shooterArrowMesh);
 
@@ -105,14 +105,15 @@ const intakeGroup = new THREE.Group();
 intakeGroup.position.set(0, ROBOT_HEIGHT / 2, ROBOT_SIZE / 2);
 robotMesh.add(intakeGroup);
 
-// Two bar meshes connecting pivot to roller
+// Two bar meshes connecting pivot to roller.
+// With the chirality-preserving remap, robot's left is at mesh local +X.
 const barMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
 const barGeo = new THREE.BoxGeometry(0.02, 0.02, INTAKE_BAR_LENGTH);
 const barLeft = new THREE.Mesh(barGeo, barMat);
-barLeft.position.set(-INTAKE_WIDTH_VIS / 2 + 0.02, 0, INTAKE_BAR_LENGTH / 2);
+barLeft.position.set(INTAKE_WIDTH_VIS / 2 - 0.02, 0, INTAKE_BAR_LENGTH / 2);
 intakeGroup.add(barLeft);
 const barRight = new THREE.Mesh(barGeo, barMat);
-barRight.position.set(INTAKE_WIDTH_VIS / 2 - 0.02, 0, INTAKE_BAR_LENGTH / 2);
+barRight.position.set(-INTAKE_WIDTH_VIS / 2 + 0.02, 0, INTAKE_BAR_LENGTH / 2);
 intakeGroup.add(barRight);
 
 // Roller cylinder at end of bars
@@ -206,7 +207,8 @@ function createTaperedWall(p1, h1, p2, h2, thick, nx, nz, material) {
 
 function createGoalStructure(zSign, color) {
     const group = new THREE.Group();
-    const cX = -HF;
+    // Goal corner lives at +X under the chirality-preserving mapping.
+    const cX = HF;
     const cZ = zSign * HF;
     const t = GOAL_WALL_THICK_VIS;
 
@@ -217,35 +219,34 @@ function createGoalStructure(zSign, color) {
 
     const goalOffset = CRAMP_WIDTH; // triangle inset from ±Z wall
 
-    // --- Side wall A: along -X (back) wall, runs in Z direction ---
+    // --- Side wall A: along +X (back) wall, runs in Z direction ---
     // Tapered: lip height at front end, total height at corner end
-    // Offset from wall by goalOffset
     const wallA = createTaperedWall(
         {x: cX, z: cZ - zSign * (goalOffset + GOAL_LEG)}, GOAL_LIP_HEIGHT,  // front (low)
         {x: cX, z: cZ - zSign * goalOffset}, GOAL_TOTAL_HEIGHT,              // corner (tall)
-        t, 1, 0, goalMat  // thickness in +X direction (toward field)
+        t, -1, 0, goalMat  // thickness in -X direction (toward field interior)
     );
     group.add(wallA);
 
     // --- Side wall B: flush against ±Z (side) wall, runs in X direction ---
     const wallB = createTaperedWall(
-        {x: cX + GOAL_LEG, z: cZ}, GOAL_LIP_HEIGHT,  // front (low)
+        {x: cX - GOAL_LEG, z: cZ}, GOAL_LIP_HEIGHT,  // front (low)
         {x: cX, z: cZ}, GOAL_TOTAL_HEIGHT,             // corner (tall)
         t, 0, -zSign, goalMat  // thickness toward field center
     );
     group.add(wallB);
 
-    // Corner connector: along -X wall, bridges wall B (at ±Z wall) to wall A (offset)
+    // Corner connector: along +X wall, bridges wall B (at ±Z wall) to wall A (offset)
     const cornerConnGeo = new THREE.BoxGeometry(GOAL_WALL_THICK_VIS, GOAL_TOTAL_HEIGHT, goalOffset);
     const cornerConnMesh = new THREE.Mesh(cornerConnGeo, goalMat);
-    cornerConnMesh.position.set(cX + GOAL_WALL_THICK_VIS / 2, GOAL_TOTAL_HEIGHT / 2, cZ - zSign * goalOffset / 2);
+    cornerConnMesh.position.set(cX - GOAL_WALL_THICK_VIS / 2, GOAL_TOTAL_HEIGHT / 2, cZ - zSign * goalOffset / 2);
     group.add(cornerConnMesh);
 
     // --- Front wall (diagonal hypotenuse) at lip height ---
     const frontLen = GOAL_LEG * Math.SQRT2;
-    const frontMidX = cX + GOAL_LEG / 2;
+    const frontMidX = cX - GOAL_LEG / 2;
     const frontMidZ = cZ - zSign * (goalOffset + GOAL_LEG / 2);
-    const frontAngleJS = -zSign * Math.PI / 4;
+    const frontAngleJS = zSign * Math.PI / 4;
 
     const frontGeo = new THREE.BoxGeometry(frontLen, GOAL_LIP_HEIGHT, GOAL_WALL_THICK_VIS);
     const frontMesh = new THREE.Mesh(frontGeo, goalMat);
@@ -256,8 +257,8 @@ function createGoalStructure(zSign, color) {
     // --- Rectangular extension + Classifier ramp ---
     // Ramp is flush against the ±Z wall. Triangle is offset inward by CRAMP_WIDTH.
     // A rectangular extension bridges the offset triangle to the wall-hugging ramp.
-    const rampStartX = cX + GOAL_LEG;
-    const rampEndX = rampStartX + CRAMP_LENGTH;
+    const rampStartX = cX - GOAL_LEG;
+    const rampEndX = rampStartX - CRAMP_LENGTH;
     const rampMidX = (rampStartX + rampEndX) / 2;
     const rampZ = cZ - zSign * CRAMP_WIDTH / 2; // flush against ±Z wall
 
@@ -273,7 +274,7 @@ function createGoalStructure(zSign, color) {
     const rampFloorGeo = new THREE.BoxGeometry(CRAMP_LENGTH, 0.01, CRAMP_WIDTH);
     const rampFloorMesh = new THREE.Mesh(rampFloorGeo, rampMat);
     rampFloorMesh.position.set(rampMidX, CRAMP_MID_H, rampZ);
-    rampFloorMesh.rotation.z = -CRAMP_SLOPE_ANGLE; // lifts -X end (input near goal)
+    rampFloorMesh.rotation.z = CRAMP_SLOPE_ANGLE; // lifts +X end (input near goal)
     group.add(rampFloorMesh);
 
     // Ramp side rails: top edge follows the ramp slope
@@ -360,7 +361,7 @@ function createGoalStructure(zSign, color) {
     const scoreTex = new THREE.CanvasTexture(scoreCanvas);
     const scoreSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: scoreTex }));
     scoreSprite.scale.set(0.5, 0.25, 1);
-    scoreSprite.position.set(cX + GOAL_LEG / 3, GOAL_TOTAL_HEIGHT + 0.15, cZ - zSign * GOAL_LEG / 3);
+    scoreSprite.position.set(cX - GOAL_LEG / 3, GOAL_TOTAL_HEIGHT + 0.15, cZ - zSign * GOAL_LEG / 3);
     scene.add(scoreSprite);
 
     return { group, gateMesh, leverMesh, scoreCanvas, scoreCtx, scoreTex, scoreSprite };
@@ -389,12 +390,15 @@ const purpleMat = new THREE.MeshStandardMaterial({ color: 0x9933ff });
 const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 16, 12);
 
 function updateRobot(x, y, theta, turretAngle, intakeAngle, hoodAngle, flywheelRPM, intakeRollerRPM) {
-    // sim (x=forward, y=left) -> Three.js (x=-y, z=x), sim theta -> rotation about -Y
-    robotMesh.position.set(-y, ROBOT_HEIGHT / 2, x);
-    robotMesh.rotation.y = -theta;
+    // sim (x=forward, y=left, z=up) -> Three.js (x=sim.y, y=sim.z, z=sim.x).
+    // This mapping is chirality-preserving (det = +1) so sim's "left" renders
+    // on the robot's left. Sim theta (CCW about sim.z) becomes positive
+    // rotation.y in three.js.
+    robotMesh.position.set(y, ROBOT_HEIGHT / 2, x);
+    robotMesh.rotation.y = theta;
     // Turret rotates about Y axis relative to robot
     if (turretAngle !== undefined) {
-        shooterGroup.rotation.y = -turretAngle;
+        shooterGroup.rotation.y = turretAngle;
     }
     // Intake pivots around X axis
     if (intakeAngle !== undefined) {
@@ -430,8 +434,89 @@ function updateBalls(balls) {
             ballMeshes.push(mesh);
         }
         const b = balls[i];
-        mesh.position.set(-b.y, b.z, b.x); // sim (x=fwd, y=left, z=up) -> Three.js (x=-y, y=z, z=x)
+        mesh.position.set(b.y, b.z, b.x); // sim (x=fwd, y=left, z=up) -> Three.js (x=y, y=z, z=x)
         mesh.material = b.color === 'green' ? greenMat : purpleMat;
+    }
+}
+
+// ---- Shot visualization (goal marker + ballistic trajectories) ----
+const goalMarker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xff3333 })
+);
+goalMarker.visible = false;
+scene.add(goalMarker);
+
+// One persistent line per kind. Materials are fixed at construction so we
+// don't allocate per frame. Dashed lines need computeLineDistances() after
+// each geometry update.
+const TRAJECTORY_KINDS = {
+    current:     { color: 0x00ccff, dashed: false },
+    target:      { color: 0xffaa00, dashed: false },
+    secondary:   { color: 0xffaa00, dashed: true  },
+    preposition: { color: 0xffaa00, dashed: false },
+};
+
+const trajectoryLines = {};
+for (const [kind, cfg] of Object.entries(TRAJECTORY_KINDS)) {
+    const mat = cfg.dashed
+        ? new THREE.LineDashedMaterial({
+            color: cfg.color,
+            transparent: true,
+            opacity: 0.6,
+            dashSize: 0.05,
+            gapSize: 0.04,
+        })
+        : new THREE.LineBasicMaterial({
+            color: cfg.color,
+            transparent: true,
+            opacity: 0.6,
+        });
+    const geo = new THREE.BufferGeometry();
+    const line = new THREE.Line(geo, mat);
+    line.frustumCulled = false;
+    line.visible = false;
+    trajectoryLines[kind] = line;
+    scene.add(line);
+}
+
+function updateShotViz(shotViz) {
+    if (!shotViz) {
+        goalMarker.visible = false;
+        for (const line of Object.values(trajectoryLines)) line.visible = false;
+        return;
+    }
+
+    const goal = shotViz.goal;
+    if (goal) {
+        goalMarker.position.set(goal.y, goal.z, goal.x);
+        goalMarker.visible = true;
+    } else {
+        goalMarker.visible = false;
+    }
+
+    const seen = new Set();
+    const trajs = shotViz.trajectories || [];
+    for (const t of trajs) {
+        const line = trajectoryLines[t.kind];
+        if (!line) continue;
+        const pts = t.points || [];
+        if (pts.length < 2) { line.visible = false; continue; }
+        const v3 = new Array(pts.length);
+        for (let i = 0; i < pts.length; i++) {
+            const p = pts[i]; // [x, y, z] in sim frame
+            v3[i] = new THREE.Vector3(p[1], p[2], p[0]);
+        }
+        line.geometry.setFromPoints(v3);
+        if (line.material.isLineDashedMaterial) {
+            line.computeLineDistances();
+        }
+        line.visible = true;
+        seen.add(t.kind);
+    }
+
+    for (const kind of Object.keys(trajectoryLines)) {
+        if (!seen.has(kind)) trajectoryLines[kind].visible = false;
     }
 }
 
@@ -468,4 +553,4 @@ function updateGoals(goals) {
     updateScoreSprite(blueGoal, 'RED', goals.blueScore || 0, 'rgba(180,40,40,0.8)');
 }
 
-export { updateRobot, updateBalls, updateGoals };
+export { updateRobot, updateBalls, updateGoals, updateShotViz };

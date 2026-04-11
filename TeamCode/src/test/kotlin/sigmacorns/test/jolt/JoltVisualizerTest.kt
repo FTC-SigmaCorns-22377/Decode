@@ -275,14 +275,12 @@ class JoltVisualizerTest {
         val server = sigmacorns.sim.viz.SimVizServer(sim)
         server.start()
 
-        val shotDataPath = javaClass.getResource("/shot_tuning_data.json")?.path
-            ?: error("shot_tuning_data.json not found in test resources")
-        val robot = Robot(sim, blue = true, shotDataPath = shotDataPath)
+        val robot = Robot(sim, blue = true)
         robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
+        server.setRobot(robot)
         robot.aimFlywheel = false
         // Sim X axis is negated relative to real field — flip goal X for aiming
         robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
-        robot.aim.targeting.goalPosition = robot.aim.goalPosition
         val gamepad = Gamepad()
         val simGamepad = SimGamepad(gamepad)
 
@@ -374,7 +372,7 @@ class JoltVisualizerTest {
             if (kb.n1 && !prevN1) {
                 robot.aim.autoAim.enabled = !robot.aim.autoAim.enabled
                 if (!robot.aim.autoAim.enabled) {
-                    robot.aim.turret.fieldRelativeMode = true
+                    robot.turret.fieldRelativeMode = true
                 }
                 println("Auto-aim: ${if (robot.aim.autoAim.enabled) "ON" else "OFF"}")
             }
@@ -433,13 +431,11 @@ class JoltVisualizerTest {
         val server = sigmacorns.sim.viz.SimVizServer(sim)
         server.start()
 
-        val shotDataPath = javaClass.getResource("/shot_tuning_data.json")?.path
-            ?: error("shot_tuning_data.json not found in test resources")
-        val robot = Robot(sim, blue = true, shotDataPath = shotDataPath)
+        val robot = Robot(sim, blue = true)
         robot.init(Pose2d(0.0, 0.0, 0.0), apriltagTracking = false)
+        server.setRobot(robot)
         robot.aimFlywheel = false
         robot.aim.goalPosition = org.joml.Vector2d(-robot.aim.goalPosition.x, robot.aim.goalPosition.y)
-        robot.aim.targeting.goalPosition = robot.aim.goalPosition
 
         println("Robot.kt WASD sim running at http://localhost:8080")
         println("=== DRIVER (Keyboard) ===")
@@ -471,8 +467,8 @@ class JoltVisualizerTest {
             // Turret yaw - O/P (directly set robot-relative target)
             val yawInput = if (kb.o) 1.0 else if (kb.p) -1.0 else 0.0
             if (kotlin.math.abs(yawInput) > 0.1) {
-                robot.aim.turret.fieldRelativeMode = false
-                robot.aim.turret.targetAngle += yawInput * Math.toRadians(60.0) * dtSeconds
+                robot.turret.fieldRelativeMode = false
+                robot.turret.targetAngle += yawInput * Math.toRadians(60.0) * dtSeconds
             }
 
             // Intake + flywheel combo - R (toggle)
@@ -491,7 +487,7 @@ class JoltVisualizerTest {
             if (kb.n1 && !prevN1) {
                 robot.aim.autoAim.enabled = !robot.aim.autoAim.enabled
                 if (!robot.aim.autoAim.enabled) {
-                    robot.aim.turret.fieldRelativeMode = true
+                    robot.turret.fieldRelativeMode = true
                 }
                 println("Auto-aim: ${if (robot.aim.autoAim.enabled) "ON" else "OFF"}")
             }
