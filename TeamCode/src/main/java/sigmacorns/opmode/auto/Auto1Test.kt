@@ -4,7 +4,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous
 import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
-import sigmacorns.control.mpc.TrajoptLoader
+import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import java.io.File

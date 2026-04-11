@@ -2,7 +2,10 @@ package sigmacorns.constants
 
 import org.joml.Vector2d
 import org.joml.Vector3d
+import sigmacorns.control.AntiWheelieConfig
+import sigmacorns.control.AntiWheelieFilter
 import sigmacorns.control.MotorRangeMapper
+import sigmacorns.sim.MecanumDynamics
 import sigmacorns.sim.MecanumParameters
 import sigmacorns.sim.FlywheelParameters
 import sigmacorns.sim.LinearDcMotor
@@ -26,7 +29,7 @@ val bareMotorStallTorque = 0.14416
 /**
  * goBILDA 5203 planetary gearbox ratio for drive motors (13.7:1 variant)
  */
-val driveGearRatio = 13.7
+val driveGearRatio =  6000.0/435.0*27/24
 
 val driveMotor = LinearDcMotor(bareMotorTopSpeed/driveGearRatio,bareMotorStallTorque*driveGearRatio)
 
@@ -35,11 +38,11 @@ val driveMotor = LinearDcMotor(bareMotorTopSpeed/driveGearRatio,bareMotorStallTo
  */
 val drivetrainParameters = MecanumParameters(
     driveMotor,
-    0.2,
-    0.2,
+    0.148,
+    0.15,
     0.048,
-    14.1,
-    0.5,
+    13.1,
+    0.3,
     0.1,
     0.05
 )
@@ -77,3 +80,22 @@ val turretPos = Vector3d(
 )
 
 val ballExitRadius = 0.0785
+
+
+//176.819 mm - 57.32500 mm - 248.30000 mm /2
+/**
+ * Anti-wheelie filter configuration.
+ * Measure the robot's centre of mass with all competition hardware installed.
+ *
+ * comHeight  — vertical distance from ground to COM (m)
+ * comOffsetX — forward offset of COM from the wheel-rectangle centre (+forward, m)
+ * comOffsetY — lateral offset of COM from the wheel-rectangle centre (+left, m)
+ */
+val antiWheelieConfig = AntiWheelieConfig(
+    comHeight = 0.1212075,
+    comOffsetX = -0.00465600,
+    comOffsetY = 0.0,
+    minNormalFraction = 0.05
+)
+
+val antiWheelieFilter = AntiWheelieFilter(MecanumDynamics(drivetrainParameters), antiWheelieConfig)

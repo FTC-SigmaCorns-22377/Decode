@@ -19,8 +19,10 @@ import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Aiming system: vision + sensor fusion + turret targeting + shooter coordination.
@@ -59,9 +61,11 @@ class AimingSystem(
 
     /**
      * Set to true to arm a shot. AimingSystem will fire (TRANSFERRING) as soon as all
-     * actuators are within tolerance of the solver target. Cleared automatically after firing.
+     * actuators are within tolerance of the solver target, or after 2 seconds. Cleared automatically after firing.
      */
     override var shotRequested: Boolean = false
+
+    private var shotRequestedTime: Duration? = null
 
     /**
      * True when turret, hood, and flywheel are all within tolerance of the current solver target.
@@ -150,8 +154,16 @@ class AimingSystem(
 
         val vel = odoVel.rotate(fusedPose.rot - robot.io.position().rot)
 
+        // Offset goal position by velocity * transfer delay to account for robot motion during shot
+        val goalPos = FieldLandmarks.goalPosition3d(blue, AimConfig.goalHeight)
+        val offsetGoalPos = Vector3d(
+            goalPos.x + vel.x * AimConfig.transferDelay,
+            goalPos.y + vel.y * AimConfig.transferDelay,
+            goalPos.z
+        )
+
         val target = Ballistics.Target(
-            target = FieldLandmarks.goalPosition3d(blue, AimConfig.goalHeight),
+            target = offsetGoalPos,
             turret = Vector3d(fusedPose.v.x, fusedPose.v.y, turretPos.z),
             vR = Vector2d(vel.x, vel.y),
         )
@@ -165,19 +177,58 @@ class AimingSystem(
 
         val curShotErr = ballistics.shotError(currentState,target)
 
-        if (shotRequested && curShotErr < AimConfig.shotTolerance) {
-            shotRequested = false
-            robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+        if (shotRequested) {
+            if (shotRequestedTime == null) {
+                shotRequestedTime = robot.io.time()
+            }
+
+            val elapsed = robot.io.time() - shotRequestedTime!!
+            val shouldFire = curShotErr < AimConfig.shotTolerance || elapsed >= 2.seconds
+
+            if (shouldFire) {
+                shotRequested = false
+                shotRequestedTime = null
+                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+            }
         }
 
-        val shotState = try {
-            shotSolver.optimalAdjust(currentState, target, ShotSolverConfig.tolerance)
+        val isFallback = try {
+            val optimal = shotSolver.optimalAdjust(currentState, target, ShotSolverConfig.tolerance)
+            primaryShotState = optimal
+            false
         } catch (e: Exception) {
-            readyToShoot = false
-            return
+            // No optimal solution found; fix vExit to vMax and find the hood angle closest to goal
+            var bestShot: Ballistics.ShotState? = null
+            var bestError = Double.POSITIVE_INFINITY
+
+            // Compute theta that points at the goal
+            val b = (target.dx) / 1.0 - target.vR.x
+            val c = (target.dy) / 1.0 - target.vR.y
+            val theta = Math.atan2(c, b)
+
+            val phiSteps = 20
+            for (i in 0..phiSteps) {
+                val phi = ShooterConfig.minAngleDeg + (ShooterConfig.maxAngleDeg - ShooterConfig.minAngleDeg) * i / phiSteps
+                val phiRad = Math.toRadians(phi)
+
+                val candidate = Ballistics.ShotState(
+                    theta = theta,
+                    phi = phiRad,
+                    vExit = AimConfig.vMax
+                )
+
+                val error = ballistics.shotError(candidate, target)
+                if (error < bestError) {
+                    bestError = error
+                    bestShot = candidate
+                }
+            }
+
+            primaryShotState = bestShot ?: ballistics.solve(target, 1.0)
+            true
         }
 
-        primaryShotState = shotState
+        val shotState = primaryShotState ?: return
 
         if (aimTurret) {
             turret.fieldRelativeMode = true
@@ -186,8 +237,11 @@ class AimingSystem(
 
         if (robot.aimFlywheel) {
             shooter.hoodAngle = shotState.phi
-            shooter.flywheelTarget = AimConfig.omegaMap.omega(shotState.phi,shotState.vExit)
+            shooter.flywheelTarget = AimConfig.omegaMap.omega(shotState.phi, shotState.vExit)
         }
+
+        // Only consider ready to shoot if we're using the optimal solution
+        readyToShoot = !isFallback && curShotErr < AimConfig.shotTolerance
     }
 
     /**
@@ -214,7 +268,10 @@ object AimConfig {
     @JvmField var goalHeight = 1.14
     @JvmField var g = 9.81
 
-    @JvmField var launchEfficiency = 0.25
+    /** Time (seconds) from when shot is requested until ball leaves shooter */
+    @JvmField var transferDelay = 0.2
+
+    @JvmField var launchEfficiency = 0.20
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
             vExit / (flywheelRadius * launchEfficiency)
@@ -230,7 +287,7 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.03 // m
+    @JvmField var shotTolerance = 0.05 // m
 
     // Expected flywheel speed drop (rad/s) between consecutive shots. When > 0,
     // NativeAutoAim uses the robust shot planner so the first shot's parameters

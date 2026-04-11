@@ -7,22 +7,18 @@ import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
 import sigmacorns.control.ltv.QpSolverType
-import sigmacorns.control.mpc.TrajoptLoader
-import sigmacorns.control.mpc.TrajoptTrajectory
+import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.io.RerunLogging
 import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.io.SimIO
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
-import sigmacorns.opmode.test.MPCTest
 import java.io.File
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration.Companion.nanoseconds
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
-import kotlin.time.measureTime
 
 /**
  * Tests HPIPM_OCP LTV robustness across a 5×5×5 grid of starting offsets.
@@ -102,7 +98,7 @@ class LTVOffsetRobustnessTest {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
 
-        val projectFile = MPCTest.findProjectFile("simple")
+        val projectFile = TrajoptLoader.findProjectFile("simple")
             ?: error("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
         val traj = TrajoptLoader.loadFirstTrajectory(projectFile)
             ?: error("No trajectory found in ${projectFile.name}")
@@ -333,7 +329,7 @@ class LTVOffsetRobustnessTest {
         SigmaOpMode.SIM = true
         SigmaOpMode.LIMELIGHT_CONNECTED = false
 
-        val projectFile = MPCTest.findProjectFile("simple")
+        val projectFile = TrajoptLoader.findProjectFile("simple")
             ?: error("No trajopt project file found in ${TrajoptLoader.robotTrajoptDir()}")
         val trajectories = TrajoptLoader.loadAllTrajectories(projectFile)
         require(trajectories.isNotEmpty()) { "No trajectories found in ${projectFile.name}" }

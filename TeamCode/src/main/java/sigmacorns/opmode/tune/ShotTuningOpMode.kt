@@ -78,6 +78,7 @@ class ShotTuningOpMode : SigmaOpMode() {
 
             override fun getPoints(): String = dataStore.exportPointsJson()
             override fun saveToFile() = dataStore.save()
+            override fun exportCsv(): String = dataStore.exportCsv()
         })
 
         server.start()

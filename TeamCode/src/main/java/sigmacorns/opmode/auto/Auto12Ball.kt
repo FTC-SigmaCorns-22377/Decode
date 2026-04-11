@@ -5,7 +5,7 @@ import sigmacorns.Robot
 import sigmacorns.State
 import sigmacorns.constants.drivetrainParameters
 import sigmacorns.control.ltv.LTVClient
-import sigmacorns.control.mpc.TrajoptLoader
+import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.io.JoltSimIO
 import sigmacorns.io.SIM_UPDATE_TIME
 import sigmacorns.io.BallColor
@@ -47,6 +47,7 @@ class Auto12Ball : SigmaOpMode() {
         val initialSample = traj.getInitialSample()
             ?: throw IllegalStateException("Trajectory has no samples")
 
+        io.setPosition(initialSample.pos)
         // Preload 3 balls in sim
         val joltSim = io as? JoltSimIO
         repeat(3) { joltSim?.heldBalls?.add(BallColor.GREEN) }
@@ -54,6 +55,7 @@ class Auto12Ball : SigmaOpMode() {
         val robot = Robot(io, blue = true)
         robot.init(initialSample.pos, apriltagTracking = !SIM)
         robot.aimTurret = true
+        robot.aimFlywheel = false
 
         // Sim X axis is negated relative to real field — flip goal for aiming
         if (SIM) {
@@ -85,7 +87,7 @@ class Auto12Ball : SigmaOpMode() {
 
                 // Spin up for 1s, then transfer for 1.5s to shoot all 3
                 if (t >= 1.0) {
-                    robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+//                    robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
                 }
 
                 robot.update()
@@ -98,7 +100,6 @@ class Auto12Ball : SigmaOpMode() {
             robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             robot.shooter.flywheelTarget = 0.0
 
-            io.setPosition(initialSample.pos)
             val startTime = io.time()
 
             while (opModeIsActive()) {

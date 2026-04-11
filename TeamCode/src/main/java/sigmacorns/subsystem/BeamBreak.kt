@@ -12,7 +12,7 @@ class BeamBreak(val io: SigmaIO) {
     val slots: BooleanArray = booleanArrayOf(false, false, false)
 
     /** Number of balls currently held. */
-    val ballCount: Int get() = slots.count { it == true }
+    val ballCount: Int get() = slots.count { it }
 
     /** True when all 3 slots are occupied. */
     val isFull: Boolean get() = ballCount >= 3

@@ -30,7 +30,8 @@ object MecanumLTVBridge {
         handle: Long,
         N: Int,
         qDiag: DoubleArray, rDiag: DoubleArray, qfDiag: DoubleArray,
-        uMin: Double, uMax: Double
+        uMin: Double, uMax: Double,
+        aTipX: Double, aTipY: Double,
     )
 
     /** Load trajectory as flat array of [t, px, py, theta, vx, vy, omega] per sample. Returns number of windows. */
@@ -56,6 +57,9 @@ object MecanumLTVBridge {
     /** Returns the window index selected by the most recent solve() call. */
     @JvmStatic external fun nativeGetPrevIdx(handle: Long): Int
 
+    /** Returns the ETA (seconds) computed by the most recent solveWaypoint() call. */
+    @JvmStatic external fun nativeGetWaypointEta(handle: Long): Double
+
     /** Fills xRefOut[6] with x_ref_0 for windowIdx. Returns false on bad index. */
     @JvmStatic external fun nativeGetWindowRef(handle: Long, windowIdx: Int, xRefOut: DoubleArray): Boolean
 
@@ -63,9 +67,30 @@ object MecanumLTVBridge {
     @JvmStatic external fun nativeHorizonLength(handle: Long): Int
     @JvmStatic external fun nativeNumVars(handle: Long): Int
 
-    /** Set QP solver type: 0 = FISTA, 1 = HPIPM_OCP */
+    /** Set QP solver type: 0 = FISTA, 1 = HPIPM_OCP, 2 = NEON_IPM */
     @JvmStatic external fun nativeSetSolverType(handle: Long, type: Int)
 
     /** Check if a solver type is available in this build. */
     @JvmStatic external fun nativeIsSolverAvailable(type: Int): Boolean
+
+    /**
+     * Solve to a target state without a preloaded trajectory.
+     * x0 and xTarget are [px, py, theta, vx, vy, omega] (length 6).
+     * dt:      control timestep in seconds — used if loadTrajectory has not been called.
+     * lqrRef:  true = constant reference at x_target (LQR-optimal, best for zero-velocity
+     *          arrival); false = Hermite-interpolated reference (better for nonzero velocity).
+     * uOut receives 4 controls [V1, V2, V3, V4] for the first timestep.
+     * Returns 0 on success, -1 on error.
+     */
+    @JvmStatic external fun nativeSolveWaypoint(
+        handle: Long,
+        dt: Double,
+        x0: DoubleArray,
+        xTarget: DoubleArray,
+        tRemaining: Double,
+        lqrRef: Boolean,
+        qDiag: DoubleArray,
+        r: Double,
+        uOut: DoubleArray,
+    ): Int
 }

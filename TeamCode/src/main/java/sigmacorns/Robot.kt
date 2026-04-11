@@ -2,27 +2,28 @@ package sigmacorns
 
 import kotlinx.coroutines.CoroutineScope
 import sigmacorns.constants.Limelight
-import sigmacorns.constants.Network
+import sigmacorns.constants.antiWheelieConfig
+import sigmacorns.constants.antiWheelieFilter
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.control.AntiWheelieConfig
+import sigmacorns.control.AntiWheelieFilter
 import sigmacorns.control.PollableDispatcher
-import sigmacorns.control.mpc.ContourSelectionMode
-import sigmacorns.control.mpc.MPCClient
-import sigmacorns.control.mpc.MPCRunner
 import sigmacorns.control.aim.AutoAim
+import sigmacorns.control.ltv.LTVClient
 import sigmacorns.logic.AimingSystem
 import sigmacorns.logic.IntakeCoordinator
 import sigmacorns.logic.NativeAutoAim
 import sigmacorns.subsystem.Drivetrain
-import sigmacorns.control.mpc.TrajoptTrajectory
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
-import sigmacorns.sim.MecanumState
+import sigmacorns.sim.MecanumDynamics
 import sigmacorns.subsystem.BeamBreak
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.Shooter
 import sigmacorns.subsystem.Turret
 import java.lang.AutoCloseable
+import kotlin.math.max
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -39,13 +40,16 @@ class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): Auto
     val aim: AutoAim = if (useNativeAim) NativeAutoAim(this, blue) else AimingSystem(this, blue)
     val intakeCoordinator = IntakeCoordinator(this)
 
+    val ltv = LTVClient(
+        drivetrainParameters,
+        aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd),
+        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight)
+    )
+
     val dispatcher = PollableDispatcher(io)
     val scope = CoroutineScope(dispatcher)
 
     private val limelight = (io as? HardwareIO)?.limelight
-    var mpc: MPCClient? = null
-    var runner: MPCRunner? = null
-
     var aimTurret = true
     var aimFlywheel = true
 
@@ -57,71 +61,9 @@ class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): Auto
         limelight?.start()
     }
 
-    /** Switch limelight to the pipeline that starts the MPC solver process. */
-    fun startMPCSolver() {
-        limelight?.pipelineSwitch(Limelight.START_MPC_PIPELINE)
-    }
-
     fun pipeline(): Int? = limelight?.status?.pipelineIndex
 
-    /** Switch limelight to the pipeline that stops the MPC solver process. */
-    fun stopMPCSolver() {
-        limelight?.pipelineSwitch(Limelight.STOP_MPC_PIPELINE)
-    }
-
-    /** Switch limelight to the idle pipeline (frees CPU for MPC). */
-    fun idleLimelight() {
-        limelight?.pipelineSwitch(Limelight.IDLE_PIPELINE)
-    }
-
-    /** Create the MPC client without starting the runner thread. */
-    fun initMPC() {
-        if (mpc != null) mpc?.close()
-        mpc = MPCClient(
-            drivetrainParameters,
-            Network.LIMELIGHT,
-            contourSelectionMode = ContourSelectionMode.POSITION,
-            preIntegrate = 30.milliseconds,
-            sampleLookahead = 0
-        )
-    }
-
-    /** Start the MPC runner thread (creates client if needed). */
-    fun startMPCWorker() {
-        if (mpc == null) initMPC()
-        runner = MPCRunner(mpc!!, drive)
-        runner!!.start()
-    }
-
-    /** Start MPC solver, create client, and start runner. */
-    fun startMPC() {
-        startMPCSolver()
-        initMPC()
-        startMPCWorker()
-    }
-
-    var prewarm: Boolean = false
-    var startTime = 0.seconds
     var zero: Boolean = false
-
-    /**
-     * Send a single MPC request to pre-warm the solver with the first horizon.
-     * Call after [initMPC] and setting a target trajectory.
-     */
-    fun prewarmMPC(traj: TrajoptTrajectory) {
-        prewarm = true
-        val m = mpc ?: return
-        m.setTarget(traj)
-        val state = MecanumState(Pose2d(), io.position())
-        m.update(state, 12.0, 0.seconds)
-    }
-
-    fun stopMPC() {
-        runner?.stop()
-        runner = null
-        mpc?.close()
-        mpc = null
-    }
 
     fun startApriltag() {
         limelight?.pipelineSwitch(Limelight.APRILTAG_PIPELINE)
@@ -134,20 +76,6 @@ class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): Auto
         lastTime = t
 
         dispatcher.update()
-
-        if (prewarm) {
-            startTime = t
-        }
-
-        if (!prewarm) {
-            runner?.updateState(
-                MecanumState(
-                    io.velocity(),
-                    io.position()
-                ), 12.0, t - startTime
-            )
-            runner?.driveWithMPC(io, io.voltage())
-        }
 
         if (zero) {
             aimTurret = false
@@ -171,7 +99,7 @@ class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): Auto
 
     override fun close() {
         aim.close()
-        stopMPC()
         limelight?.stop()
+        ltv.close()
     }
 }

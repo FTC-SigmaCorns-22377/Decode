@@ -1,14 +1,16 @@
 package sigmacorns.subsystem
 
 import com.qualcomm.robotcore.hardware.Gamepad
+import org.joml.Matrix2d
 import org.joml.Vector4d
 import org.joml.times
 import sigmacorns.constants.drivetrainParameters
+import sigmacorns.control.AntiWheelieFilter
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.MecanumDynamics
 
-class Drivetrain {
+class Drivetrain(val antiWheelieFilter: AntiWheelieFilter? = null) {
     private val mecanumDynamics = MecanumDynamics(drivetrainParameters)
     private var speedMultiplier = 1.0
 
@@ -60,12 +62,23 @@ class Drivetrain {
             wheelPowers *= (1.0 / maxComponent)
         }
 
-        io.driveFL = wheelPowers[0]
-        io.driveBL = wheelPowers[1]
-        io.driveBR = wheelPowers[2]
-        io.driveFR = wheelPowers[3]
+        val raw = doubleArrayOf(wheelPowers[0], wheelPowers[1], wheelPowers[2], wheelPowers[3])
 
-        return doubleArrayOf(wheelPowers[0], wheelPowers[1], wheelPowers[2], wheelPowers[3])
+        val powers = if (antiWheelieFilter != null) {
+            val fieldVel = io.velocity()
+            val heading = io.position().rot
+            val robotVel = Pose2d(fieldVel.v.x, fieldVel.v.y, fieldVel.rot).also {
+                it.v = Matrix2d().rotate(-heading) * it.v
+            }
+            antiWheelieFilter.filter(raw, robotVel)
+        } else raw
+
+        io.driveFL = powers[0]
+        io.driveBL = powers[1]
+        io.driveBR = powers[2]
+        io.driveFR = powers[3]
+
+        return powers
     }
     
     fun getSpeedMultiplier(): Double = speedMultiplier
