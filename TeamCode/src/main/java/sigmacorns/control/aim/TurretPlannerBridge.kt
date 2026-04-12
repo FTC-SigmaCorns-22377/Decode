@@ -7,7 +7,7 @@ import sigmacorns.opmode.SigmaOpMode.Companion.SIM
  * JNI bridge to the native turret_planner library (libturret_planner_jni.so).
  *
  * Config array layouts (must match turret_planner_jni.cpp):
- *   physConfig  [2]:  g (m/s²), rH (barrel offset, m)
+ *   physConfig  [3]:  g (m/s²), rH (barrel offset, m), dragK (1/s, 0=no drag)
  *   bounds      [6]:  thetaMin, thetaMax, phiMin, phiMax, vExitMax, omegaMax
  *   weights     [3]:  wTheta (s/rad), wPhi (s/rad), wOmega (s/unit)
  *   omegaCoeffs [6]:  c0..c5 for ω(φ,v) = c0 + c1·v + c2·φ + c3·v² + c4·φv + c5·φ²
@@ -79,6 +79,30 @@ class TurretPlannerBridge {
         const val S2_OMEGA  = 11
     }
 
+    /** Index constants for the 20-element array from [robust3ShotPlan]. */
+    object Robust3ShotPlanIdx {
+        const val FEASIBLE  = 0
+        const val IDX1      = 1
+        const val IDX2      = 2
+        const val IDX3      = 3
+        const val J         = 4
+        const val T1        = 5
+        const val T2        = 6
+        const val T3        = 7
+        const val S1_THETA  = 8
+        const val S1_PHI    = 9
+        const val S1_V_EXIT = 10
+        const val S1_OMEGA  = 11
+        const val S2_THETA  = 12
+        const val S2_PHI    = 13
+        const val S2_V_EXIT = 14
+        const val S2_OMEGA  = 15
+        const val S3_THETA  = 16
+        const val S3_PHI    = 17
+        const val S3_V_EXIT = 18
+        const val S3_OMEGA  = 19
+    }
+
     /** Index constants for the 8-element array from [updateZoneTracker]. */
     object ZoneTrackerIdx {
         const val URGENCY          = 0
@@ -148,11 +172,11 @@ class TurretPlannerBridge {
 
     /**
      * Plan a pair of consecutive shots (target1 then target2) that are robust
-     * to an expected flywheel speed drop [omegaDrop] between them.
+     * to an expected flywheel speed drop [dropFraction] between them.
      *
      * Minimizes `J(T1, T2) = max(w_theta·|Δθ|, w_phi·|Δφ|, w_omega·|Δω_adj|)`
-     * where Δω_adj accounts for subtracting [omegaDrop] from shot 1's required
-     * flywheel speed (modeling energy loss after firing).
+     * where Δω_adj accounts for scaling shot 1's required flywheel speed by
+     * (1 - [dropFraction]) to model the proportional energy loss after firing.
      *
      * @return FloatArray(12): [feasible, T1, T2, J,
      *                          s1.theta, s1.phi, s1.vExit, s1.omega,
@@ -163,7 +187,7 @@ class TurretPlannerBridge {
         target1X: Float, target1Y: Float, target1Z: Float,
         target2X: Float, target2Y: Float, target2Z: Float,
         robotVx: Float, robotVy: Float,
-        omegaDrop: Float,
+        dropFraction: Float,
         weights: FloatArray,
         bounds: FloatArray,
         physConfig: FloatArray,
@@ -180,7 +204,7 @@ class TurretPlannerBridge {
      *
      * The first term is the slew cost from the current turret state to the
      * first shot; the second is the cost of transitioning from shot 1 (with
-     * its flywheel speed reduced by [omegaDrop]) to shot 2. Same return shape
+     * its flywheel speed scaled by (1-[dropFraction])) to shot 2. Same return shape
      * as [robustShot] — see [RobustShotIdx].
      *
      * Use when the robot is already inside a shooting zone and you want the
@@ -194,13 +218,50 @@ class TurretPlannerBridge {
         target2X: Float, target2Y: Float, target2Z: Float,
         robotVx: Float, robotVy: Float,
         curTheta: Float, curPhi: Float, curOmega: Float,
-        omegaDrop: Float,
+        dropFraction: Float,
         weights: FloatArray,
         bounds: FloatArray,
         physConfig: FloatArray,
         omegaCoeffs: FloatArray,
         tol: Float = 5e-4f,
         maxIter: Int = 40
+    ): FloatArray
+
+    // ------------------------------------------------------------------
+    // Trajectory-aware N-shot planner
+    // ------------------------------------------------------------------
+
+    /**
+     * Plan up to 3 consecutive shots along a predicted trajectory.
+     *
+     * [trajectory] is a flat FloatArray with 6 floats per state: [t, x, y, heading, vx, vy].
+     * Shot timing is deterministic: shot 2 fires at shot1_time + [transferTime],
+     * shot 3 at shot1_time + 2*[transferTime]. The solver sweeps over first-shot
+     * timing candidates and jointly optimizes flight times (T1, T2, T3) via
+     * branch-and-bound to minimize transition costs between consecutive shots.
+     *
+     * The first shot cannot happen before [tRemaining] + [transferTime].
+     * [urgencyLambda] controls how much the slew cost to shot 1 matters:
+     * w = exp(-lambda * tRemaining). Large tRemaining -> turret has time to prepare.
+     *
+     * @return FloatArray(20): see [Robust3ShotPlanIdx]
+     */
+    external fun robust3ShotPlan(
+        trajectory: FloatArray, nStates: Int,
+        turretZ: Float,
+        targetX: Float, targetY: Float, targetZ: Float,
+        curTheta: Float, curPhi: Float, curOmega: Float,
+        nBalls: Int,
+        tRemaining: Float,
+        transferTime: Float,
+        dropFraction: Float,
+        urgencyLambda: Float,
+        weights: FloatArray,
+        bounds: FloatArray,
+        physConfig: FloatArray,
+        omegaCoeffs: FloatArray,
+        tol: Float = 5e-4f,
+        maxIter: Int = 80
     ): FloatArray
 
     // ------------------------------------------------------------------
@@ -259,10 +320,10 @@ class TurretPlannerBridge {
      * solved as the first half of a robust pair against the next sample
      * (see [robustShot]), biasing the pre-position toward turret states that
      * make the *following* shot easy under an expected flywheel drop
-     * [omegaDrop].
+     * [dropFraction].
      *
      * Note: this is NOT equivalent to [computePreposition] even when
-     * `omegaDrop == 0`, because the two functions optimize different objectives
+     * `dropFraction == 0`, because the two functions optimize different objectives
      * per sample — [computePreposition] minimizes τ from the current turret
      * state to the shot, while this minimizes the transition between
      * consecutive shots.
@@ -278,7 +339,7 @@ class TurretPlannerBridge {
         tAvailable: Float,
         lambdaDecay: Float,
         kSamples: Int,
-        omegaDrop: Float,
+        dropFraction: Float,
         weights: FloatArray,
         bounds: FloatArray,
         physConfig: FloatArray,
@@ -343,6 +404,20 @@ class TurretPlannerBridge {
             }
         }
 
+        /** Encode a trajectory for [robust3ShotPlan]. 6 floats per state: [t, x, y, heading, vx, vy]. */
+        fun encodeTrajectory(states: List<TrajectoryState>): FloatArray {
+            val out = FloatArray(states.size * 6)
+            states.forEachIndexed { i, s ->
+                out[i*6 + 0] = s.t
+                out[i*6 + 1] = s.x
+                out[i*6 + 2] = s.y
+                out[i*6 + 3] = s.heading
+                out[i*6 + 4] = s.vx
+                out[i*6 + 5] = s.vy
+            }
+            return out
+        }
+
         /** Encode a path for [findEarliestShot] / [computePreposition]. */
         fun encodePath(samples: List<PathSample>): FloatArray {
             val out = FloatArray(samples.size * 5)
@@ -365,4 +440,14 @@ data class PathSample(
     val y: Float,
     val vx: Float = 0f,
     val vy: Float = 0f
+)
+
+/** Predicted robot state at a future time, for [TurretPlannerBridge.robust3ShotPlan]. */
+data class TrajectoryState(
+    val t: Float,          // seconds from now
+    val x: Float,          // predicted field-frame position (m)
+    val y: Float,
+    val heading: Float,    // predicted heading (rad)
+    val vx: Float,         // predicted field-frame velocity (m/s)
+    val vy: Float
 )

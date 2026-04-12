@@ -65,8 +65,9 @@ struct TurretWeights {
 
 // Physical constants for ballistics.
 struct PhysicsConfig {
-    float g;    // gravitational acceleration (m/s^2, positive downward, ~9.81)
-    float r_h;  // barrel offset: distance from turret pivot to launch point (m)
+    float g;       // gravitational acceleration (m/s^2, positive downward, ~9.81)
+    float r_h;     // barrel offset: distance from turret pivot to launch point (m)
+    float drag_k;  // linear air drag coefficient (1/s), 0 = no drag
 };
 
 // Configuration for zone-entry tracker.

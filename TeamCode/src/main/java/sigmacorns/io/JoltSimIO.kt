@@ -244,7 +244,7 @@ class JoltSimIO(
             color.joltId)
 
         // slow down flywheel
-        flywheelState.omega *= 0.8
+        flywheelState.omega *= (1.0-FLYWHEEL_SHOT_LOSS)
     }
 
     // --- Intake/Hood getters ---
@@ -343,8 +343,9 @@ class JoltSimIO(
         val SIM_UPDATE_TIME = 5.milliseconds
 
         /** Time between auto-shot attempts when transfer motor is running (seconds). */
-        const val AUTO_SHOOT_INTERVAL = 0.3
-        const val LAUNCH_EFFICIENCY = 0.27
+        const val AUTO_SHOOT_INTERVAL = 0.2
+        const val LAUNCH_EFFICIENCY = 0.195
+        const val FLYWHEEL_SHOT_LOSS = 0.1
 
         const val SERVO_TIME_CONSTANT = 0.05
 

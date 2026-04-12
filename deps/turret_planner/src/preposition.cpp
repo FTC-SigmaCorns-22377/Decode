@@ -107,7 +107,7 @@ PrepositionResult preposition_robust_compute(
     float t_available,
     float lambda_decay,
     int   k_samples,
-    float omega_drop,
+    float drop_fraction,
     const TurretWeights& weights,
     const TurretBounds& bounds,
     const PhysicsConfig& cfg,
@@ -132,7 +132,7 @@ PrepositionResult preposition_robust_compute(
                 turret_x, turret_y, turret_z,
                 s.x,  s.y,  target_z,
                 sn.x, sn.y, target_z,
-                robot_vx, robot_vy, omega_drop,
+                robot_vx, robot_vy, drop_fraction,
                 weights, bounds, cfg, omega);
             if (res.feasible) {
                 theta = res.s1.theta;

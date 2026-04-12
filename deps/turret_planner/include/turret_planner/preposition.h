@@ -37,12 +37,12 @@ PrepositionResult preposition_compute(
 
 // Robust variant: each sample's shot is solved as the FIRST half of a
 // robust pair against the next path sample (flight_time_robust with the
-// given omega_drop), so the preposition is biased toward turret states
+// given drop_fraction), so the preposition is biased toward turret states
 // that make the *following* shot easy under flywheel loss. The last
 // sample (or any single-sample path) falls back to flight_time_cold.
 //
 // Note: this is NOT equivalent to preposition_compute even when
-// omega_drop == 0, because the two functions optimize different
+// drop_fraction == 0, because the two functions optimize different
 // objectives per sample. preposition_compute minimizes τ from the
 // current turret state to the shot (fastest shot to slew to), while
 // this function minimizes the transition between consecutive shots.
@@ -55,7 +55,7 @@ PrepositionResult preposition_robust_compute(
     float t_available,
     float lambda_decay,
     int   k_samples,
-    float omega_drop,
+    float drop_fraction,
     const TurretWeights& weights,
     const TurretBounds& bounds,
     const PhysicsConfig& cfg,

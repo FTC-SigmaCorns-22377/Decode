@@ -60,7 +60,13 @@ interface AutoAim : AutoCloseable {
      */
     val secondaryShotState: Ballistics.ShotState?
 
-    /** True when the most recent update produced a robust (two-shot) solve. */
+    /**
+     * Third leg of the most recent 3-shot robust solve. Non-null only when
+     * [isRobustActive] and the planner solved for 3 balls.
+     */
+    val tertiaryShotState: Ballistics.ShotState?
+
+    /** True when the most recent update produced a robust (multi-shot) solve. */
     val isRobustActive: Boolean
 
     /** True when the most recent update produced an approach-preposition target. */

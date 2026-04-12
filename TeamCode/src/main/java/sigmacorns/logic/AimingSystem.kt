@@ -77,6 +77,7 @@ class AimingSystem(
     override var primaryShotState: Ballistics.ShotState? = null
         private set
     override val secondaryShotState: Ballistics.ShotState? get() = null
+    override val tertiaryShotState: Ballistics.ShotState? get() = null
     override val isRobustActive: Boolean get() = false
     override val isPrepositionActive: Boolean get() = false
 
@@ -273,8 +274,11 @@ object AimConfig {
     @JvmField var goalHeight = 1.14
     @JvmField var g = 9.81
 
+    /** Linear air drag coefficient (1/s). 0 = no drag. Tune empirically (~0.3-0.8 for wiffle balls). */
+    @JvmField var dragK = 0.5
+
     /** Time (seconds) from when shot is requested until ball leaves shooter */
-    @JvmField var transferDelay = 0.2
+    @JvmField var transferDelay = 0.15
 
     @JvmField var launchEfficiency = 0.195
     val omegaMap = object : OmegaMap {
@@ -292,13 +296,19 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.05 // m
+    @JvmField var shotTolerance = 0.03 // m
 
-    // Expected flywheel speed drop (rad/s) between consecutive shots. When > 0,
-    // NativeAutoAim uses the robust shot planner so the first shot's parameters
-    // leave the flywheel at a speed compatible with the next shot after losing
-    // this amount. Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var flywheelDrop = 20.0
+    // Proportional flywheel speed loss per shot. After firing, the flywheel
+    // retains (1 - dropFraction) of its speed. When > 0, NativeAutoAim uses
+    // the robust shot planner so the first shot's parameters leave the flywheel
+    // at a speed compatible with the next shot after this proportional loss.
+    // Set to 0 to fall back to single-shot optimal aim.
+    @JvmField var dropFraction = 0.2
+
+    // Trajectory prediction for the robust 3-shot planner.
+    @JvmField var predictionHorizon = 1.0   // seconds of trajectory to predict
+    @JvmField var predictionStep = 0.04     // seconds between trajectory samples
+    @JvmField var urgencyLambda = 1.0       // J_0 weight decay: w = exp(-lambda * t_remaining)
 
     // Approach prepositioning: when > 0, NativeAutoAim predicts the robot's
     // near-future trajectory via constant-velocity mecanum kinematics and
@@ -324,8 +334,8 @@ object AimConfig {
 }
 
 object ShotSolverConfig {
-    @JvmField var wOmega = 0.01   // s per rad/s flywheel change
+    @JvmField var wOmega = 0.02   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
-    @JvmField var wPhi = 0.05      // s per rad hood change
+    @JvmField var wPhi = 0.3      // s per rad hood change
     @JvmField var tolerance = 0.05
 }

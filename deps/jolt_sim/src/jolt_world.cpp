@@ -694,8 +694,8 @@ int JoltWorld::spawnShotBall(float x, float y, float z, float vx, float vy, floa
         JPH::BodyLockWrite lock(physicsSystem_->GetBodyLockInterface(), balls_[idx].bodyId);
         if (lock.Succeeded()) {
             auto* mp = lock.GetBody().GetMotionProperties();
-            mp->SetLinearDamping(mp->GetLinearDamping() * 0.15f);
-            mp->SetAngularDamping(mp->GetAngularDamping() * 0.15f);
+            mp->SetLinearDamping(mp->GetLinearDamping() * 0.3f);
+            mp->SetAngularDamping(mp->GetAngularDamping() * 0.3f);
         }
         shotImmunity_.push_back({balls_[idx].bodyId, 0.5f}); // 0.5s immunity
     }

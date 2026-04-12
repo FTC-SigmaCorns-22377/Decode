@@ -31,6 +31,7 @@ add_library(turret_planner STATIC
     src/ballistics.cpp
     src/flight_time.cpp
     src/robust_shot.cpp
+    src/robust_3shot.cpp
     src/path_scan.cpp
     src/preposition.cpp
     src/zone_tracker.cpp
@@ -80,6 +81,10 @@ add_test(NAME flight_time COMMAND test_flight_time)
 add_executable(test_robust_shot tests/test_robust_shot.cpp)
 target_link_libraries(test_robust_shot turret_planner)
 add_test(NAME robust_shot COMMAND test_robust_shot)
+
+add_executable(test_robust_3shot tests/test_robust_3shot.cpp)
+target_link_libraries(test_robust_3shot turret_planner)
+add_test(NAME robust_3shot COMMAND test_robust_3shot)
 
 add_executable(test_path_scan tests/test_path_scan.cpp)
 target_link_libraries(test_path_scan turret_planner)

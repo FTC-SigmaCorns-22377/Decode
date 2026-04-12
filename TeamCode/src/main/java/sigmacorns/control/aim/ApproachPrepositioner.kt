@@ -50,7 +50,7 @@ class ApproachPrepositioner(
      * @param curTheta Current turret angle in field frame (rad).
      * @param curPhi Current hood angle (rad).
      * @param curOmega Current flywheel speed (rad/s).
-     * @param omegaDrop Expected flywheel drop between consecutive shots (rad/s).
+     * @param dropFraction Expected flywheel drop between consecutive shots (rad/s).
      * @param horizonSeconds Look-ahead horizon for the predicted trajectory (s).
      * @param steps Number of samples along the horizon (>= 2).
      * @param lambdaDecay Exponential decay on sample weights (0 = uniform).
@@ -67,7 +67,7 @@ class ApproachPrepositioner(
         curTheta: Double,
         curPhi: Double,
         curOmega: Double,
-        omegaDrop: Double,
+        dropFraction: Double,
         horizonSeconds: Double,
         steps: Int,
         lambdaDecay: Double,
@@ -98,7 +98,7 @@ class ApproachPrepositioner(
                 goal.z.toFloat(),
                 curTheta.toFloat(), curPhi.toFloat(), curOmega.toFloat(),
                 tAvailable.toFloat(), lambdaDecay.toFloat(), k,
-                omegaDrop.toFloat(),
+                dropFraction.toFloat(),
                 weights, bounds, physConfig, omegaCoeffs
             )
         } catch (e: Exception) {
