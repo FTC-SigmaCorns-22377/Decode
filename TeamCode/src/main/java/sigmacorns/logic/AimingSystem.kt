@@ -295,7 +295,7 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.07 // m
+    @JvmField var shotTolerance = 0.10 // m
 
     // Proportional flywheel speed loss per shot. After firing, the flywheel
     // retains (1 - dropFraction) of its speed. When > 0, NativeAutoAim uses
@@ -309,7 +309,7 @@ object AimConfig {
     @JvmField var predictionStep = 0.04     // seconds between trajectory samples
 
     /** Flywheel spins up when estimated time to a launch zone is below this (seconds). */
-    @JvmField var spinupLeadTime = 2.2
+    @JvmField var spinupLeadTime = 1.5
 
     /** Start decelerating trajectory when within this distance of a shooting zone (m). */
     @JvmField var decelZoneMargin = 0.25

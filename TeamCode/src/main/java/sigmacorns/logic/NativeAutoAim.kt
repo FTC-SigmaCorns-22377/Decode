@@ -17,6 +17,7 @@ import sigmacorns.io.HardwareIO
 import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.math.closestPointOnConvexPolygon
+import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
 import sigmacorns.subsystem.TurretServoConfig
 import kotlin.math.PI
@@ -398,10 +399,14 @@ class NativeAutoAim(
             turret.fieldTargetAngle = targetTheta
         }
 
+        val prespin = timeToZone <= AimConfig.spinupLeadTime &&
+                nBalls>0 &&
+                robot.intakeTransfer.state != IntakeTransfer.State.INTAKING
+
         if (robot.aimFlywheel) {
             shooter.hoodAngle = targetPhi
             // Only spin up the flywheel when close enough to a launch zone
-            shooter.flywheelTarget = if (timeToZone <= AimConfig.spinupLeadTime || burstActive)
+            shooter.flywheelTarget = if (prespin || burstActive)
                 targetOmega else 0.0
         }
 
