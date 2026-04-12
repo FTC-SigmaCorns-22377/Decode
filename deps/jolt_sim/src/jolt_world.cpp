@@ -409,34 +409,29 @@ void JoltWorld::updateGates(float dt) {
     GoalInfo* goals[] = { &redGoal_, &blueGoal_ };
 
     for (auto* goal : goals) {
-        JPH::Vec3 gatePos = bodyInterface.GetPosition(goal->gateId);
-        JPH::Vec3 robotPos = bodyInterface.GetPosition(robotBodyId_);
-
-        // Gate opens when the lever is pushed (lever lifts inner end, releasing the gate)
-        bool leverActivated = goal->leverAngle > 0.1f;
-
-        // Also open if robot is directly pushing the gate
-        float dist = (robotPos - gatePos).Length();
-        bool robotPushing = dist < (ROBOT_WIDTH / 2.0f + GATE_THICK + 0.05f);
-
-        if ((leverActivated || robotPushing) && goal->gateOpenAmount < GATE_TRAVEL) {
-            // Open the gate
-            goal->gateOpenAmount += dt * 0.3f; // opens over ~0.5s
-            goal->gateOpenAmount = std::min(goal->gateOpenAmount, GATE_TRAVEL);
-        } else if (!leverActivated && !robotPushing && goal->gateOpenAmount > 0.0f) {
-            // Gravity closes the gate
-            goal->gateOpenAmount -= dt * 0.08f;
-            goal->gateOpenAmount = std::max(goal->gateOpenAmount, 0.0f);
-        }
-
-        // Move the gate: slides in +X direction when opening
-        JPH::Vec3 newPos = gatePos;
         float origX = -HALF_FIELD + GOAL_LEG + CRAMP_LENGTH;
         float rampZ = goal->zSign * HALF_FIELD - goal->zSign * CRAMP_WIDTH / 2.0f;
-        newPos.SetX(origX + goal->gateOpenAmount);
-        newPos.SetZ(rampZ); // keep Z stable
+        float gateCenterY = CRAMP_END_H + GATE_CLOSED_H / 2.0f;
+        JPH::Vec3 closedPos(origX, gateCenterY, rampZ);
 
-        bodyInterface.MoveKinematic(goal->gateId, newPos, JPH::Quat::sIdentity(), dt);
+        JPH::Vec3 robotPos = bodyInterface.GetPosition(robotBodyId_);
+
+        // Gate opens when the lever is pushed or robot is near the gate
+        bool leverActivated = goal->leverAngle > 0.1f;
+        float dist = (robotPos - closedPos).Length();
+        bool robotPushing = dist < (ROBOT_WIDTH / 2.0f + GATE_THICK + 0.08f);
+
+        bool shouldOpen = leverActivated || robotPushing;
+
+        // Binary open/close: move gate out of the way when open, back to position when closed
+        if (shouldOpen) {
+            goal->gateOpenAmount = GATE_TRAVEL;
+            JPH::Vec3 hiddenPos(origX, -1.0f, rampZ); // below the field
+            bodyInterface.MoveKinematic(goal->gateId, hiddenPos, JPH::Quat::sIdentity(), dt);
+        } else {
+            goal->gateOpenAmount = 0.0f;
+            bodyInterface.MoveKinematic(goal->gateId, closedPos, JPH::Quat::sIdentity(), dt);
+        }
     }
 }
 
@@ -800,6 +795,11 @@ void JoltWorld::updateIntake(float dt) {
     // Check for ball pickups if roller is spinning
     if (std::abs(intake_.rollerOmega) < INTAKE_OMEGA_THRESHOLD) return;
 
+    // Pickup: any ball that is close to the robot AND in the front half.
+    // Uses the distance from the ball to the robot's front face center.
+    float frontZ = ROBOT_LENGTH / 2.0f;
+    float pickupRange = INTAKE_BAR_LENGTH + BALL_RADIUS * 3;  // how far past the front face
+
     for (int i = static_cast<int>(balls_.size()) - 1; i >= 0; i--) {
         // Skip recently shot balls
         bool immune = false;
@@ -811,17 +811,19 @@ void JoltWorld::updateIntake(float dt) {
         JPH::Vec3 ballPos = bodyInterface.GetPosition(balls_[i].bodyId);
         JPH::Vec3 localBall = robotRot.Conjugated() * (ballPos - robotPos);
 
-        bool withinWidth = std::abs(localBall.GetX()) < (INTAKE_WIDTH / 2.0f + BALL_RADIUS);
-        bool withinHeight = localBall.GetY() > -BALL_RADIUS && localBall.GetY() < (ROBOT_HEIGHT + BALL_RADIUS * 3);
+        // Ball must be in the front half of the robot or beyond the front face
+        if (localBall.GetZ() < 0.0f) continue;
 
-        // Pick up if ball is near front face — either at roller height or pushed against chassis
-        bool nearFrontFace = localBall.GetZ() > (ROBOT_LENGTH / 2.0f - BALL_RADIUS * 2) &&
-                             localBall.GetZ() < (ROBOT_LENGTH / 2.0f + INTAKE_BAR_LENGTH + BALL_RADIUS * 2);
-        if (nearFrontFace && withinWidth && withinHeight) {
-            // Avoid duplicate entries for the same ball across physics steps
-            if (std::find(pendingPickups_.begin(), pendingPickups_.end(), i) == pendingPickups_.end()) {
-                pendingPickups_.push_back(i);
-            }
+        // Ball must be within the intake width (robot width + ball tolerance)
+        if (std::abs(localBall.GetX()) > INTAKE_WIDTH / 2.0f + BALL_RADIUS) continue;
+
+        // Ball must be close to the front face (not far ahead of the robot)
+        float zPastFront = localBall.GetZ() - frontZ;
+        if (zPastFront > pickupRange) continue;
+
+        // Avoid duplicate entries for the same ball across physics steps
+        if (std::find(pendingPickups_.begin(), pendingPickups_.end(), i) == pendingPickups_.end()) {
+            pendingPickups_.push_back(i);
         }
     }
 

@@ -2,6 +2,7 @@ package sigmacorns.test.jolt
 
 import org.junit.jupiter.api.Test
 import sigmacorns.io.JoltSimIO
+import sigmacorns.opmode.AutoTeleOp
 import sigmacorns.opmode.MainTeleOp
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.sim.viz.SimVizServer
@@ -48,7 +49,7 @@ class JoltTeleOpVisualizerTest {
         Thread.sleep(500)
         println("Client connected. Starting MainTeleOp.")
 
-        val opmode = MainTeleOp()
+        val opmode = AutoTeleOp()
 
         // Launch the opmode; its ioLoop will step physics via io.update().
         val opmodeThread = Thread {

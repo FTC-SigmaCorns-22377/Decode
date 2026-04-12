@@ -97,16 +97,16 @@ class SimVizServer(
      * objects. Call once per loop on the opmode thread before reading gamepads.
      */
     fun syncGamepads(gp1: Gamepad, gp2: Gamepad) {
-        applyToGamepad(gp1, gamepad1State)
-        applyToGamepad(gp2, gamepad2State)
+        applyToGamepad(gp1, gamepad1State, wasdState)
+        applyToGamepad(gp2, gamepad2State, null)
     }
 
-    private fun applyToGamepad(target: Gamepad, state: BrowserGamepadState) {
-        target.left_stick_x  = state.leftStickX
-        target.left_stick_y  = state.leftStickY
-        target.right_stick_x = state.rightStickX
+    private fun applyToGamepad(target: Gamepad, state: BrowserGamepadState, wasdState: WasdState?) {
+        target.left_stick_x  = state.leftStickX + (if(wasdState?.a == true) -1f else 0f) + if(wasdState?.d == true) 1f else 0f
+        target.left_stick_y  = state.leftStickY + (if(wasdState?.w == true) -1f else 0f) + if(wasdState?.s == true) 1f else 0f
+        target.right_stick_x = state.rightStickX + (if(wasdState?.q == true) -1f else 0f) + if(wasdState?.e == true) 1f else 0f
         target.right_stick_y = state.rightStickY
-        target.left_trigger  = state.leftTrigger
+        target.left_trigger  = state.leftTrigger + (if(wasdState?.q == true) -1f else 0f) + if(wasdState?.e == true) 1f else 0f
         target.right_trigger = state.rightTrigger
         target.a = state.a; target.b = state.b
         target.x = state.x; target.y = state.y
@@ -256,14 +256,24 @@ class SimVizServer(
             ))
         }
 
-        // 3. Robust secondary (dashed).
+        // 3. Robust secondary.
         if (r.aim.isRobustActive) {
             val s2 = r.aim.secondaryShotState
             if (s2 != null) {
                 trajectories.add(trajToMap(
                     kind = "secondary",
-                    dashed = true,
+                    dashed = false,
                     points = vizBallistics.sampleTrajectory(pivot, vField, s2, stopZ),
+                ))
+            }
+
+            // 4. Robust tertiary.
+            val s3 = r.aim.tertiaryShotState
+            if (s3 != null) {
+                trajectories.add(trajToMap(
+                    kind = "tertiary",
+                    dashed = false,
+                    points = vizBallistics.sampleTrajectory(pivot, vField, s3, stopZ),
                 ))
             }
         }

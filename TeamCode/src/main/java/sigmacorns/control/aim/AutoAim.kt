@@ -2,6 +2,7 @@ package sigmacorns.control.aim
 
 import org.joml.Vector2d
 import sigmacorns.control.localization.GTSAMEstimator
+import sigmacorns.logic.PlannedShot
 import sigmacorns.math.Pose2d
 import kotlin.time.Duration
 
@@ -68,6 +69,16 @@ interface AutoAim : AutoCloseable {
 
     /** True when the most recent update produced a robust (multi-shot) solve. */
     val isRobustActive: Boolean
+
+    /**
+     * Optional pre-planned shot target from an autonomous routine.
+     * When set, the implementation should prespin and pre-aim for the shot at
+     * [PlannedShot.state] so it fires with minimal delay on arrival.
+     * The default is a no-op (appropriate for implementations that ignore pre-planning).
+     */
+    var plannedShot: PlannedShot?
+        get() = null
+        set(_) {}
 
     /** Called once before the main loop. Initialises GTSAM with the robot's starting pose. */
     fun init(initialPose: Pose2d, apriltagTracking: Boolean)

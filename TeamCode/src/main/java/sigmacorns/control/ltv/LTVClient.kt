@@ -350,14 +350,15 @@ class LTVClient private constructor(
             io.driveBR = u[2] * 12.0 / voltage
             io.driveFR = u[3] * 12.0 / voltage
 
-            // Update tRemaining from solver's forward-simulated ETA
-            tRemaining = prevWaypointEta().coerceAtLeast(minTRemaining)
-
-            // Check arrival: XY position, heading, and velocity magnitude
+            // Update tRemaining from solver's forward-simulated ETA,
+            // but floor it with a distance-based estimate so a single bad
+            // native ETA can't collapse the horizon to 2 steps permanently.
             val posErr = hypot(
                 currentState.pos.v.x - target.pos.v.x,
                 currentState.pos.v.y - target.pos.v.y,
             )
+            val distBasedMin = (posErr / 1.5).seconds // 1.5 m/s reference speed
+            tRemaining = maxOf(prevWaypointEta(), distBasedMin, minTRemaining)
             val headingErr = abs(currentState.pos.rot - target.pos.rot)
             val velMag = hypot(currentState.vel.v.x, currentState.vel.v.y)
 

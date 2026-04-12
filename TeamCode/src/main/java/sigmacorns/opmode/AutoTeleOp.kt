@@ -2,6 +2,7 @@ package sigmacorns.opmode
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.Robot
+import sigmacorns.logic.AutomationManager
 import sigmacorns.math.Pose2d
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
@@ -17,49 +18,28 @@ import kotlin.math.max
  *   Right stick X       - Rotate
  *   D-pad up/down       - Speed mode toggle (full / precision)
  *   X                    - Toggle field-centric drive
+ *   Y                    - Toggle auto shoot
  *
  *   Left trigger         - Hold to intake balls
  *   B                    - Hold to reverse intake (spit balls out)
- *   Right trigger        - Hold to shoot (flywheel + transfer)
- *   Left bumper          - Hold to spin up flywheel (without shooting)
- *
- * GAMEPAD 2 (Operator - all subsystem controls):
- *   Left trigger         - Hold to intake balls
- *   B                    - Hold to reverse intake (spit balls out)
- *   Right trigger        - Hold to shoot (flywheel + transfer)
- *   Left bumper          - Hold to spin up flywheel (without shooting)
- *   A                    - Toggle auto-aim on/off
- *   Right stick X        - Manual turret override (disables auto-aim while held)
- *   Right stick Y        - Manual hood angle override
- *   X                    - Toggle shoot-while-move
- *   Y                    - Toggle auto-shoot (zone-based)
- *   D-pad up             - Toggle hood auto-adjust
- *   D-pad left           - Decrease flywheel target speed (-25 rad/s)
- *   D-pad right          - Increase flywheel target speed (+25 rad/s)
  */
-@TeleOp(name = "Main TeleOp", group = "Competition")
-class   MainTeleOp : SigmaOpMode() {
-
+@TeleOp(name = "Auto TeleOp", group = "Competition")
+class AutoTeleOp : SigmaOpMode() {
     override fun runOpMode() {
         val robot = Robot(io, blue = false, useNativeAim = true)
         robotRef = robot
         robot.init(Pose2d(), apriltagTracking = !SIM)
         robot.startApriltag()
 
+        val automationManager = AutomationManager(robot)
+
         // State
-        var autoAimEnabled = true
-        var flywheelTargetSpeed = 400.0
-        val flywheelSpeedStep = 25.0
+        robot.intakeCoordinator.autoShootEnabled = true
+        robot.aimTurret = true
+        robot.aimFlywheel = true
 
-        // Toggle debounce flags (GP1)
         var lastX1 = false
-
-        // Toggle debounce flags (GP2)
-        var lastA2 = false
         var lastY2 = false
-        var lastDpadUp2 = false
-        var lastDpadLeft2 = false
-        var lastDpadRight2 = false
 
         telemetry.addLine("Main TeleOp initialized. Waiting for start...")
         telemetry.update()
@@ -76,23 +56,14 @@ class   MainTeleOp : SigmaOpMode() {
             if (gamepad1.x && !lastX1) robot.drive.fieldCentric = !robot.drive.fieldCentric
             lastX1 = gamepad1.x
 
-            robot.drive.fieldCentricHeading = robot.aim.autoAim.fusedPose.rot - 0.5*PI
-            robot.drive.update(gamepad1, io)
-
-            // ============================================================
-            // GAMEPAD 2: Operator (ALL subsystem controls)
-            // ============================================================
-
-            // --- Flywheel speed adjustment (D-pad left/right) ---
-            if (gamepad2.dpad_left && !lastDpadLeft2) {
-                flywheelTargetSpeed = (flywheelTargetSpeed - flywheelSpeedStep).coerceAtLeast(0.0)
+            if(gamepad1.right_bumper && !automationManager.hasControl) {
+                automationManager.shootFarZone()
             }
-            lastDpadLeft2 = gamepad2.dpad_left
 
-            if (gamepad2.dpad_right && !lastDpadRight2) {
-                flywheelTargetSpeed = (flywheelTargetSpeed + flywheelSpeedStep).coerceAtMost(628.0)
+            if(!automationManager.update(gamepad1)) {
+                robot.drive.fieldCentricHeading = robot.aim.autoAim.fusedPose.rot - 0.5*PI
+                robot.drive.update(gamepad1, io)
             }
-            lastDpadRight2 = gamepad2.dpad_right
 
             // --- Intake: hold left trigger ---
             if ( (max(gamepad2.left_trigger,gamepad1.left_trigger) > 0.1 && max(gamepad2.right_trigger,gamepad1.right_trigger) <= 0.1) ) {
@@ -111,76 +82,11 @@ class   MainTeleOp : SigmaOpMode() {
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             }
 
-            // --- Toggle: Auto-aim (A button) ---
-            if (gamepad2.a && !lastA2) {
-                autoAimEnabled = !autoAimEnabled
-            }
-            lastA2 = gamepad2.a
-
             // --- Toggle: Auto-shoot zones (Y button) ---
             if (gamepad2.y && !lastY2) {
-                robot.intakeCoordinator.autoShootEnabled =
-                    !robot.intakeCoordinator.autoShootEnabled
+                robot.intakeCoordinator.autoShootEnabled = !robot.intakeCoordinator.autoShootEnabled
             }
             lastY2 = gamepad2.y
-
-            // --- Toggle: Hood auto-adjust (D-pad up) ---
-            if (gamepad2.dpad_up && !lastDpadUp2) {
-                robot.shooter.autoAdjust = !robot.shooter.autoAdjust
-            }
-            lastDpadUp2 = gamepad2.dpad_up
-
-            // --- Turret control ---
-            val manualTurretInput = gamepad2.right_stick_x.toDouble()
-            if (abs(manualTurretInput) > 0.05) {
-                // Manual override: robot-relative turret control
-                robot.aimTurret = false
-                robot.turret.fieldRelativeMode = false
-                robot.turret.targetAngle += manualTurretInput * 2.0 * dt.inWholeMilliseconds / 1000.0
-                robot.turret.targetAngle = robot.turret.targetAngle.coerceIn(-PI, PI)
-            } else if (autoAimEnabled) {
-                robot.aimTurret = true
-            }
-
-            // --- Hood manual override (right stick Y) ---
-            val manualHoodInput = -gamepad2.right_stick_y.toDouble()
-            if (abs(manualHoodInput) > 0.05) {
-                robot.shooter.autoAdjust = false
-                robot.shooter.manualHoodAngle += manualHoodInput * Math.toRadians(30.0) * dt.inWholeMilliseconds / 1000.0
-                robot.shooter.manualHoodAngle = robot.shooter.manualHoodAngle.coerceIn(
-                    Math.toRadians(ShooterConfig.minAngleDeg),
-                    Math.toRadians(ShooterConfig.maxAngleDeg)
-                )
-            }
-
-//            robot.io.flywheel = if (gamepad2.right_trigger > 0.1) { 0.88 } else { 0.0 }
-
-            // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
-            if (max(gamepad2.right_trigger, gamepad1.right_trigger) > 0.1) {
-                // Shooting: spin flywheel + transfer (blocker delay handled by state machine)
-                if(autoAimEnabled) {
-                    robot.aimFlywheel = true
-                    robot.aim.shotRequested = true
-                } else {
-                    robot.shooter.flywheelTarget = flywheelTargetSpeed
-                    robot.aimFlywheel = false
-                    robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
-                }
-            } else if (gamepad2.left_bumper || gamepad1.left_bumper) {
-                // Spin-up only: flywheel on, blocker stays engaged
-                robot.shooter.flywheelTarget = flywheelTargetSpeed
-                robot.aimFlywheel = false
-                robot.aim.shotRequested = false
-                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-            } else {
-                // Idle: stop flywheel, only reset transfer (not intake/reverse)
-                robot.shooter.flywheelTarget = 0.0
-                robot.aimFlywheel = false
-                robot.aim.shotRequested = false
-                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
-                    robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-                }
-            }
 
             // ============================================================
             // Robot update
@@ -210,7 +116,6 @@ class   MainTeleOp : SigmaOpMode() {
             telemetry.addLine("")
             telemetry.addLine("=== VISION ===")
             telemetry.addData("Vision Target", robot.aim.autoAim.hasVisionTarget)
-            telemetry.addData("Auto-Aim", if (autoAimEnabled) "ON" else "OFF")
 
             telemetry.addLine("")
             telemetry.addLine("=== SHOOTER ===")
