@@ -40,7 +40,7 @@ void test_static_1ball() {
     Robust3ShotResult r = robust_3shot_plan(
         traj, N, 0.f,
         3.f, 0.f, target_z,
-        cur, 1, 0.f, 0.2f, 0.005f, 3.f,
+        cur, 1, 0.f, 0.2f, 0.005f,
         weights, bounds, cfg, om);
 
     printf("feasible=%d  idx1=%d  T1=%.4f  J=%.6f\n",
@@ -66,7 +66,7 @@ void test_static_2ball() {
     Robust3ShotResult r = robust_3shot_plan(
         traj, N, 0.f,
         3.f, 0.f, target_z,
-        cur, 2, 0.f, 0.2f, 0.005f, 3.f,
+        cur, 2, 0.f, 0.2f, 0.005f,
         weights, bounds, cfg, om);
 
     printf("feasible=%d  idx1=%d  T1=%.4f T2=%.4f  J=%.6f\n",
@@ -92,7 +92,7 @@ void test_static_3ball() {
     Robust3ShotResult r = robust_3shot_plan(
         traj, N, 0.f,
         3.f, 0.f, target_z,
-        cur, 3, 0.f, 0.2f, 0.005f, 3.f,
+        cur, 3, 0.f, 0.2f, 0.005f,
         weights, bounds, cfg, om);
 
     printf("feasible=%d  T1=%.4f T2=%.4f T3=%.4f  J=%.6f\n",
@@ -123,7 +123,7 @@ void test_moving_trajectory() {
     Robust3ShotResult r = robust_3shot_plan(
         traj, N, 0.f,
         3.f, 0.f, target_z,
-        cur, 2, 0.f, 0.2f, 0.005f, 3.f,
+        cur, 2, 0.f, 0.2f, 0.005f,
         weights, bounds, cfg, om);
 
     printf("feasible=%d  idx1=%d  t1=%.3f  J=%.6f\n",
@@ -148,7 +148,7 @@ void test_transfer_timing() {
     Robust3ShotResult r = robust_3shot_plan(
         traj, N, 0.f,
         3.f, 0.f, 1.5f,
-        cur, 3, t_remaining, transfer_time, 0.005f, 3.f,
+        cur, 3, t_remaining, transfer_time, 0.005f,
         weights, bounds, cfg, om);
 
     if (r.feasible) {
@@ -160,12 +160,50 @@ void test_transfer_timing() {
     printf("PASS transfer_timing\n");
 }
 
+void test_no_backward_shot() {
+    printf("\n=== test_no_backward_shot ===\n");
+    // Robot is close to the target and moving toward it at high speed.
+    // Without the directional constraint, the solver could find a backwards-
+    // pointing solution where theta ≈ π (turret faces away from goal).
+    const int N = 40;
+    FutureState traj[N];
+    // Robot at (1, 0) moving at vx=2 m/s toward target at (3, 0).
+    // At T > 0.5s the velocity correction can flip theta.
+    make_trajectory(traj, N, 1.f, 0.f, 2.f, 0.f, 0.f, 0.05f);
+
+    TurretState cur{0.f, 0.3f, 900.f};
+    float target_z = 1.5f;
+
+    Robust3ShotResult r = robust_3shot_plan(
+        traj, N, 0.f,
+        3.f, 0.f, target_z,
+        cur, 1, 0.f, 0.2f, 0.005f,
+        weights, bounds, cfg, om);
+
+    printf("feasible=%d  idx1=%d  T1=%.4f  J=%.6f\n",
+           r.feasible, r.idx1, r.T1, r.J);
+    if (r.feasible) {
+        printf("  s1: theta=%.4f phi=%.4f vExit=%.3f\n",
+               r.s1.theta, r.s1.phi, r.s1.v_exit);
+        // Goal is in the +x direction (theta ≈ 0 from early trajectory points).
+        // The shot theta must not be backwards (|theta| must be < π/2).
+        float goal_angle = std::atan2(0.f - 0.f, 3.f - 1.f);  // atan2(0, 2) = 0
+        float d = std::abs(r.s1.theta - goal_angle);
+        if (d > 3.14159265f) d = 6.28318530f - d;
+        printf("  angle deviation from goal: %.4f rad (%.1f deg)\n",
+               d, d * 180.f / 3.14159265f);
+        assert(d < 1.5707963f && "shot must not point backwards from goal");
+    }
+    printf("PASS no_backward_shot\n");
+}
+
 int main() {
     test_static_1ball();
     test_static_2ball();
     test_static_3ball();
     test_moving_trajectory();
     test_transfer_timing();
+    test_no_backward_shot();
     printf("\nDone.\n");
     return 0;
 }

@@ -109,6 +109,30 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_solve(
 }
 
 // ---------------------------------------------------------------------------
+// JNI: shotError
+// Forward-simulate a shot and return the horizontal miss distance (m).
+// ---------------------------------------------------------------------------
+extern "C" JNIEXPORT jfloat JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_shotError(
+    JNIEnv* env, jobject,
+    jfloat turretX, jfloat turretY, jfloat turretZ,
+    jfloat targetX, jfloat targetY, jfloat targetZ,
+    jfloat robotVx, jfloat robotVy,
+    jfloat theta, jfloat phi, jfloat vExit, jfloat omega,
+    jfloat T,
+    jfloatArray jPhys)
+{
+    ScopedArray ph(env, jPhys);
+    if (!ph) return 1e9f;
+    ShotParams p{theta, phi, vExit, omega};
+    return ballistics_shot_error(
+        turretX, turretY, turretZ,
+        targetX, targetY, targetZ,
+        robotVx, robotVy, p, T,
+        unpack_physics(ph));
+}
+
+// ---------------------------------------------------------------------------
 // JNI: optimalTCold
 // Returns [T*, tau, theta, phi, vExit, omega, feasible(0|1)]
 // ---------------------------------------------------------------------------
@@ -394,10 +418,10 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_computeRobustPreposition(
 // ---------------------------------------------------------------------------
 // JNI: robust3ShotPlan
 // trajectory: flat FloatArray, 6 floats/state [t, x, y, heading, vx, vy]
-// Returns [feasible, idx1, idx2, idx3, J, T1, T2, T3,
+// Returns [feasible, idx1, idx2, idx3, J, J_12, J_23, T1, T2, T3,
 //          s1.theta, s1.phi, s1.vExit, s1.omega,
 //          s2.theta, s2.phi, s2.vExit, s2.omega,
-//          s3.theta, s3.phi, s3.vExit, s3.omega]   = 20 floats
+//          s3.theta, s3.phi, s3.vExit, s3.omega]   = 22 floats
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT jfloatArray JNICALL
 Java_sigmacorns_control_aim_TurretPlannerBridge_robust3ShotPlan(
@@ -410,7 +434,6 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robust3ShotPlan(
     jfloat tRemaining,
     jfloat transferTime,
     jfloat dropFraction,
-    jfloat urgencyLambda,
     jfloatArray jWeights,
     jfloatArray jBounds,
     jfloatArray jPhys,
@@ -423,7 +446,6 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robust3ShotPlan(
                         ph(env, jPhys),   om(env, jOmega);
     if (!traj || !w || !b || !ph || !om) return nullptr;
 
-    // FutureState is 6 floats: t, x, y, heading, vx, vy
     static_assert(sizeof(FutureState) == 6 * sizeof(float), "FutureState layout mismatch");
     const FutureState* states = reinterpret_cast<const FutureState*>(traj.ptr);
 
@@ -433,21 +455,21 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robust3ShotPlan(
         targetX, targetY, targetZ,
         unpack_turret(curTheta, curPhi, curOmega),
         (int)nBalls,
-        tRemaining, transferTime, dropFraction, urgencyLambda,
+        tRemaining, transferTime, dropFraction,
         unpack_weights(w), unpack_bounds(b),
         unpack_physics(ph), unpack_omega(om),
         tol, (int)maxIter);
 
-    float buf[20] = {
+    float buf[22] = {
         r.feasible ? 1.f : 0.f,
         float(r.idx1), float(r.idx2), float(r.idx3),
-        r.J,
+        r.J, r.J_12, r.J_23,
         r.T1, r.T2, r.T3,
         r.s1.theta, r.s1.phi, r.s1.v_exit, r.s1.omega_flywheel,
         r.s2.theta, r.s2.phi, r.s2.v_exit, r.s2.omega_flywheel,
         r.s3.theta, r.s3.phi, r.s3.v_exit, r.s3.omega_flywheel
     };
-    return make_result(env, buf, 20);
+    return make_result(env, buf, 22);
 }
 
 // ---------------------------------------------------------------------------

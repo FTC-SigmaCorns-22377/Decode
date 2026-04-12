@@ -69,9 +69,6 @@ interface AutoAim : AutoCloseable {
     /** True when the most recent update produced a robust (multi-shot) solve. */
     val isRobustActive: Boolean
 
-    /** True when the most recent update produced an approach-preposition target. */
-    val isPrepositionActive: Boolean
-
     /** Called once before the main loop. Initialises GTSAM with the robot's starting pose. */
     fun init(initialPose: Pose2d, apriltagTracking: Boolean)
 

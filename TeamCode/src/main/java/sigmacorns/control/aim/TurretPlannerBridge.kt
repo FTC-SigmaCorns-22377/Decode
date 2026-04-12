@@ -79,28 +79,30 @@ class TurretPlannerBridge {
         const val S2_OMEGA  = 11
     }
 
-    /** Index constants for the 20-element array from [robust3ShotPlan]. */
+    /** Index constants for the 22-element array from [robust3ShotPlan]. */
     object Robust3ShotPlanIdx {
         const val FEASIBLE  = 0
         const val IDX1      = 1
         const val IDX2      = 2
         const val IDX3      = 3
         const val J         = 4
-        const val T1        = 5
-        const val T2        = 6
-        const val T3        = 7
-        const val S1_THETA  = 8
-        const val S1_PHI    = 9
-        const val S1_V_EXIT = 10
-        const val S1_OMEGA  = 11
-        const val S2_THETA  = 12
-        const val S2_PHI    = 13
-        const val S2_V_EXIT = 14
-        const val S2_OMEGA  = 15
-        const val S3_THETA  = 16
-        const val S3_PHI    = 17
-        const val S3_V_EXIT = 18
-        const val S3_OMEGA  = 19
+        const val J_12      = 5
+        const val J_23      = 6
+        const val T1        = 7
+        const val T2        = 8
+        const val T3        = 9
+        const val S1_THETA  = 10
+        const val S1_PHI    = 11
+        const val S1_V_EXIT = 12
+        const val S1_OMEGA  = 13
+        const val S2_THETA  = 14
+        const val S2_PHI    = 15
+        const val S2_V_EXIT = 16
+        const val S2_OMEGA  = 17
+        const val S3_THETA  = 18
+        const val S3_PHI    = 19
+        const val S3_V_EXIT = 20
+        const val S3_OMEGA  = 21
     }
 
     /** Index constants for the 8-element array from [updateZoneTracker]. */
@@ -131,6 +133,19 @@ class TurretPlannerBridge {
         physConfig: FloatArray,
         omegaCoeffs: FloatArray
     ): FloatArray
+
+    /**
+     * Forward-simulate a shot and return the horizontal miss distance (m)
+     * at the target height. Accounts for air drag.
+     */
+    external fun shotError(
+        turretX: Float, turretY: Float, turretZ: Float,
+        targetX: Float, targetY: Float, targetZ: Float,
+        robotVx: Float, robotVy: Float,
+        theta: Float, phi: Float, vExit: Float, omega: Float,
+        T: Float,
+        physConfig: FloatArray
+    ): Float
 
     // ------------------------------------------------------------------
     // Flight time optimizers
@@ -240,11 +255,12 @@ class TurretPlannerBridge {
      * timing candidates and jointly optimizes flight times (T1, T2, T3) via
      * branch-and-bound to minimize transition costs between consecutive shots.
      *
-     * The first shot cannot happen before [tRemaining] + [transferTime].
-     * [urgencyLambda] controls how much the slew cost to shot 1 matters:
-     * w = exp(-lambda * tRemaining). Large tRemaining -> turret has time to prepare.
+     * The first shot cannot happen before [tRemaining] on the trajectory.
      *
-     * @return FloatArray(20): see [Robust3ShotPlanIdx]
+     * Minimizes J_0 + J_12 + J_23 subject to J_12 <= transferTime and
+     * J_23 <= transferTime (transitions must complete within the transfer window).
+     *
+     * @return FloatArray(22): see [Robust3ShotPlanIdx]
      */
     external fun robust3ShotPlan(
         trajectory: FloatArray, nStates: Int,
@@ -255,7 +271,6 @@ class TurretPlannerBridge {
         tRemaining: Float,
         transferTime: Float,
         dropFraction: Float,
-        urgencyLambda: Float,
         weights: FloatArray,
         bounds: FloatArray,
         physConfig: FloatArray,

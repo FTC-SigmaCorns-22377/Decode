@@ -217,6 +217,47 @@ ShotParams ballistics_solve_with_derivs(
 }
 
 // ---------------------------------------------------------------------------
+// ballistics_shot_error — forward-simulate and measure miss distance
+// ---------------------------------------------------------------------------
+
+float ballistics_shot_error(
+    float turret_x, float turret_y, float turret_z,
+    float target_x, float target_y, float target_z,
+    float robot_vx, float robot_vy,
+    const ShotParams& p,
+    float T,
+    const PhysicsConfig& cfg)
+{
+    float sin_theta, cos_theta, sin_phi, cos_phi;
+    fast_sincos(p.theta, &sin_theta, &cos_theta);
+    fast_sincos(p.phi, &sin_phi, &cos_phi);
+
+    // Launch position (barrel offset)
+    float sx = turret_x + cfg.r_h * (1.f - sin_phi) * cos_theta;
+    float sy = turret_y + cfg.r_h * (1.f - sin_phi) * sin_theta;
+
+    // Launch velocity components in field frame
+    float vx0 = p.v_exit * cos_phi * cos_theta + robot_vx;
+    float vy0 = p.v_exit * cos_phi * sin_theta + robot_vy;
+
+    float xf, yf;
+    if (cfg.drag_k > 1e-6f) {
+        // With drag: pos(T) = pos0 + v0/k * (1 - exp(-kT))
+        float k = cfg.drag_k;
+        float decay = (1.f - std::exp(-k * T)) / k;
+        xf = sx + vx0 * decay;
+        yf = sy + vy0 * decay;
+    } else {
+        xf = sx + vx0 * T;
+        yf = sy + vy0 * T;
+    }
+
+    float dx = xf - target_x;
+    float dy = yf - target_y;
+    return fast_sqrt(dx * dx + dy * dy);
+}
+
+// ---------------------------------------------------------------------------
 // ballistics_is_feasible
 // ---------------------------------------------------------------------------
 
@@ -480,11 +521,26 @@ TInterval ballistics_feasible_interval(
     }
 
     // Check if any feasible T exists in (0, T_upper_bound]
+    // Precompute unit target direction for the forward-shot check.
+    float dist_sq = dx * dx + dy * dy;
+
     auto is_feas = [&](float T) -> bool {
         if (T <= 0.f) return false;
         ShotParams p = ballistics_solve(0,0,0, dx,dy,dz, vRx,vRy, T, cfg,
                                         OmegaMapParams{});
-        return ballistics_is_feasible(p, T, bounds, cfg);
+        if (!ballistics_is_feasible(p, T, bounds, cfg)) return false;
+
+        // Reject backwards-pointing shots: the launch direction must have
+        // a positive component along the geometric target direction.
+        // When the robot's velocity dominates dx/T (or dy/T), atan2 can
+        // flip theta ~180°, producing a physically valid but impractical
+        // solution where the turret points away from the goal.
+        if (dist_sq > 1e-6f) {
+            float dot = std::cos(p.theta) * dx + std::sin(p.theta) * dy;
+            if (dot <= 0.f) return false;
+        }
+
+        return true;
     };
 
     // Phase 1: coarse sweep to find the outer feasible envelope.

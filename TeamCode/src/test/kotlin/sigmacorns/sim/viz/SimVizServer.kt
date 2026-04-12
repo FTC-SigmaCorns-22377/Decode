@@ -268,21 +268,6 @@ class SimVizServer(
             }
         }
 
-        // 4. Preposition horizon-end.
-        if (r.aim.isPrepositionActive && target != null) {
-            val h = AimConfig.prepositionHorizon
-            val futurePivot = Vector3d(
-                pivot.x + vField.x * h,
-                pivot.y + vField.y * h,
-                pivot.z,
-            )
-            trajectories.add(trajToMap(
-                kind = "preposition",
-                dashed = false,
-                points = vizBallistics.sampleTrajectory(futurePivot, vField, target, stopZ),
-            ))
-        }
-
         val goal = mapOf(
             "x" to r.aim.goalPosition.x,
             "y" to r.aim.goalPosition.y,

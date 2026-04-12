@@ -351,7 +351,7 @@ class JoltSimIO(
 
         // Flywheel inertia: ½mr² = 0.5 * 0.38709252 kg * (0.046 m)²
         const val SIM_FLYWHEEL_INERTIA = 0.000410 // kg·m^2
-        val SIM_FLYWHEEL_PARAMS = FlywheelParameters(flywheelMotor, SIM_FLYWHEEL_INERTIA, 0.0001)
+        val SIM_FLYWHEEL_PARAMS = FlywheelParameters(flywheelMotor, SIM_FLYWHEEL_INERTIA, 0.0)
 
         // Intake roller dynamics (reuses FlywheelDynamics with different parameters)
         const val INTAKE_ROLLER_INERTIA = 0.0005 // kg·m^2

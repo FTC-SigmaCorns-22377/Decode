@@ -28,7 +28,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): AutoCloseable {
+class Robot(val io: SigmaIO, val blue: Boolean, useNativeAim: Boolean = false): AutoCloseable {
     // Subsystems
     val shooter = Shooter(this)
     val drive = Drivetrain()

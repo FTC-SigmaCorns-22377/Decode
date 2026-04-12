@@ -46,6 +46,8 @@ class   MainTeleOp : SigmaOpMode() {
         robot.init(Pose2d(), apriltagTracking = !SIM)
         robot.startApriltag()
 
+        robot.intakeCoordinator.autoShootEnabled = true
+
         // State
         var autoAimEnabled = true
         var flywheelTargetSpeed = 400.0
@@ -172,7 +174,7 @@ class   MainTeleOp : SigmaOpMode() {
                 robot.aimFlywheel = false
                 robot.aim.shotRequested = false
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-            } else {
+            } else if(!robot.intakeCoordinator.autoShootEnabled) {
                 // Idle: stop flywheel, only reset transfer (not intake/reverse)
                 robot.shooter.flywheelTarget = 0.0
                 robot.aimFlywheel = false

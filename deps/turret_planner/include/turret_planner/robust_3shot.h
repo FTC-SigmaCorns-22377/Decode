@@ -9,22 +9,20 @@
 //
 // Given a predicted trajectory (array of FutureState), a stationary target,
 // and the current turret state, finds when and how to fire up to 3 shots
-// that minimize the total transition cost between consecutive shots.
+// that minimize the total slew cost:
 //
-// Shot timing is deterministic: t2 = t1 + transfer_time, t3 = t1 + 2*transfer_time.
-// The solver sweeps over t1 candidates, and for each one runs a joint B&B over
-// (T1, T2, T3) — the flight times — to minimize:
+//   J = J_0(cur -> s1) + J_12(s1_dropped -> s2) + J_23(s2_dropped -> s3)
 //
-//   J = w_urgency * tau(cur -> s1(T1))
-//     + moveCost(s1(T1)*(1-drop) -> s2(T2))
-//     + moveCost(s2(T2)*(1-drop) -> s3(T3))
+// subject to transition constraints:
+//   J_12 <= transfer_time   (flywheel recovers in time for shot 2)
+//   J_23 <= transfer_time   (flywheel recovers in time for shot 3)
 //
-// where w_urgency = exp(-urgency_lambda * t_remaining) so that the slew to
-// the first shot matters less when there's plenty of preparation time.
+// Solutions violating the constraints are pruned (returned as infeasible).
+// Shot timing is deterministic: t2 = t1 + transfer_time, t3 = t1 + 2*tt.
 //
 // For n_balls < 3, lower terms are omitted:
-//   n_balls=1: J = w_urgency * tau(cur -> s1)
-//   n_balls=2: J = w_urgency * tau(cur -> s1) + moveCost(s1_dropped -> s2)
+//   n_balls=1: J = J_0(cur -> s1)              (no constraint)
+//   n_balls=2: J = J_0 + J_12                  (J_12 <= tt)
 // ---------------------------------------------------------------------------
 
 struct FutureState {
@@ -39,6 +37,7 @@ struct Robust3ShotResult {
     float T1, T2, T3;         // flight times (0 if unused)
     ShotParams s1, s2, s3;    // shot params at each trajectory point
     float J;                   // total objective value
+    float J_12, J_23;         // individual transition costs (for diagnostics)
     bool  feasible;            // true if a valid solution was found
 };
 
@@ -51,7 +50,6 @@ Robust3ShotResult robust_3shot_plan(
     float t_remaining,                 // time until first shot can begin (s)
     float transfer_time,               // minimum time between consecutive shots (s)
     float drop_fraction,               // proportional flywheel speed loss per shot
-    float urgency_lambda,              // decay rate for J_0 weight: w = exp(-lambda*t_remaining)
     const TurretWeights& weights,
     const TurretBounds& bounds,
     const PhysicsConfig& cfg,

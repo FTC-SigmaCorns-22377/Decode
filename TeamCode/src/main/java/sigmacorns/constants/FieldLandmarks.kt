@@ -57,6 +57,8 @@ object FieldLandmarks {
     val goalZoneCorners = listOf(Vector2d(0.0, 0.0), Vector2d(-1.83, 1.83), Vector2d(1.83, 1.83))
     val farZoneCorners = listOf(Vector2d(-0.61, -1.83), Vector2d(0.0, -1.22), Vector2d(0.61, -1.83))
 
+    val fieldHalfExtend = 1.8288
+
     private val spikeMarkX = 1.200944
     private val spikeMarkFarY = -0.896144
     private val spikeMarkMedY = -0.296069
