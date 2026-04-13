@@ -279,7 +279,7 @@ object AimConfig {
     /** Time (seconds) from when shot is requested until ball leaves shooter */
     @JvmField var transferDelay = 0.2
 
-    @JvmField var launchEfficiency = 0.22
+    @JvmField var launchEfficiency = 0.215
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
             vExit / (flywheelRadius * launchEfficiency)
