@@ -414,7 +414,7 @@ class TurretPlannerBridge {
                 if (resolvedPath != null) {
                     System.load(resolvedPath)
                 } else {
-                    System.loadLibrary("mecanum_ltv_jni")
+                    System.loadLibrary("turret_planner_jni")
                 }
             }
         }
