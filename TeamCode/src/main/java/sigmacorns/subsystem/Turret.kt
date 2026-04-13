@@ -38,6 +38,9 @@ class Turret(val io: SigmaIO) {
     /** Whether to use field-relative aiming */
     var fieldRelativeMode: Boolean = false
 
+    /** If non-null, bypasses all angle logic and writes this value directly to both servos. */
+    var servoOverride: Double? = null
+
     // Current turret angle in radians from sensor feedback
     var pos = 0.0
         private set
@@ -64,6 +67,13 @@ class Turret(val io: SigmaIO) {
     private val saturationHysteresis = 0.05  // rad - only switch if error improves by this much
 
     fun update(dt: Duration) {
+        servoOverride?.let { v ->
+            currentServoPosition = v
+            io.turretLeft = 1.0 - v
+            io.turretRight = v
+            return
+        }
+
         // Read current position from analog sensor feedback
         pos = io.turretPosition()
 
@@ -83,20 +93,17 @@ class Turret(val io: SigmaIO) {
         val validCandidates = candidates.filter { it in angleLimits }
 
         val targetToUse = if (validCandidates.isNotEmpty()) {
+            lastSaturatedTarget = null
+            lastSaturatedError = null
             validCandidates.minByOrNull { abs(it - pos) }!!
         } else {
-            // Saturated - use hysteresis to prevent rapid switching
+            // Saturated - stay at whichever limit pos is currently closest to,
+            // only switching if the error to the other limit improves by more than the hysteresis threshold
             val start = angleLimits.start
             val end = angleLimits.endInclusive
 
-            val lookaheadTime = 0.5 // seconds
-            val projectedTarget = normalizeAngle(rawTarget - robotAngularVelocity * lookaheadTime)
-
-            val distStart = (normalizeAngle(projectedTarget - start)).absoluteValue
-            val distEnd = (normalizeAngle(projectedTarget - end)).absoluteValue
-
-            val preferredTarget = if (distStart < distEnd) start else end
-            val preferredError = min(distStart, distEnd)
+            val preferredTarget = if (abs(pos - start) <= abs(pos - end)) start else end
+            val preferredError = min(abs(pos - start), abs(pos - end))
 
             if (lastSaturatedTarget == null) {
                 lastSaturatedTarget = preferredTarget
