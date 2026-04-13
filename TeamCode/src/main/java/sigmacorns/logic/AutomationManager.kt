@@ -2,11 +2,11 @@ package sigmacorns.logic
 
 import com.qualcomm.robotcore.hardware.Gamepad
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.joml.Vector2d
+import org.joml.minus
 import sigmacorns.Robot
 import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.robotSize
@@ -48,35 +48,70 @@ class AutomationManager(val robot: Robot) {
             hasControl = false
         }
 
+        if(curBehavior?.isCancelled == true) {
+            curBehavior = null
+            hasControl = false
+        }
+
         return hasControl
     }
 
     private val MIN_FAR_ZONE_Y = -FieldLandmarks.fieldHalfExtend + max(robotSize.x,robotSize.y)
 
+    private fun target(polygon: List<Vector2d>): MecanumState {
+        val p = closestPointOnConvexPolygon(polygon, robot.io.position().v)
+        val curTheta = robot.io.position().rot
+        p.y = max(p.y, MIN_FAR_ZONE_Y)
 
-    fun shootFarZone() {
-        if(curBehavior != null) return
+        // bc this is far zone bounds will always be in -PI to PI
+        val goalAngle = p.angle(FieldLandmarks.goalPosition(robot.blue))
+        val headingRange = (robot.turret.angleLimits.start*0.8 + goalAngle)..(robot.turret.angleLimits.endInclusive*0.8 + goalAngle)
+
+        val errStart = normalizeAngle(headingRange.start-curTheta).absoluteValue
+        val errEnd = normalizeAngle(headingRange.endInclusive-curTheta).absoluteValue
+
+        val theta = if(headingRange.contains(curTheta)) {
+            curTheta
+        } else {
+            if(errStart < errEnd) headingRange.start else headingRange.endInclusive
+        }
+
+        return MecanumState(Pose2d(),Pose2d(p,theta))
+    }
+
+    private fun tryLock(): Boolean {
+        if(curBehavior != null && curBehavior!!.isActive) {
+            curBehavior?.cancel()
+            return false
+        }
+        return true
+    }
+
+    private var holding = false
+    private var staleETA = false
+    private suspend fun ltvMoveHold(target: MecanumState) {
+        try {
+            staleETA = false
+            robot.ltv.runWaypointToCompletion(target,5.seconds,robot.io)
+            holding = true
+            while (true) {
+                robot.ltv.holdPos(robot.io,target.pos)
+                yield()
+            }
+        } finally {
+            staleETA = true
+            holding = false
+        }
+    }
+
+    fun shootFarZone() = shootZone(FieldLandmarks.farZoneCorners)
+    fun shootGoalZone() = shootZone(FieldLandmarks.goalZoneCorners)
+
+    private fun shootZone(corners: List<Vector2d>) {
+        if(!tryLock()) return
 
         curBehavior = robot.scope.launch {
-            val p = closestPointOnConvexPolygon(FieldLandmarks.farZoneCorners, robot.io.position().v)
-            val curTheta = robot.io.position().rot
-            p.y = max(p.y, MIN_FAR_ZONE_Y)
-
-            // bc this is far zone bounds will always be in -PI to PI
-            val goalAngle = p.angle(FieldLandmarks.goalPosition(robot.blue))
-            val headingRange = (robot.turret.angleLimits.start*0.8 + goalAngle)..(robot.turret.angleLimits.endInclusive*0.8 + goalAngle)
-
-            val errStart = normalizeAngle(headingRange.start-curTheta).absoluteValue
-            val errEnd = normalizeAngle(headingRange.endInclusive-curTheta).absoluteValue
-
-            val theta = if(headingRange.contains(curTheta)) {
-                curTheta
-            } else {
-                if(errStart < errEnd) headingRange.start else headingRange.endInclusive
-            }
-
-            val target = MecanumState(Pose2d(),Pose2d(p,theta))
-            println("[NativeAutoAim] " + "shootFarZone: target=(${p.x.f},${p.y.f}) heading=${Math.toDegrees(theta).f}°")
+            val target = target(corners)
 
             val beforeAutoShoot = robot.intakeCoordinator.autoShootEnabled
             val beforeAimFlywheel = robot.aimFlywheel
@@ -86,28 +121,18 @@ class AutomationManager(val robot: Robot) {
             robot.aimFlywheel = true
             robot.aimTurret = true
             robot.drive.fieldCentric = false
+
+            // simple constant-vel approx
             val curPos = robot.io.position().v
             val curVel = robot.io.velocity().v
-            val dist = hypot(p.x - curPos.x, p.y - curPos.y)
+            val dist = (target.pos.v - curPos).length()
             val speed = hypot(curVel.x, curVel.y).coerceAtLeast(0.5)
             val timeToArrival = (dist / speed).seconds
-            println("[NativeAutoAim] " + "shootFarZone: dist=${dist.f}m speed=${speed.f}m/s eta=${timeToArrival.inWholeMilliseconds}ms")
 
-            var holding = false
-            var pathingUpdatedEta = false
             lateinit var pathing: Job
 
             try {
-                pathing = launch {
-                    pathingUpdatedEta = true
-                    robot.ltv.runWaypointToCompletion(target,5.seconds,robot.io)
-                    println("[NativeAutoAim] " + "shootFarZone: waypoint reached, now holding")
-                    holding = true
-                    while (true) {
-                        robot.ltv.holdPos(robot.io,target.pos)
-                        yield()
-                    }
-                }
+                pathing = launch { ltvMoveHold(target) }
                 while (robot.beamBreak.ballCount > 0) {
                     // Compute ETA for NativeAutoAim's trajectory interpolation.
                     // prevWaypointEta() can collapse to 0 if the solver's horizon
@@ -119,7 +144,7 @@ class AutomationManager(val robot: Robot) {
                     val distEta = (d / hypot(robot.io.velocity().v.x, robot.io.velocity().v.y).coerceAtLeast(0.5)).seconds
                     val eta = when {
                         holding -> 0.seconds
-                        !pathingUpdatedEta -> timeToArrival
+                        staleETA -> timeToArrival
                         d > 0.1 -> maxOf(solverEta, distEta)
                         else -> solverEta
                     }
@@ -129,7 +154,7 @@ class AutomationManager(val robot: Robot) {
                 }
                 println("[NativeAutoAim] " + "shootFarZone: all balls fired")
             } finally {
-                pathing.cancelAndJoin()
+                pathing.cancel()
                 robot.aim.plannedShot = null
                 robot.intakeCoordinator.autoShootEnabled = beforeAutoShoot
                 robot.aimFlywheel = beforeAimFlywheel

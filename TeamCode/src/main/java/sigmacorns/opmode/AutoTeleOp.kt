@@ -40,6 +40,8 @@ class AutoTeleOp : SigmaOpMode() {
 
         var lastX1 = false
         var lastY2 = false
+        var lastRB1 = false
+        var lastLB1 = false
 
         telemetry.addLine("Main TeleOp initialized. Waiting for start...")
         telemetry.update()
@@ -56,9 +58,13 @@ class AutoTeleOp : SigmaOpMode() {
             if (gamepad1.x && !lastX1) robot.drive.fieldCentric = !robot.drive.fieldCentric
             lastX1 = gamepad1.x
 
-            if(gamepad1.right_bumper && !automationManager.hasControl) {
+            if(gamepad1.right_bumper && !lastRB1) {
                 automationManager.shootFarZone()
+            } else if(gamepad1.left_bumper && !lastLB1) {
+                automationManager.shootGoalZone()
             }
+            lastRB1 = gamepad1.right_bumper
+            lastLB1 = gamepad1.left_bumper
 
             if(!automationManager.update(gamepad1)) {
                 robot.drive.fieldCentricHeading = robot.aim.autoAim.fusedPose.rot - 0.5*PI

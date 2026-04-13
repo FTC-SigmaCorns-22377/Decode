@@ -274,12 +274,12 @@ object AimConfig {
     @JvmField var g = 9.81
 
     /** Linear air drag coefficient (1/s). 0 = no drag. Tune empirically (~0.3-0.8 for wiffle balls). */
-    @JvmField var dragK = 0.3
+    @JvmField var dragK = 0.4
 
     /** Time (seconds) from when shot is requested until ball leaves shooter */
     @JvmField var transferDelay = 0.2
 
-    @JvmField var launchEfficiency = 0.195
+    @JvmField var launchEfficiency = 0.22
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
             vExit / (flywheelRadius * launchEfficiency)
@@ -295,14 +295,14 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.10 // m
+    @JvmField var shotTolerance = 0.15 // m
 
     // Proportional flywheel speed loss per shot. After firing, the flywheel
     // retains (1 - dropFraction) of its speed. When > 0, NativeAutoAim uses
     // the robust shot planner so the first shot's parameters leave the flywheel
     // at a speed compatible with the next shot after this proportional loss.
     // Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var dropFraction = 0.1
+    @JvmField var dropFraction = 0.08
 
     // Trajectory prediction for the robust 3-shot planner.
     @JvmField var predictionHorizon = 1.0   // seconds of trajectory to predict

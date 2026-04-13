@@ -75,7 +75,10 @@ class IntakeCoordinator(val robot: Robot) {
         }
 
         if(robot.aimFlywheel && robot.aim.shotRequested) {
-            robot.intakeTransfer.state = if(robot.aim.readyToShoot) IntakeTransfer.State.TRANSFERRING else IntakeTransfer.State.IDLE
+             if(robot.aim.readyToShoot)
+                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+            else if(robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING)
+                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         }
     }
 
