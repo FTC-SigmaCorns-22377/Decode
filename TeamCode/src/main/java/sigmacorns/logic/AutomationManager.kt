@@ -12,12 +12,14 @@ import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.robotSize
 import sigmacorns.math.Pose2d
 import sigmacorns.math.closestPointOnConvexPolygon
+import sigmacorns.math.isInsideConvexPolygon
 import sigmacorns.math.normalizeAngle
 import sigmacorns.sim.MecanumState
 import sigmacorns.subsystem.IntakeTransfer
 import kotlin.math.absoluteValue
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -112,6 +114,8 @@ class AutomationManager(val robot: Robot) {
 
         curBehavior = robot.scope.launch {
             val target = target(corners)
+            println("[AutomationManager] robotPos=${robot.io.position().v.x.f},${robot.io.position().v.y.f} target=${target.pos.v.x.f},${target.pos.v.y.f} heading=${target.pos.rot.f}")
+            println("[AutomationManager] polygon=${corners.map { "(${it.x.f},${it.y.f})" }}")
 
             val beforeAutoShoot = robot.intakeCoordinator.autoShootEnabled
             val beforeAimFlywheel = robot.aimFlywheel
@@ -129,7 +133,7 @@ class AutomationManager(val robot: Robot) {
             val speed = hypot(curVel.x, curVel.y).coerceAtLeast(0.5)
             val timeToArrival = (dist / speed).seconds
 
-            lateinit var pathing: Job
+            var pathing: Job? = null
 
             try {
                 pathing = launch { ltvMoveHold(target) }
@@ -154,7 +158,7 @@ class AutomationManager(val robot: Robot) {
                 }
                 println("[NativeAutoAim] " + "shootFarZone: all balls fired")
             } finally {
-                pathing.cancel()
+                pathing?.cancel()
                 robot.aim.plannedShot = null
                 robot.intakeCoordinator.autoShootEnabled = beforeAutoShoot
                 robot.aimFlywheel = beforeAimFlywheel

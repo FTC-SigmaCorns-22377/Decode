@@ -3,6 +3,9 @@ package sigmacorns.math
 import org.joml.Vector2d
 
 fun closestPointOnConvexPolygon(polygon: List<Vector2d>, point: Vector2d): Vector2d {
+    // If the point is already inside the convex polygon, return it directly.
+    if (isInsideConvexPolygon(polygon, point)) return Vector2d(point)
+
     var closestPoint = polygon[0]
     var minDistSq = Double.MAX_VALUE
 
@@ -22,6 +25,23 @@ fun closestPointOnConvexPolygon(polygon: List<Vector2d>, point: Vector2d): Vecto
     }
 
     return closestPoint
+}
+
+/** Check if [point] lies inside a convex [polygon] using cross-product sign consistency. */
+fun isInsideConvexPolygon(polygon: List<Vector2d>, point: Vector2d): Boolean {
+    if (polygon.size < 3) return false
+    var sign = 0
+    for (i in polygon.indices) {
+        val a = polygon[i]
+        val b = polygon[(i + 1) % polygon.size]
+        val cross = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+        if (cross != 0.0) {
+            val s = if (cross > 0) 1 else -1
+            if (sign == 0) sign = s
+            else if (s != sign) return false
+        }
+    }
+    return true
 }
 
 fun closestPointOnSegment(a: Vector2d, b: Vector2d, p: Vector2d): Vector2d {
