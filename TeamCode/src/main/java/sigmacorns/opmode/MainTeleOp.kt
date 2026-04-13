@@ -21,17 +21,18 @@ import kotlin.math.max
  *   Left trigger         - Hold to intake balls
  *   B                    - Hold to reverse intake (spit balls out)
  *   Right trigger        - Hold to shoot (flywheel + transfer)
- *   Left bumper          - Hold to spin up flywheel (without shooting)
  *
  * GAMEPAD 2 (Operator - all subsystem controls):
- *   Left trigger         - Hold to intake balls
+ *   Left stick           - Translate (mecanum drive, when GP2 drive enabled)
+ *   Right stick X        - Rotate (when GP2 drive enabled) / Manual turret override (when drive disabled)
+ *   X                    - Toggle GP2 mecanum drive on/off
+ *   Left trigger         - Hold to intake (only when GP2 drive enabled)
  *   B                    - Hold to reverse intake (spit balls out)
- *   Right trigger        - Hold to shoot (flywheel + transfer)
+ *   Right trigger        - Hold to shoot (only when GP2 drive enabled)
  *   Left bumper          - Hold to spin up flywheel (without shooting)
+ *   Right bumper         - Toggle flywheel always-on (0.4 power)
  *   A                    - Toggle auto-aim on/off
- *   Right stick X        - Manual turret override (disables auto-aim while held)
  *   Right stick Y        - Manual hood angle override
- *   X                    - Toggle shoot-while-move
  *   Y                    - Toggle auto-shoot (zone-based)
  *   D-pad up             - Toggle hood auto-adjust
  *   D-pad left           - Decrease flywheel target speed (-25 rad/s)
@@ -50,6 +51,8 @@ class   MainTeleOp : SigmaOpMode() {
         var autoAimEnabled = true
         var flywheelTargetSpeed = 400.0
         val flywheelSpeedStep = 25.0
+        var flywheelAlwaysOn = true
+        var gp2DriveEnabled = false
 
         // Toggle debounce flags (GP1)
         var lastX1 = false
@@ -57,9 +60,14 @@ class   MainTeleOp : SigmaOpMode() {
         // Toggle debounce flags (GP2)
         var lastA2 = false
         var lastY2 = false
+        var lastX2 = false
+        var lastRightBumper2 = false
         var lastDpadUp2 = false
         var lastDpadLeft2 = false
         var lastDpadRight2 = false
+
+        // Start in robot-centric mode
+        robot.drive.fieldCentric = false
 
         telemetry.addLine("Main TeleOp initialized. Waiting for start...")
         telemetry.update()
@@ -68,20 +76,37 @@ class   MainTeleOp : SigmaOpMode() {
 
         ioLoop { state, dt ->
             // ============================================================
-            // GAMEPAD 1: Driver (driving ONLY) + Debug/Tuning
+            // GAMEPAD 1: Driver (driving + intake/shoot)
             // ============================================================
 
-            // Drivetrain: left stick = translate, right stick x = rotate, dpad = speed mode
             // X button toggles field-centric mode
             if (gamepad1.x && !lastX1) robot.drive.fieldCentric = !robot.drive.fieldCentric
             lastX1 = gamepad1.x
 
             robot.drive.fieldCentricHeading = robot.aim.autoAim.fusedPose.rot - 0.5*PI
-            robot.drive.update(gamepad1, io)
+
+            // Drive from GP1 always active; GP2 drive only when enabled
+            if (gp2DriveEnabled) {
+                robot.drive.update(gamepad2, io)
+            } else {
+                robot.drive.update(gamepad1, io)
+            }
 
             // ============================================================
             // GAMEPAD 2: Operator (ALL subsystem controls)
             // ============================================================
+
+            // --- Toggle: GP2 mecanum drive (X button) ---
+            if (gamepad2.x && !lastX2) {
+                gp2DriveEnabled = !gp2DriveEnabled
+            }
+            lastX2 = gamepad2.x
+
+            // --- Toggle: Flywheel always-on (right bumper) ---
+            if (gamepad2.right_bumper && !lastRightBumper2) {
+                flywheelAlwaysOn = !flywheelAlwaysOn
+            }
+            lastRightBumper2 = gamepad2.right_bumper
 
             // --- Flywheel speed adjustment (D-pad left/right) ---
             if (gamepad2.dpad_left && !lastDpadLeft2) {
@@ -94,18 +119,22 @@ class   MainTeleOp : SigmaOpMode() {
             }
             lastDpadRight2 = gamepad2.dpad_right
 
-            // --- Intake: hold left trigger ---
-            if ( (max(gamepad2.left_trigger,gamepad1.left_trigger) > 0.1 && max(gamepad2.right_trigger,gamepad1.right_trigger) <= 0.1) ) {
+            // --- Intake: GP1 left trigger, or GP2 left trigger when GP2 drive active ---
+            val intakeTriggered = gamepad1.left_trigger > 0.1 ||
+                (gp2DriveEnabled && gamepad2.left_trigger > 0.1)
+            val shootTriggered = gamepad1.right_trigger > 0.1 ||
+                (gp2DriveEnabled && gamepad2.right_trigger > 0.1)
+            if (intakeTriggered && !shootTriggered) {
                 robot.intakeCoordinator.startIntake()
-            } else if (!gamepad2.b || !gamepad1.b) {
+            } else if (!gamepad1.b && !gamepad2.b) {
                 if (robot.intakeTransfer.state == IntakeTransfer.State.INTAKING ||
                     robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 }
             }
 
-            // --- Outtake: hold B to reverse intake ---
-            if (gamepad2.b || gamepad1.b) {
+            // --- Outtake: hold B (GP1 or GP2) ---
+            if (gamepad1.b || gamepad2.b) {
                 robot.intakeTransfer.state = IntakeTransfer.State.REVERSING
             } else if (robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
@@ -130,16 +159,17 @@ class   MainTeleOp : SigmaOpMode() {
             }
             lastDpadUp2 = gamepad2.dpad_up
 
-            // --- Turret control ---
-            val manualTurretInput = gamepad2.right_stick_x.toDouble()
-            if (abs(manualTurretInput) > 0.05) {
-                // Manual override: robot-relative turret control
-                robot.aimTurret = false
-                robot.turret.fieldRelativeMode = false
-                robot.turret.targetAngle += manualTurretInput * 2.0 * dt.inWholeMilliseconds / 1000.0
-                robot.turret.targetAngle = robot.turret.targetAngle.coerceIn(-PI, PI)
-            } else if (autoAimEnabled) {
-                robot.aimTurret = true
+            // --- Turret control (only when GP2 drive is disabled) ---
+            if (!gp2DriveEnabled) {
+                val manualTurretInput = gamepad2.right_stick_x.toDouble()
+                if (abs(manualTurretInput) > 0.05) {
+                    robot.aimTurret = false
+                    robot.turret.fieldRelativeMode = false
+                    robot.turret.targetAngle += manualTurretInput * 2.0 * dt.inWholeMilliseconds / 1000.0
+                    robot.turret.targetAngle = robot.turret.targetAngle.coerceIn(-PI, PI)
+                } else if (autoAimEnabled) {
+                    robot.aimTurret = true
+                }
             }
 
             // --- Hood manual override (right stick Y) ---
@@ -153,11 +183,8 @@ class   MainTeleOp : SigmaOpMode() {
                 )
             }
 
-//            robot.io.flywheel = if (gamepad2.right_trigger > 0.1) { 0.88 } else { 0.0 }
-
             // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
-            if (max(gamepad2.right_trigger, gamepad1.right_trigger) > 0.1) {
-                // Shooting: spin flywheel + transfer (blocker delay handled by state machine)
+            if (shootTriggered) {
                 if(autoAimEnabled) {
                     robot.aimFlywheel = true
                     robot.aim.shotRequested = true
@@ -166,19 +193,22 @@ class   MainTeleOp : SigmaOpMode() {
                     robot.aimFlywheel = false
                     robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
                 }
-            } else if (gamepad2.left_bumper || gamepad1.left_bumper) {
-                // Spin-up only: flywheel on, blocker stays engaged
+            } else if (gamepad2.left_bumper) {
+                // Spin-up only: flywheel on, no transfer
                 robot.shooter.flywheelTarget = flywheelTargetSpeed
                 robot.aimFlywheel = false
                 robot.aim.shotRequested = false
-                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             } else {
-                // Idle: stop flywheel, only reset transfer (not intake/reverse)
-                robot.shooter.flywheelTarget = 0.0
                 robot.aimFlywheel = false
                 robot.aim.shotRequested = false
                 if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                }
+                // Flywheel always-on at 0.4 power when toggle is enabled
+                if (flywheelAlwaysOn) {
+                    robot.shooter.flywheelTarget = 0.4
+                } else {
+                    robot.shooter.flywheelTarget = 0.0
                 }
             }
 
@@ -242,6 +272,8 @@ class   MainTeleOp : SigmaOpMode() {
             telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
             telemetry.addData("Auto-Shoot", if (robot.intakeCoordinator.autoShootEnabled) "ON" else "OFF")
             telemetry.addData("In Shoot Zone", robot.intakeCoordinator.inShootingZone)
+            telemetry.addData("Flywheel Always-On", if (flywheelAlwaysOn) "ON" else "OFF")
+            telemetry.addData("GP2 Drive", if (gp2DriveEnabled) "ON" else "OFF")
             telemetry.addData("Speed Mode", if (robot.drive.getSpeedMultiplier() == 1.0) "FULL" else "PRECISION")
             telemetry.addData("Field-Centric", if (robot.drive.fieldCentric) "ON" else "OFF")
             telemetry.addData("Loop Time", "%d ms", dt.inWholeMilliseconds)
