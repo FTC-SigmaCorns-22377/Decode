@@ -146,10 +146,10 @@ object TurretServoConfig {
     @JvmField var servoTotalRange = 315.0 * PI / 180.0
 
     /** Minimum turret angle in radians */
-    @JvmField var minAngle = -PI/2.0
+    @JvmField var minAngle = -PI*0.75
 
     /** Maximum turret angle in radians */
-    @JvmField var maxAngle = PI/2.0
+    @JvmField var maxAngle = PI*0.75
 
     /** Angle in radians that maps to servo position 0.5 */
     @JvmField var servoCenterAngle = 0.0
