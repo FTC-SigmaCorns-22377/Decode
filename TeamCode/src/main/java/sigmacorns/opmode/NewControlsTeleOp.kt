@@ -268,12 +268,8 @@ class NewControlsTeleOp : SigmaOpMode() {
                 if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 }
-                // Flywheel always-on at 0.4 power when toggle is enabled
-                if (flywheelAlwaysOn) {
-                    robot.shooter.flywheelTarget = 0.4
-                } else {
-                    robot.shooter.flywheelTarget = 0.0
-                }
+                // Flywheel always-on idles at velocity equivalent of ~0.4 motor power.
+                robot.shooter.flywheelTarget = if (flywheelAlwaysOn) 240.0 else 0.0
             }
 
             // ============================================================

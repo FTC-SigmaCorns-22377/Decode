@@ -26,6 +26,8 @@ class IntakeCoordinator(val robot: Robot) {
     companion object {
         /** Flywheel velocity (rad/s) above which intake is suppressed. */
         const val FLYWHEEL_MIN_VEL = 50.0
+        /** Minimum flywheel target (rad/s) considered a real shot — below this, auto-shoot is disabled (e.g. idle always-on). */
+        const val MIN_SHOT_TARGET = 300.0
     }
 
     /** When true, transitions to READY_TO_SHOOT state when robot enters a shooting zone. */
@@ -54,7 +56,7 @@ class IntakeCoordinator(val robot: Robot) {
             if(robot.aimFlywheel) {
                 robot.aim.shotRequested = inShootingZone
             } else {
-                val shooterAtSpeed = flywheelTarget > 0.0 &&
+                val shooterAtSpeed = flywheelTarget >= MIN_SHOT_TARGET &&
                         kotlin.math.abs(flywheelVel - flywheelTarget) < FLYWHEEL_MIN_VEL
 
                 if (inShootingZone && shooterAtSpeed) {
