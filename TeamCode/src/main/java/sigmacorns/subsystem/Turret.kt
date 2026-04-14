@@ -30,6 +30,9 @@ class Turret(val io: SigmaIO) {
     // angle(rad) in field-relative frame - used when fieldRelativeMode is true
     var fieldTargetAngle: Double = 0.0
 
+    /** Additional manual offset (rad) added to target in either mode — for fine-tuning auto-aim. */
+    var manualOffset: Double = 0.0
+
     // Current robot heading from odometry (radians)
     var robotHeading: Double = 0.0
     // Current robot angular velocity (rad/s)
@@ -77,13 +80,13 @@ class Turret(val io: SigmaIO) {
         // Read current position from analog sensor feedback
         pos = io.turretPosition()
 
-        // Determine the raw target angle (field-relative or robot-relative)
+        // Determine the raw target angle (field-relative or robot-relative), plus manual offset
         val rawTarget = normalizeAngle(
-            if (fieldRelativeMode) {
+            (if (fieldRelativeMode) {
                 fieldTargetAngle - robotHeading
             } else {
                 targetAngle
-            }
+            }) + manualOffset
         )
 
         goalTargetAngle = rawTarget
