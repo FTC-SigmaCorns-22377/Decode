@@ -23,7 +23,7 @@ import kotlin.math.tan
 object PhysicsEstimateGenerator {
 
     private const val G = 9.81
-    private const val RESOURCE_PATH = "/physics_estimate_data.json"
+    private const val RESOURCE_PATH = "/shot_tuning_data.json"
 
     /**
      * Load pre-computed physics estimates from the bundled resource file.
