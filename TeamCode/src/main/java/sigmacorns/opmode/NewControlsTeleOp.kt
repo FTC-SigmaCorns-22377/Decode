@@ -263,12 +263,11 @@ class NewControlsTeleOp : SigmaOpMode() {
                 robot.aimFlywheel = false
                 robot.aim.shotRequested = false
             } else {
-                robot.aimFlywheel = false
-                robot.aim.shotRequested = false
+                robot.aimFlywheel = autoAimEnabled
+                if (!autoAimEnabled) robot.aim.shotRequested = false
                 if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 }
-                // Flywheel always-on idles at velocity equivalent of ~0.4 motor power.
                 robot.shooter.flywheelTarget = if (flywheelAlwaysOn) 240.0 else 0.0
             }
 

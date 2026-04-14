@@ -487,9 +487,11 @@ class NativeAutoAim(
 
         if (robot.aimFlywheel) {
             shooter.hoodAngle = targetPhi
-            // Only spin up the flywheel when close enough to a launch zone
-            shooter.flywheelTarget = if (prespin || burstActive)
-                targetOmega else 0.0
+            // Only spin up the flywheel when close enough to a launch zone.
+            // When idle, leave flywheelTarget alone so the opmode's idle speed holds.
+            if (prespin || burstActive) {
+                shooter.flywheelTarget = targetOmega
+            }
         }
 
         // readyToShoot: forward-simulate the shot from the current position
