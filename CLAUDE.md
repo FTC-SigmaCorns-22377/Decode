@@ -16,10 +16,13 @@ FTC robotics competition code for team SigmaCorns (22377), season DECODE 2025-20
 ./gradlew :TeamCode:installDebug
 
 # Run all tests (JUnit 5, macOS uses -XstartOnFirstThread automatically)
-./gradlew :TeamCode:test
+# WARNING: Do NOT run the full test suite — some tests (JoltSimTest, RerunTest,
+# RerunLoggingImageTest) use LWJGL visualizers that run indefinitely.
+# Always run individual test classes instead.
+./gradlew :TeamCode:testDebugUnitTest --tests "sigmacorns.test.FlywheelSimTest"
 
 # Run a single test class
-./gradlew :TeamCode:test --tests "sigmacorns.test.FlywheelSimTest"
+./gradlew :TeamCode:testDebugUnitTest --tests "sigmacorns.test.FlywheelSimTest"
 
 # Rebuild native JNI libs for host tests
 ./gradlew :TeamCode:buildMecanumLtvOcpHost

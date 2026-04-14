@@ -8,6 +8,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import sigmacorns.Robot
 import sigmacorns.constants.turretPos
+import sigmacorns.control.aim.tune.PhysicsEstimateGenerator
 import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.control.aim.tune.SpeedPoint
 import sigmacorns.logic.AimConfig
@@ -68,6 +69,15 @@ class ShooterTuner : SigmaOpMode() {
         val dataStore = ShotDataStore(DATA_FILE)
         dataStore.load()
 
+        // Inject physics-estimated seed points on first use
+        if (dataStore.getPhysicsEstimateCount() == 0) {
+            val physicsPoints = PhysicsEstimateGenerator.loadFromResources()
+            for (p in physicsPoints) {
+                dataStore.addPoint(p)
+            }
+            dataStore.save()
+        }
+
         // --- Fitter ---
         val fitter = ShooterFitter(
             goalHeight = AimConfig.goalHeight,
@@ -78,8 +88,10 @@ class ShooterTuner : SigmaOpMode() {
         val fitting = AtomicBoolean(false)
         val fitScope = CoroutineScope(Dispatchers.Default + Job())
 
+        var usePhysicsEstimates = true
+
         fun refit() {
-            val points = dataStore.getPoints()
+            val points = dataStore.getPoints(includePhysicsEstimates = usePhysicsEstimates)
             if (points.size < 3 || fitting.get()) return
             fitting.set(true)
             fitScope.launch {
@@ -124,6 +136,7 @@ class ShooterTuner : SigmaOpMode() {
         var lastDpadRight = false
         var lastDpadUp = false
         var lastDpadDown = false
+        var lastRightBumper = false
 
         telemetry.addLine("Shooter Tuner initialized")
         telemetry.addData("Data points loaded", dataStore.getPoints().size)
@@ -146,6 +159,15 @@ class ShooterTuner : SigmaOpMode() {
                 autoMode = !autoMode
             }
             lastY = gamepad1.y
+
+            // ============================================================
+            // Physics estimates toggle (Right Bumper)
+            // ============================================================
+            if (gamepad1.right_bumper && !lastRightBumper) {
+                usePhysicsEstimates = !usePhysicsEstimates
+                refit()
+            }
+            lastRightBumper = gamepad1.right_bumper
 
             // ============================================================
             // Manual adjustments (only in manual mode)
@@ -304,7 +326,12 @@ class ShooterTuner : SigmaOpMode() {
 
             telemetry.addLine("")
             telemetry.addLine("=== TUNER ===")
-            telemetry.addData("Data Points", dataStore.getPoints().size)
+            val physicsCount = dataStore.getPhysicsEstimateCount()
+            val empiricalCount = dataStore.getEmpiricalCount()
+            val activePoints = dataStore.getPoints(includePhysicsEstimates = usePhysicsEstimates).size
+            telemetry.addData("Physics Estimates", if (usePhysicsEstimates) "ON ($physicsCount pts)" else "OFF")
+            telemetry.addData("Data Points", "$empiricalCount empirical + $physicsCount physics = ${empiricalCount + physicsCount} total")
+            telemetry.addData("Active (fitting)", activePoints)
             if (lastLoggedDist > 0.0) {
                 telemetry.addData("Last Logged",
                     "RPM=%.0f Hood=%.1f Dist=%.2fm", lastLoggedRpm, lastLoggedHood, lastLoggedDist)
@@ -312,7 +339,7 @@ class ShooterTuner : SigmaOpMode() {
             telemetry.addData("Fit Status", when {
                 fitting.get() -> "FITTING..."
                 coeffs.get() != null -> "OK"
-                dataStore.getPoints().size < 3 -> "NEED ${3 - dataStore.getPoints().size} MORE POINTS"
+                activePoints < 3 -> "NEED ${3 - activePoints} MORE POINTS"
                 else -> "NOT FIT"
             })
 
@@ -322,7 +349,7 @@ class ShooterTuner : SigmaOpMode() {
             telemetry.addData("Loop", "%d ms", dt.inWholeMilliseconds)
 
             telemetry.addLine("")
-            telemetry.addLine("A=log  X=undo  Y=mode  dpad=adjust  RT=shoot")
+            telemetry.addLine("A=log  X=undo  Y=mode  RB=physics  dpad=adjust  RT=shoot")
             telemetry.update()
 
             false

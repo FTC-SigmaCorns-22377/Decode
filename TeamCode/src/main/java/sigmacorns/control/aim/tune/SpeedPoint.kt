@@ -6,5 +6,6 @@ package sigmacorns.control.aim.tune
 data class SpeedPoint(
     val distance: Double,   // meters
     val speed: Double,      // rad/s
-    val hoodAngle: Double = 45.0  // degrees
+    val hoodAngle: Double = 45.0,  // degrees
+    val physicsEstimate: Boolean = false
 )
