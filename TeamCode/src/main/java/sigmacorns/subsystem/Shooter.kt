@@ -44,6 +44,9 @@ class Shooter(
     /** Hood angle in radians set directly by AimingSystem from ShotSolver output. */
     var hoodAngle: Double = Math.toRadians(ShooterConfig.defaultAngleDeg)
 
+    /** Additional manual offset (rad) added to hood angle in either mode — for fine-tuning. */
+    var manualOffset: Double = 0.0
+
     /** The commanded hood angle in radians (for telemetry). */
     var computedHoodAngle: Double = Math.toRadians(ShooterConfig.defaultAngleDeg)
         private set
@@ -183,7 +186,10 @@ class Shooter(
     // ========================================================================
 
     private fun updateHood(dt: Duration) {
-        val angle = if (autoAdjust) hoodAngle else manualHoodAngle
+        val base = if (autoAdjust) hoodAngle else manualHoodAngle
+        val minRad = Math.toRadians(ShooterConfig.minAngleDeg)
+        val maxRad = Math.toRadians(ShooterConfig.maxAngleDeg)
+        val angle = (base + manualOffset).coerceIn(minRad, maxRad)
         computedHoodAngle = angle
         hoodServoPosition = hoodAngleToServo(angle)
         robot.io.hood = hoodServoPosition
