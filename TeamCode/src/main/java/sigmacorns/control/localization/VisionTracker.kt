@@ -50,7 +50,6 @@ class VisionTracker(
         }
 
         val result: LLResult = limelight.latestResult
-        println("LIMELIGHT RESULT= ${result.fiducialResults}")
 
         if (!result.isValid) {
             logDebug("Limelight result invalid")
@@ -78,9 +77,7 @@ class VisionTracker(
                 rawTyDegrees = fiducial.targetYDegrees
             }
 
-            println("RAW CORNERS: ${fiducial.targetCorners}")
             val cornersArray = extractCornerArray(fiducial.targetCorners, tagId) ?: continue
-            println("EXTRACTED CORNERS ${cornersArray.contentToString()}")
             observations.add(
                 VisionObservation(
                     tagId = tagId,

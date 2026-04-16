@@ -42,8 +42,8 @@ class Robot(val io: SigmaIO, val blue: Boolean, useNativeAim: Boolean = false): 
 
     val ltv = LTVClient(
         drivetrainParameters,
-        aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd),
-        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight),
+        aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd)*100,
+        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight)*100,
         aTipTau = 0.2
     )
 

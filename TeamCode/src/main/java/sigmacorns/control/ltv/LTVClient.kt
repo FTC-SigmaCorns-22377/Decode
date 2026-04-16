@@ -332,7 +332,7 @@ class LTVClient private constructor(
         posTol: Double = 0.05,
         headingTol: Double = 0.05,
         velTol: Double = 0.05,
-        minTRemaining: Duration = 40.milliseconds,
+        minTRemaining: Duration = 100.milliseconds,
         timeout: Duration = 10.seconds,
     ) {
         val legStart = io.time()
