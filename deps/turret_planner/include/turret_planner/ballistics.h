@@ -81,8 +81,22 @@ bool ballistics_is_feasible(
     float robot_heading = 0.f
 );
 
-// dθ/dT standalone (matches Kotlin dThetaDT, useful for Lipschitz bounds).
-float ballistics_dtheta_dT(float dx, float dy, float vRx, float vRy, float T);
+// Forward-simulate a shot from (turret_x, turret_y, turret_z) with the given
+// ShotParams and flight time T.  Returns the horizontal miss distance (m) at
+// target height — i.e. how far from (target_x, target_y) the ball lands.
+// Accounts for air drag when cfg.drag_k > 0.
+float ballistics_shot_error(
+    float turret_x, float turret_y, float turret_z,
+    float target_x, float target_y, float target_z,
+    float robot_vx, float robot_vy,
+    const ShotParams& p,
+    float T,
+    const PhysicsConfig& cfg
+);
+
+// dθ/dT standalone (useful for Lipschitz bounds).
+float ballistics_dtheta_dT(float dx, float dy, float vRx, float vRy, float T,
+                           const PhysicsConfig& cfg);
 
 // Lipschitz bounds on |dθ/dT|, |dφ/dT|, |dv/dT| over [t_lo, t_hi].
 // Used by the cold-start Lipschitz minimizer in flight_time.h.

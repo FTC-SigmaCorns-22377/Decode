@@ -98,7 +98,7 @@ val antiWheelieConfig = AntiWheelieConfig(
     comHeight = 0.1212075,
     comOffsetX = -0.00465600,
     comOffsetY = 0.0,
-    minNormalFraction = 0.05
+    minNormalFraction = -0.05
 )
 
 val antiWheelieFilter = AntiWheelieFilter(MecanumDynamics(drivetrainParameters), antiWheelieConfig)

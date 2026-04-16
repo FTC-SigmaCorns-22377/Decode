@@ -244,7 +244,7 @@ class JoltSimIO(
             color.joltId)
 
         // slow down flywheel
-        flywheelState.omega *= 0.8
+        flywheelState.omega *= (1.0-FLYWHEEL_SHOT_LOSS)
     }
 
     // --- Intake/Hood getters ---
@@ -343,14 +343,15 @@ class JoltSimIO(
         val SIM_UPDATE_TIME = 5.milliseconds
 
         /** Time between auto-shot attempts when transfer motor is running (seconds). */
-        const val AUTO_SHOOT_INTERVAL = 0.3
-        const val LAUNCH_EFFICIENCY = 0.27
+        const val AUTO_SHOOT_INTERVAL = 0.2
+        const val LAUNCH_EFFICIENCY = 0.195
+        const val FLYWHEEL_SHOT_LOSS = 0.1
 
         const val SERVO_TIME_CONSTANT = 0.05
 
         // Flywheel inertia: ½mr² = 0.5 * 0.38709252 kg * (0.046 m)²
         const val SIM_FLYWHEEL_INERTIA = 0.000410 // kg·m^2
-        val SIM_FLYWHEEL_PARAMS = FlywheelParameters(flywheelMotor, SIM_FLYWHEEL_INERTIA, 0.0001)
+        val SIM_FLYWHEEL_PARAMS = FlywheelParameters(flywheelMotor, SIM_FLYWHEEL_INERTIA, 0.0)
 
         // Intake roller dynamics (reuses FlywheelDynamics with different parameters)
         const val INTAKE_ROLLER_INERTIA = 0.0005 // kg·m^2

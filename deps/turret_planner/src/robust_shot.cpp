@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 // 2D Lipschitz branch-and-bound port of Kotlin ShotSolver.optimalRobustShot.
 //
-// The objective is the move cost from (s1 with flywheel reduced by omega_drop)
+// The objective is the move cost from (s1 with flywheel scaled by 1-drop_fraction)
 // to s2. Constants L1, L2 are computed once over the full feasible rectangle;
 // subtracting a constant from one omega doesn't change the Lipschitz constant
 // of the absolute difference.
@@ -33,7 +33,7 @@ RobustShotResult flight_time_robust(
     float target1_x, float target1_y, float target1_z,
     float target2_x, float target2_y, float target2_z,
     float robot_vx, float robot_vy,
-    float omega_drop,
+    float drop_fraction,
     const TurretWeights& weights,
     const TurretBounds&  bounds,
     const PhysicsConfig& cfg,
@@ -61,9 +61,9 @@ RobustShotResult flight_time_robust(
     }
 
     // --- Lipschitz constants on the full rectangle ---
-    auto compute_L = [&](float dx, float dy, float dz,
-                         float tx, float ty, float tz,
-                         float t_lo, float t_hi) -> float {
+    auto compute_L_raw = [&](float dx, float dy, float dz,
+                             float tx, float ty, float tz,
+                             float t_lo, float t_hi) -> std::pair<float, float> {
         LipschitzBounds lip = ballistics_lipschitz(dx, dy, dz, robot_vx, robot_vy,
                                                    t_lo, t_hi, cfg);
         float t_mid = 0.5f * (t_lo + t_hi);
@@ -77,13 +77,17 @@ RobustShotResult flight_time_robust(
         float v_hi   = s_mid.v_exit + lip.l_vexit * hw;
         float l_om = omega_map_lipschitz(omega, phi_lo, phi_hi, v_lo, v_hi,
                                          lip.l_phi, lip.l_vexit);
-        return std::max({weights.w_theta * lip.l_theta,
-                         weights.w_phi   * lip.l_phi,
-                         weights.w_omega * l_om});
+        float l_geom = std::max(weights.w_theta * lip.l_theta,
+                                weights.w_phi   * lip.l_phi);
+        return {l_geom, l_om};
     };
 
-    float L1 = compute_L(dx1, dy1, dz1, target1_x, target1_y, target1_z, iv1.t_lo, iv1.t_hi);
-    float L2 = compute_L(dx2, dy2, dz2, target2_x, target2_y, target2_z, iv2.t_lo, iv2.t_hi);
+    // L1: omega1 is scaled by (1-drop_fraction), so its Lipschitz constant scales too
+    auto [l1_geom, l1_om] = compute_L_raw(dx1, dy1, dz1, target1_x, target1_y, target1_z, iv1.t_lo, iv1.t_hi);
+    float L1 = std::max(l1_geom, weights.w_omega * (1.f - drop_fraction) * l1_om);
+    // L2: omega2 is unscaled
+    auto [l2_geom, l2_om] = compute_L_raw(dx2, dy2, dz2, target2_x, target2_y, target2_z, iv2.t_lo, iv2.t_hi);
+    float L2 = std::max(l2_geom, weights.w_omega * l2_om);
 
     // --- Objective ---
     auto J = [&](float t1, float t2, ShotParams* out_s1 = nullptr,
@@ -94,7 +98,7 @@ RobustShotResult flight_time_robust(
         ShotParams s2 = ballistics_solve(turret_x, turret_y, turret_z,
                                          target2_x, target2_y, target2_z,
                                          robot_vx, robot_vy, t2, cfg, omega);
-        float om1 = omega_map_eval(omega, s1.phi, s1.v_exit) - omega_drop;
+        float om1 = omega_map_eval(omega, s1.phi, s1.v_exit) * (1.f - drop_fraction);
         float om2 = omega_map_eval(omega, s2.phi, s2.v_exit);
         float d_omega = std::abs(om1 - om2);
         float d_phi   = std::abs(s1.phi   - s2.phi);
@@ -192,13 +196,12 @@ RobustShotResult flight_time_robust(
 //     J(T1, T2) = J_Δ(cur → s1(T1)) + J_Δ(s1(T1)_reduced → s2(T2))
 //
 // Lipschitz analysis:
-//   - Term A = J_Δ(cur, s1) depends only on T1; its Lipschitz constant in T1
-//     is the same as the cold solver's compute_L on target1.
-//   - Term B = J_Δ(s1_reduced, s2) depends on both T1 and T2; per-arm
-//     Lipschitz is L_T1 in T1 and L_T2 in T2 (constant omega_drop doesn't
-//     change |Δω|'s Lipschitz constant).
-//   So L1 = L_T1 + L_T1 = 2·L_T1 (A and B both contribute in T1),
-//      L2 = L_T2           (only B contributes in T2).
+//   - Term A = J_Δ(cur, s1) depends only on T1.
+//   - Term B = J_Δ(s1_reduced, s2) depends on both T1 and T2; the
+//     proportional drop (1-drop_fraction) scales the omega Lipschitz
+//     constant in B's T1 arm.
+//   So L1 = L_A + L_B_T1 (A and B both contribute in T1),
+//      L2 = L_B_T2        (only B contributes in T2).
 // ---------------------------------------------------------------------------
 RobustShotResult flight_time_robust_adjust(
     float turret_x, float turret_y, float turret_z,
@@ -206,7 +209,7 @@ RobustShotResult flight_time_robust_adjust(
     float target2_x, float target2_y, float target2_z,
     float robot_vx, float robot_vy,
     const TurretState& current,
-    float omega_drop,
+    float drop_fraction,
     const TurretWeights& weights,
     const TurretBounds&  bounds,
     const PhysicsConfig& cfg,
@@ -233,10 +236,10 @@ RobustShotResult flight_time_robust_adjust(
         return r;
     }
 
-    // --- Per-target Lipschitz constants (same compute_L as flight_time_robust) ---
-    auto compute_L = [&](float dx, float dy, float dz,
-                         float tx, float ty, float tz,
-                         float t_lo, float t_hi) -> float {
+    // --- Per-target Lipschitz constants ---
+    auto compute_L_raw = [&](float dx, float dy, float dz,
+                             float tx, float ty, float tz,
+                             float t_lo, float t_hi) -> std::pair<float, float> {
         LipschitzBounds lip = ballistics_lipschitz(dx, dy, dz, robot_vx, robot_vy,
                                                    t_lo, t_hi, cfg);
         float t_mid = 0.5f * (t_lo + t_hi);
@@ -250,16 +253,22 @@ RobustShotResult flight_time_robust_adjust(
         float v_hi   = s_mid.v_exit + lip.l_vexit * hw;
         float l_om = omega_map_lipschitz(omega, phi_lo, phi_hi, v_lo, v_hi,
                                          lip.l_phi, lip.l_vexit);
-        return std::max({weights.w_theta * lip.l_theta,
-                         weights.w_phi   * lip.l_phi,
-                         weights.w_omega * l_om});
+        float l_geom = std::max(weights.w_theta * lip.l_theta,
+                                weights.w_phi   * lip.l_phi);
+        return {l_geom, l_om};
     };
 
-    float L_T1 = compute_L(dx1, dy1, dz1, target1_x, target1_y, target1_z, iv1.t_lo, iv1.t_hi);
-    float L_T2 = compute_L(dx2, dy2, dz2, target2_x, target2_y, target2_z, iv2.t_lo, iv2.t_hi);
+    auto [l1_geom, l1_om] = compute_L_raw(dx1, dy1, dz1, target1_x, target1_y, target1_z, iv1.t_lo, iv1.t_hi);
+    auto [l2_geom, l2_om] = compute_L_raw(dx2, dy2, dz2, target2_x, target2_y, target2_z, iv2.t_lo, iv2.t_hi);
 
-    float L1 = 2.f * L_T1;   // A and B both contribute L_T1 in T1
-    float L2 = L_T2;         // only B contributes in T2
+    // Term A = J_Δ(cur, s1): L_A in T1 uses full omega Lipschitz (unscaled)
+    float L_A = std::max(l1_geom, weights.w_omega * l1_om);
+    // Term B = J_Δ(s1_reduced, s2): s1's omega is scaled by (1-drop_fraction)
+    float L_B_T1 = std::max(l1_geom, weights.w_omega * (1.f - drop_fraction) * l1_om);
+    float L_B_T2 = std::max(l2_geom, weights.w_omega * l2_om);
+
+    float L1 = L_A + L_B_T1;  // A and B both contribute in T1
+    float L2 = L_B_T2;        // only B contributes in T2
 
     // --- Objective: A + B ---
     auto J = [&](float t1, float t2) -> float {
@@ -274,7 +283,7 @@ RobustShotResult flight_time_robust_adjust(
         float A = flight_time_tau(s1, current, weights, omega);
 
         // B = J_Δ(s1_reduced → s2), no Δθ wrap (same-goal consecutive shots).
-        float b_om1 = s1.omega_flywheel - omega_drop;
+        float b_om1 = s1.omega_flywheel * (1.f - drop_fraction);
         float b_om2 = s2.omega_flywheel;
         float b_d_omega = std::abs(b_om1 - b_om2);
         float b_d_phi   = std::abs(s1.phi   - s2.phi);

@@ -54,7 +54,8 @@ void test_dtheta_dT() {
     double T = 0.4, eps = 1e-7;
 
     // Analytic (float)
-    float analytic = ballistics_dtheta_dT(float(dx), float(dy), float(vRx), float(vRy), float(T));
+    PhysicsConfig cfg{9.81f, 0.1f};
+    float analytic = ballistics_dtheta_dT(float(dx), float(dy), float(vRx), float(vRy), float(T), cfg);
 
     // FD in double for accuracy
     auto eval_theta_d = [&](double t) {

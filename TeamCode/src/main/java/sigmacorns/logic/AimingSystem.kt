@@ -77,8 +77,8 @@ class AimingSystem(
     override var primaryShotState: Ballistics.ShotState? = null
         private set
     override val secondaryShotState: Ballistics.ShotState? get() = null
+    override val tertiaryShotState: Ballistics.ShotState? get() = null
     override val isRobustActive: Boolean get() = false
-    override val isPrepositionActive: Boolean get() = false
 
     /**
      * Initialize all subsystems. Call once before the main loop.
@@ -273,10 +273,13 @@ object AimConfig {
     @JvmField var goalHeight = 1.14
     @JvmField var g = 9.81
 
+    /** Linear air drag coefficient (1/s). 0 = no drag. Tune empirically (~0.3-0.8 for wiffle balls). */
+    @JvmField var dragK = 0.4
+
     /** Time (seconds) from when shot is requested until ball leaves shooter */
     @JvmField var transferDelay = 0.2
 
-    @JvmField var launchEfficiency = 0.195
+    @JvmField var launchEfficiency = 0.225
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
             vExit / (flywheelRadius * launchEfficiency)
@@ -292,40 +295,33 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.05 // m
+    @JvmField var shotTolerance = 0.15 // m
 
-    // Expected flywheel speed drop (rad/s) between consecutive shots. When > 0,
-    // NativeAutoAim uses the robust shot planner so the first shot's parameters
-    // leave the flywheel at a speed compatible with the next shot after losing
-    // this amount. Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var flywheelDrop = 20.0
+    // Proportional flywheel speed loss per shot. After firing, the flywheel
+    // retains (1 - dropFraction) of its speed. When > 0, NativeAutoAim uses
+    // the robust shot planner so the first shot's parameters leave the flywheel
+    // at a speed compatible with the next shot after this proportional loss.
+    // Set to 0 to fall back to single-shot optimal aim.
+    @JvmField var dropFraction = 0.12
 
-    // Approach prepositioning: when > 0, NativeAutoAim predicts the robot's
-    // near-future trajectory via constant-velocity mecanum kinematics and
-    // uses computeRobustPreposition() while the robot is outside a shooting
-    // zone (see launchZone* below), with tAvailable set to the predicted
-    // half-plane crossing time.
-    @JvmField var prepositionHorizon    = 1.2   // seconds; 0 = disabled
-    @JvmField var prepositionSteps      = 6
-    @JvmField var prepositionLambda     = 0.5   // weight decay e^(-lambda*i)
-    @JvmField var prepositionTAvailable = 1.0   // fallback slew time (s) when not approaching
+    // Trajectory prediction for the robust 3-shot planner.
+    @JvmField var predictionHorizon = 1.0   // seconds of trajectory to predict
+    @JvmField var predictionStep = 0.04     // seconds between trajectory samples
 
-    // Launch zone half-plane `nx·x + ny·y >= d` (field frame).
-    //
-    // When (launchZoneNx, launchZoneNy) is non-zero the shooting logic splits:
-    //   - outside the zone: robust preposition with tAvailable = time until entry
-    //   - inside the zone : robustAdjust — minimize total time to fire two balls
-    // When the normal is the zero vector the feature is inert and NativeAutoAim
-    // falls back to its single-shot / robustShot behavior regardless of pose.
-    @JvmField var launchZoneNx = 0.0
-    @JvmField var launchZoneNy = 0.0
-    @JvmField var launchZoneD  = 0.0
+    /** Flywheel spins up when estimated time to a launch zone is below this (seconds). */
+    @JvmField var spinupLeadTime = 1.5
+
+    /** Start decelerating trajectory when within this distance of a shooting zone (m). */
+    @JvmField var decelZoneMargin = 0.25
+
+    /** Assumed deceleration rate when approaching a zone (m/s²). */
+    @JvmField var decelRate = 2.0f
 
 }
 
 object ShotSolverConfig {
-    @JvmField var wOmega = 0.01   // s per rad/s flywheel change
+    @JvmField var wOmega = 0.005   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
-    @JvmField var wPhi = 0.05      // s per rad hood change
+    @JvmField var wPhi = 0.07      // s per rad hood change
     @JvmField var tolerance = 0.05
 }

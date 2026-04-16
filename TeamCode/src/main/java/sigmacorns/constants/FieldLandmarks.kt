@@ -4,6 +4,7 @@ import org.joml.Quaterniond
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.control.localization.GTSAMEstimator
+import sigmacorns.math.Pose2d
 import kotlin.math.PI
 
 /**
@@ -56,6 +57,16 @@ object FieldLandmarks {
 
     val goalZoneCorners = listOf(Vector2d(0.0, 0.0), Vector2d(-1.83, 1.83), Vector2d(1.83, 1.83))
     val farZoneCorners = listOf(Vector2d(-0.61, -1.83), Vector2d(0.0, -1.22), Vector2d(0.61, -1.83))
+
+    fun gateIntakePosition(blue: Boolean): Pose2d {
+        return Pose2d(
+            (if(blue) 1.0 else -1.0) * 1.467,
+            -0.146,
+            if(blue) PI - PI/3.0 else PI/3.0
+        )
+    }
+
+    val fieldHalfExtend = 1.8288
 
     private val spikeMarkX = 1.200944
     private val spikeMarkFarY = -0.896144

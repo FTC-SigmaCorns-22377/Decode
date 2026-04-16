@@ -45,6 +45,9 @@ class LTVClient private constructor(
     private val handle: Long,
     private var dtSeconds: Double,
     private var solverType: QpSolverType = QpSolverType.NEON_IPM,
+    val qDiag: DoubleArray,
+    val qfDiag: DoubleArray,
+    val rDiag: DoubleArray
 ) : AutoCloseable {
 
     private var numWindows: Int = 0
@@ -56,6 +59,7 @@ class LTVClient private constructor(
 
     val dt: Duration get() = dtSeconds.seconds
 
+
     /**
      * Primary constructor: configure model params + MPC tuning, then call [loadTrajectory].
      */
@@ -63,9 +67,9 @@ class LTVClient private constructor(
         parameters: MecanumParameters,
         horizon: Int = 30,
         dt: Duration = 20.milliseconds,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
-        rDiag: DoubleArray = doubleArrayOf(0.03, 0.03, 0.03, 0.03),
-        qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 2.0, 2.0, 2.0),
+        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 400.0, 1.0, 1.0, 1.0),
+        rDiag: DoubleArray = doubleArrayOf(0.05, 0.05, 0.05, 0.05),
+        qfDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 400.0, 2.0, 2.0, 2.0),
         solverType: QpSolverType = QpSolverType.NEON_IPM,
         windowSelConfig: WindowSelConfig = WindowSelConfig(),
         /** Anti-tip X acceleration limit (m/s²) in robot body frame. 0 = disabled.
@@ -74,7 +78,13 @@ class LTVClient private constructor(
         /** Anti-tip Y acceleration limit (m/s²) in robot body frame. 0 = disabled.
          *  Typical value: g * (half lateral track width) / h_com */
         aTipY: Double = 0.0,
-    ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS)) {
+        /** Low-pass time constant (s) for the sustained-acceleration tip constraint.
+         *  0 (default) → per-step instantaneous barrier (original).
+         *  Values ~half the robot's pitch period (e.g. 0.15–0.4 s) allow brief
+         *  transient accelerations while preventing sustained tip-inducing deceleration,
+         *  eliminating mid-path chattering without sacrificing end-of-path protection. */
+        aTipTau: Double = 0.0,
+    ) : this(MecanumLTVBridge.nativeCreate(), dt.toDouble(DurationUnit.SECONDS),qDiag=qDiag, qfDiag=qfDiag, rDiag=rDiag) {
         MecanumLTVBridge.nativeSetModelParams(
             handle,
             mass = parameters.weight,
@@ -87,7 +97,7 @@ class LTVClient private constructor(
             stallTorque = parameters.motor.stallTorque,
             freeSpeed = parameters.motor.freeSpeed,
         )
-        MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0, aTipX, aTipY)
+        MecanumLTVBridge.nativeSetConfig(handle, horizon, qDiag, rDiag, qfDiag, -1.0, 1.0, aTipX, aTipY, aTipTau)
         this.solverType = solverType
         MecanumLTVBridge.nativeSetSolverType(handle, solverType.nativeId)
         setWindowSelConfig(windowSelConfig)
@@ -197,7 +207,6 @@ class LTVClient private constructor(
         target: MecanumState,
         tRemaining: Duration,
         lqrRef: Boolean = false,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 20.0, 1.0, 1.0, 1.0),
         r: Double = 0.020,
     ): DoubleArray {
         val x0 = doubleArrayOf(
@@ -221,16 +230,12 @@ class LTVClient private constructor(
     fun holdPos(
         io: SigmaIO,
         p: Pose2d,
-        qDiag: DoubleArray = doubleArrayOf(100.0, 100.0, 100.0, 1.0, 1.0, 1.0),
-        r: Double = 0.015,
     ) {
         val u = solveWaypoint(
             MecanumState(io.velocity(),io.position()),
             MecanumState(Pose2d(),p),
             1.seconds,
-            lqrRef = true,
-            qDiag,
-            r
+            lqrRef = true
         )
 
         val voltage = io.voltage()
@@ -327,7 +332,7 @@ class LTVClient private constructor(
         posTol: Double = 0.05,
         headingTol: Double = 0.05,
         velTol: Double = 0.05,
-        minTRemaining: Duration = 40.milliseconds,
+        minTRemaining: Duration = 100.milliseconds,
         timeout: Duration = 10.seconds,
     ) {
         val legStart = io.time()
@@ -345,14 +350,15 @@ class LTVClient private constructor(
             io.driveBR = u[2] * 12.0 / voltage
             io.driveFR = u[3] * 12.0 / voltage
 
-            // Update tRemaining from solver's forward-simulated ETA
-            tRemaining = prevWaypointEta().coerceAtLeast(minTRemaining)
-
-            // Check arrival: XY position, heading, and velocity magnitude
+            // Update tRemaining from solver's forward-simulated ETA,
+            // but floor it with a distance-based estimate so a single bad
+            // native ETA can't collapse the horizon to 2 steps permanently.
             val posErr = hypot(
                 currentState.pos.v.x - target.pos.v.x,
                 currentState.pos.v.y - target.pos.v.y,
             )
+            val distBasedMin = (posErr / 1.5).seconds // 1.5 m/s reference speed
+            tRemaining = maxOf(prevWaypointEta(), distBasedMin, minTRemaining)
             val headingErr = abs(currentState.pos.rot - target.pos.rot)
             val velMag = hypot(currentState.vel.v.x, currentState.vel.v.y)
 

@@ -451,27 +451,20 @@ scene.add(goalMarker);
 // don't allocate per frame. Dashed lines need computeLineDistances() after
 // each geometry update.
 const TRAJECTORY_KINDS = {
-    current:     { color: 0x00ccff, dashed: false },
-    target:      { color: 0xffaa00, dashed: false },
-    secondary:   { color: 0xffaa00, dashed: true  },
-    preposition: { color: 0xffaa00, dashed: false },
+    current:     { color: 0x2288ff, opacity: 0.9 },
+    target:      { color: 0x00dd44, opacity: 0.9 },
+    secondary:   { color: 0x00dd44, opacity: 0.45 },
+    tertiary:    { color: 0x00dd44, opacity: 0.25 },
+    preposition: { color: 0xffaa00, opacity: 0.6 },
 };
 
 const trajectoryLines = {};
 for (const [kind, cfg] of Object.entries(TRAJECTORY_KINDS)) {
-    const mat = cfg.dashed
-        ? new THREE.LineDashedMaterial({
-            color: cfg.color,
-            transparent: true,
-            opacity: 0.6,
-            dashSize: 0.05,
-            gapSize: 0.04,
-        })
-        : new THREE.LineBasicMaterial({
-            color: cfg.color,
-            transparent: true,
-            opacity: 0.6,
-        });
+    const mat = new THREE.LineBasicMaterial({
+        color: cfg.color,
+        transparent: true,
+        opacity: cfg.opacity,
+    });
     const geo = new THREE.BufferGeometry();
     const line = new THREE.Line(geo, mat);
     line.frustumCulled = false;
@@ -508,9 +501,6 @@ function updateShotViz(shotViz) {
             v3[i] = new THREE.Vector3(p[1], p[2], p[0]);
         }
         line.geometry.setFromPoints(v3);
-        if (line.material.isLineDashedMaterial) {
-            line.computeLineDistances();
-        }
         line.visible = true;
         seen.add(t.kind);
     }

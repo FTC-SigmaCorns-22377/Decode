@@ -23,16 +23,32 @@ BallisticsIntermediate ballistics_intermediate(
     s.dx  = dx;  s.dy  = dy;  s.dz  = dz;
     s.vRx = vRx; s.vRy = vRy;
 
+    // alpha replaces 1/T when drag is present.
+    // No drag:   alpha = 1/T
+    // With drag: alpha = k / (1 - exp(-k*T))
+    // The correction accounts for exponential velocity decay: horizontal
+    // distance = v0/k * (1 - exp(-kT)) instead of v0*T.
     float inv_T = 1.f / T;
-    s.b = dx * inv_T - vRx;
-    s.c = dy * inv_T - vRy;
-    s.a = -cfg.r_h * inv_T;
+    float alpha;
+    if (cfg.drag_k > 1e-6f) {
+        float kT = cfg.drag_k * T;
+        float exp_neg_kT = std::exp(-kT);
+        alpha = cfg.drag_k / (1.f - exp_neg_kT);
+        // Vertical: with drag, z(T) = (vz + g/k)/k * (1-e^{-kT}) - g*T/k = dz
+        // Solving for the "C" combination:
+        s.C = (dz + cfg.g * T / cfg.drag_k) * alpha - cfg.g / cfg.drag_k;
+    } else {
+        alpha = inv_T;
+        s.C = dz * inv_T + 0.5f * cfg.g * T;
+    }
+    s.b = dx * alpha - vRx;
+    s.c = dy * alpha - vRy;
+    s.a = -cfg.r_h * alpha;
 
     s.theta = fast_atan2(s.c, s.b);
     fast_sincos(s.theta, &s.sin_theta, &s.cos_theta);
 
     s.B = s.a + s.cos_theta * s.b + s.sin_theta * s.c;
-    s.C = dz * inv_T + 0.5f * cfg.g * T;
 
     float v_sq = s.B * s.B + s.C * s.C - s.a * s.a;
     // v_sq < 0 can happen outside the feasible T range — clamp to 0.
@@ -126,21 +142,42 @@ ShotParams ballistics_solve_with_derivs(
         float inv_T  = 1.f / T;
         float inv_T2 = inv_T * inv_T;
 
+        // d(alpha)/dT: derivative of the horizontal correction factor
+        float dalpha_dT;
+        float dC_dT;
+        if (cfg.drag_k > 1e-6f) {
+            float k = cfg.drag_k;
+            float kT = k * T;
+            float exp_neg_kT = std::exp(-kT);
+            float one_minus_exp = 1.f - exp_neg_kT;
+            // alpha = k / (1 - exp(-kT))
+            // d(alpha)/dT = -k^2 * exp(-kT) / (1-exp(-kT))^2
+            dalpha_dT = -k * k * exp_neg_kT / (one_minus_exp * one_minus_exp);
+            // C = (dz + g*T/k) * alpha - g/k
+            // dC/dT = (g/k) * alpha + (dz + g*T/k) * dalpha/dT
+            float alpha = k / one_minus_exp;
+            dC_dT = (cfg.g / k) * alpha + (dz + cfg.g * T / k) * dalpha_dT;
+        } else {
+            // alpha = 1/T, d(alpha)/dT = -1/T^2
+            dalpha_dT = -inv_T2;
+            dC_dT = -dz * inv_T2 + 0.5f * cfg.g;
+        }
+
         // --- dθ/dT ---
+        // b = dx*alpha - vRx, c = dy*alpha - vRy
+        // db/dT = dx * dalpha_dT, dc/dT = dy * dalpha_dT
+        // dθ/dT = (dc/dT * b - db/dT * c) / (b² + c²)
+        //       = dalpha_dT * (dy*b - dx*c) / (b²+c²)
         float bc_sq = s.b * s.b + s.c * s.c;
-        // Simplified: dθ/dT = (dy*vRx - dx*vRy) / (T² * bc_sq)
-        float dtheta_dT = (dy * robot_vx - dx * robot_vy) / (T * T * bc_sq);
+        float dtheta_dT = dalpha_dT * (dy * s.b - dx * s.c) / bc_sq;
 
         // --- dB/dT ---
-        float db_dT  = -dx * inv_T2;
-        float dc_dT  = -dy * inv_T2;
-        float da_dT  =  cfg.r_h * inv_T2;
+        float db_dT  = dx * dalpha_dT;
+        float dc_dT  = dy * dalpha_dT;
+        float da_dT  = -cfg.r_h * dalpha_dT;
         float dB_dT  = da_dT
                      + (-s.sin_theta * dtheta_dT) * s.b + s.cos_theta * db_dT
                      + ( s.cos_theta * dtheta_dT) * s.c + s.sin_theta * dc_dT;
-
-        // --- dC/dT ---
-        float dC_dT  = -dz * inv_T2 + 0.5f * cfg.g;
 
         // --- dv/dT ---
         // 2v * dv/dT = 2B*dB/dT + 2C*dC/dT - 2a*da_dT
@@ -180,6 +217,47 @@ ShotParams ballistics_solve_with_derivs(
 }
 
 // ---------------------------------------------------------------------------
+// ballistics_shot_error — forward-simulate and measure miss distance
+// ---------------------------------------------------------------------------
+
+float ballistics_shot_error(
+    float turret_x, float turret_y, float turret_z,
+    float target_x, float target_y, float target_z,
+    float robot_vx, float robot_vy,
+    const ShotParams& p,
+    float T,
+    const PhysicsConfig& cfg)
+{
+    float sin_theta, cos_theta, sin_phi, cos_phi;
+    fast_sincos(p.theta, &sin_theta, &cos_theta);
+    fast_sincos(p.phi, &sin_phi, &cos_phi);
+
+    // Launch position (barrel offset)
+    float sx = turret_x + cfg.r_h * (1.f - sin_phi) * cos_theta;
+    float sy = turret_y + cfg.r_h * (1.f - sin_phi) * sin_theta;
+
+    // Launch velocity components in field frame
+    float vx0 = p.v_exit * cos_phi * cos_theta + robot_vx;
+    float vy0 = p.v_exit * cos_phi * sin_theta + robot_vy;
+
+    float xf, yf;
+    if (cfg.drag_k > 1e-6f) {
+        // With drag: pos(T) = pos0 + v0/k * (1 - exp(-kT))
+        float k = cfg.drag_k;
+        float decay = (1.f - std::exp(-k * T)) / k;
+        xf = sx + vx0 * decay;
+        yf = sy + vy0 * decay;
+    } else {
+        xf = sx + vx0 * T;
+        yf = sy + vy0 * T;
+    }
+
+    float dx = xf - target_x;
+    float dy = yf - target_y;
+    return fast_sqrt(dx * dx + dy * dy);
+}
+
+// ---------------------------------------------------------------------------
 // ballistics_is_feasible
 // ---------------------------------------------------------------------------
 
@@ -203,8 +281,15 @@ bool ballistics_is_feasible(
     }
 
     // Lob check: vertical velocity at T must be < 0 (ball descending at target).
-    // Matches Kotlin isLob: vz < 0 (strictly negative; horizontal at impact is not a lob).
-    float vz_at_T = p.v_exit * std::sin(p.phi) - cfg.g * T;
+    float vz_at_T;
+    if (cfg.drag_k > 1e-6f) {
+        // With drag: vz(T) = (vz0 + g/k) * exp(-kT) - g/k
+        float vz0 = p.v_exit * std::sin(p.phi);
+        float g_over_k = cfg.g / cfg.drag_k;
+        vz_at_T = (vz0 + g_over_k) * std::exp(-cfg.drag_k * T) - g_over_k;
+    } else {
+        vz_at_T = p.v_exit * std::sin(p.phi) - cfg.g * T;
+    }
     return vz_at_T < 0.f;
 }
 
@@ -212,12 +297,24 @@ bool ballistics_is_feasible(
 // ballistics_dtheta_dT
 // ---------------------------------------------------------------------------
 
-float ballistics_dtheta_dT(float dx, float dy, float vRx, float vRy, float T)
+float ballistics_dtheta_dT(float dx, float dy, float vRx, float vRy, float T,
+                           const PhysicsConfig& cfg)
 {
-    float b = dx / T - vRx;
-    float c = dy / T - vRy;
-    // Simplified form: numerator = (dy*vRx - dx*vRy) / T²
-    return (dy * vRx - dx * vRy) / (T * T * (b * b + c * c));
+    float alpha, dalpha_dT;
+    if (cfg.drag_k > 1e-6f) {
+        float kT = cfg.drag_k * T;
+        float exp_neg_kT = std::exp(-kT);
+        float one_minus_exp = 1.f - exp_neg_kT;
+        alpha = cfg.drag_k / one_minus_exp;
+        dalpha_dT = -cfg.drag_k * cfg.drag_k * exp_neg_kT / (one_minus_exp * one_minus_exp);
+    } else {
+        alpha = 1.f / T;
+        dalpha_dT = -1.f / (T * T);
+    }
+    float b = dx * alpha - vRx;
+    float c = dy * alpha - vRy;
+    // dθ/dT = dalpha_dT * (dy*b - dx*c) / (b²+c²)
+    return dalpha_dT * (dy * b - dx * c) / (b * b + c * c);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,56 +329,80 @@ LipschitzBounds ballistics_lipschitz(
     float t_lo, float t_hi,
     const PhysicsConfig& cfg)
 {
-    // --- L_theta ---
-    float cross_term = dy * vRx - dx * vRy;
-    float num_up = std::abs(cross_term) / (t_lo * t_lo);
+    // Helper: compute alpha(t) for drag-corrected ballistics
+    auto compute_alpha = [&](float t) -> float {
+        if (cfg.drag_k > 1e-6f) {
+            float kT = cfg.drag_k * t;
+            return cfg.drag_k / (1.f - std::exp(-kT));
+        }
+        return 1.f / t;
+    };
 
-    // Denominator = b²+c²; minimize over [t_lo, t_hi]
+    // Helper: compute d(alpha)/dT
+    auto compute_dalpha_dT = [&](float t) -> float {
+        if (cfg.drag_k > 1e-6f) {
+            float k = cfg.drag_k;
+            float kT = k * t;
+            float exp_neg_kT = std::exp(-kT);
+            float one_minus_exp = 1.f - exp_neg_kT;
+            return -k * k * exp_neg_kT / (one_minus_exp * one_minus_exp);
+        }
+        return -1.f / (t * t);
+    };
+
+    // Helper: compute C(t) for the vertical ballistics equation
+    auto compute_C = [&](float t) -> float {
+        if (cfg.drag_k > 1e-6f) {
+            float alpha = compute_alpha(t);
+            return (dz + cfg.g * t / cfg.drag_k) * alpha - cfg.g / cfg.drag_k;
+        }
+        return dz / t + 0.5f * cfg.g * t;
+    };
+
+    // --- L_theta ---
+    // With drag: b = dx*alpha - vRx, c = dy*alpha - vRy
+    // dθ/dT = dalpha_dT * (dy*b - dx*c) / (b²+c²)
+    // Sample |dθ/dT| to get a tight bound.
+    float l_theta = 0.f;
+
+    // Denominator = b²+c²; minimize over [t_lo, t_hi] via sampling
     auto bc_sq = [&](float t) {
-        float b = dx / t - vRx;
-        float c = dy / t - vRy;
+        float alpha = compute_alpha(t);
+        float b = dx * alpha - vRx;
+        float c = dy * alpha - vRy;
         return b * b + c * c;
     };
     float den_lo = std::min(bc_sq(t_lo), bc_sq(t_hi));
-    // Check zeros of b(T) = dx/vRx and c(T) = dy/vRy
-    if (std::abs(vRx) > 1e-9f) {
-        float tc = dx / vRx;
-        if (tc >= t_lo && tc <= t_hi) {
-            float c = dy / tc - vRy;
-            den_lo = std::min(den_lo, c * c);
-        }
+    // Sample interior for minimum
+    for (int i = 1; i < 16; ++i) {
+        float t = t_lo + (t_hi - t_lo) * float(i) / 16.f;
+        den_lo = std::min(den_lo, bc_sq(t));
     }
-    if (std::abs(vRy) > 1e-9f) {
-        float tc = dy / vRy;
-        if (tc >= t_lo && tc <= t_hi) {
-            float b = dx / tc - vRx;
-            den_lo = std::min(den_lo, b * b);
-        }
-    }
-    // Guard against degenerate case
     if (den_lo < 1e-12f) den_lo = 1e-12f;
-    float l_theta = num_up / den_lo;
 
     // --- L_B and L_phi (sample N points, denser near t_lo where derivatives spike) ---
-    // L_phi is evaluated analytically at each sample — the analytical formula is exact,
-    // but the interval-based bound can under-estimate when B→0 near t_lo.
-    // Sampling the analytical derivative directly gives a tight floor.
     float l_B        = 0.f;
     float l_phi_samp = 0.f;
-    // Use 64 samples; cluster the first 16 near t_lo (where phi' spikes) and
-    // the remaining 48 uniformly over the rest of the interval.
     const int N_lo = 16, N_rest = 48;
-    // Near-boundary region: first 5% of interval
     float t_near = t_lo + 0.05f * (t_hi - t_lo);
 
     auto process_sample = [&](float t) {
-        // L_B contribution
-        float b = dx / t - vRx;
-        float c = dy / t - vRy;
-        float dtdT = ballistics_dtheta_dT(dx, dy, vRx, vRy, t);
-        float term1 = dtdT * c - dx / (t * t);
-        float term2 = dtdT * b + dy / (t * t);
-        l_B = std::max(l_B, cfg.r_h / (t * t) + fast_sqrt(term1 * term1 + term2 * term2));
+        float alpha = compute_alpha(t);
+        float dalpha = compute_dalpha_dT(t);
+        float b = dx * alpha - vRx;
+        float c = dy * alpha - vRy;
+        float dtdT = ballistics_dtheta_dT(dx, dy, vRx, vRy, t, cfg);
+
+        // |dθ/dT| for L_theta
+        l_theta = std::max(l_theta, std::abs(dtdT));
+
+        // L_B contribution: |dB/dT| upper bound via Cauchy-Schwarz
+        float db_dT = dx * dalpha;
+        float dc_dT = dy * dalpha;
+        float term1 = dtdT * c + dc_dT;  // from sin(θ) component
+        float term2 = dtdT * b + db_dT;  // from cos(θ) component — sign doesn't matter for norm
+        float da_dT = -cfg.r_h * dalpha;
+        l_B = std::max(l_B, std::abs(da_dT) + fast_sqrt(term1 * term1 + term2 * term2));
 
         // Analytical |dφ/dT| — reuse solve_with_derivs intermediates
         if (t > 0.f) {
@@ -302,7 +423,6 @@ LipschitzBounds ballistics_lipschitz(
     }
 
     // --- Bounds on B, C, C' for L_v and L_phi ---
-    // Evaluate B at midpoint for B0
     float t_mid = 0.5f * (t_lo + t_hi);
     BallisticsIntermediate s_mid = ballistics_intermediate(dx, dy, dz, vRx, vRy, t_mid, cfg);
     float B0  = s_mid.B;
@@ -310,35 +430,46 @@ LipschitzBounds ballistics_lipschitz(
     float B_up  = std::abs(B0) + l_B * delta_T;
     float B_lo  = std::max(std::abs(B0) - l_B * delta_T, 0.f);
 
-    // C(t) = dz/t + g/2*t; monotone if dz > 0 else has minimum at t = sqrt(2dz/g)
-    float c_lo_t = dz / t_lo + 0.5f * cfg.g * t_lo;
-    float c_hi_t = dz / t_hi + 0.5f * cfg.g * t_hi;
+    // C bounds via sampling (handles both drag and no-drag cases)
+    float c_lo_t = compute_C(t_lo);
+    float c_hi_t = compute_C(t_hi);
     float C_max  = std::max(std::abs(c_lo_t), std::abs(c_hi_t));
-    float C_min;
-    if (dz >= 0.f) {
-        float tc = fast_sqrt(2.f * dz / cfg.g);
-        if (tc >= t_lo && tc <= t_hi)
-            C_min = fast_sqrt(2.f * cfg.g * dz);
-        else
-            C_min = std::min(std::abs(c_lo_t), std::abs(c_hi_t));
-    } else {
-        C_min = std::min(std::abs(c_lo_t), std::abs(c_hi_t));
+    float C_min  = std::min(std::abs(c_lo_t), std::abs(c_hi_t));
+    // Sample interior for C_min/C_max (handles both drag and no-drag)
+    for (int i = 1; i < 16; ++i) {
+        float t = t_lo + (t_hi - t_lo) * float(i) / 16.f;
+        float C_t = compute_C(t);
+        C_max = std::max(C_max, std::abs(C_t));
+        C_min = std::min(C_min, std::abs(C_t));
     }
 
-    float Cp_lo = -dz / (t_lo * t_lo) + 0.5f * cfg.g;
-    float Cp_hi = -dz / (t_hi * t_hi) + 0.5f * cfg.g;
-    float C_prime_max = std::max(std::abs(Cp_lo), std::abs(Cp_hi));
+    // C'(t) = dC/dT bounds via sampling
+    float C_prime_max = 0.f;
+    for (int i = 0; i <= 16; ++i) {
+        float t = t_lo + (t_hi - t_lo) * float(i) / 16.f;
+        // Finite difference approximation of dC/dT
+        float dt_fd = (t_hi - t_lo) * 1e-4f;
+        if (dt_fd < 1e-8f) dt_fd = 1e-8f;
+        float t_p = std::min(t + dt_fd, t_hi);
+        float t_m = std::max(t - dt_fd, t_lo);
+        float Cp = (compute_C(t_p) - compute_C(t_m)) / (t_p - t_m);
+        C_prime_max = std::max(C_prime_max, std::abs(Cp));
+    }
 
-    // v² = B²+C²-a²; lower-bound v
-    float a_max_sq = sq(cfg.r_h / t_lo);
+    // v² = B²+C²-a²; lower-bound v.
+    // a = -r_h * alpha(t); |a|_max occurs at the smallest t (largest alpha)
+    float alpha_max = compute_alpha(t_lo);
+    float a_max_sq = sq(cfg.r_h * alpha_max);
     float v_sq_lo  = std::max(B_lo * B_lo + C_min * C_min - a_max_sq, 0.f);
     float v_lo_val = fast_sqrt(v_sq_lo);
     float v_up     = fast_sqrt(B_up * B_up + C_max * C_max);
 
+    // L_v: dv/dT = (B*dB/dT + C*dC/dT - a*da/dT) / v
+    // Upper bound: (|B|_max * L_B + |C|_max * C'_max + |a|_max * |da/dT|_max) / v_lo
+    float da_dT_max = cfg.r_h * std::abs(compute_dalpha_dT(t_lo)); // largest at t_lo
     float l_v = 0.f;
     if (v_lo_val > 1e-6f) {
-        l_v = (l_B * B_up + 0.25f * cfg.g * cfg.g * t_hi
-               + (cfg.r_h * cfg.r_h + dz * dz) / (t_lo * t_lo * t_lo)) / v_lo_val;
+        l_v = (l_B * B_up + C_max * C_prime_max + alpha_max * cfg.r_h * da_dT_max) / v_lo_val;
     } else {
         l_v = 1e6f; // degenerate
     }
@@ -348,8 +479,8 @@ LipschitzBounds ballistics_lipschitz(
     float l_phi = 0.f;
     if (denom_phi > 1e-12f) {
         l_phi = (C_prime_max * B_up + l_B * C_max
-                 + (cfg.r_h / (t_lo * t_lo)) * v_up
-                 + l_v * (cfg.r_h / t_lo)) / denom_phi;
+                 + alpha_max * cfg.r_h * v_up
+                 + l_v * cfg.r_h * alpha_max) / denom_phi;
     } else {
         l_phi = 1e6f;
     }
@@ -371,9 +502,10 @@ TInterval ballistics_feasible_interval(
     const PhysicsConfig& cfg,
     float tol)
 {
-    // Upper bound on T: the trajectory that maximizes height.
-    // At phi=45° approximately the maximum range case; use vMax at phi=pi/4.
-    // Matches Kotlin tBounds: solve g/2*T^2 - vMax/sqrt(2)*T + (dz - r_h/sqrt(2)) = 0
+    // Upper bound on T: the trajectory that maximizes flight time.
+    // No-drag: solve g/2*T^2 - vMax/sqrt(2)*T + (dz - r_h/sqrt(2)) = 0
+    // With drag the ball decelerates so max flight time increases; we apply a
+    // generous multiplier to avoid cutting off feasible solutions.
     float a_coef = cfg.g / 2.f;
     float b_coef = -bounds.v_exit_max / 1.41421356f;
     float c_coef =  dz - cfg.r_h / 1.41421356f;
@@ -383,25 +515,65 @@ TInterval ballistics_feasible_interval(
     float T_upper_bound = (-b_coef + fast_sqrt(disc)) / (2.f * a_coef);
     if (T_upper_bound <= 0.f) return {0.f, 0.f};
 
+    // With drag, flight times are longer (velocity decays); scale up the bound.
+    if (cfg.drag_k > 1e-6f) {
+        T_upper_bound *= (1.f + cfg.drag_k * T_upper_bound);
+    }
+
     // Check if any feasible T exists in (0, T_upper_bound]
+    // Precompute unit target direction for the forward-shot check.
+    float dist_sq = dx * dx + dy * dy;
+
     auto is_feas = [&](float T) -> bool {
         if (T <= 0.f) return false;
         ShotParams p = ballistics_solve(0,0,0, dx,dy,dz, vRx,vRy, T, cfg,
                                         OmegaMapParams{});
-        return ballistics_is_feasible(p, T, bounds, cfg);
+        if (!ballistics_is_feasible(p, T, bounds, cfg)) return false;
+
+        // Reject backwards-pointing shots: the launch direction must have
+        // a positive component along the geometric target direction.
+        // When the robot's velocity dominates dx/T (or dy/T), atan2 can
+        // flip theta ~180°, producing a physically valid but impractical
+        // solution where the turret points away from the goal.
+        if (dist_sq > 1e-6f) {
+            float dot = std::cos(p.theta) * dx + std::sin(p.theta) * dy;
+            if (dot <= 0.f) return false;
+        }
+
+        return true;
     };
 
-    // Binary search for t_max (upper edge of feasible window — the lob/speed limit)
-    float lo = 0.f, hi = T_upper_bound;
+    // Phase 1: coarse sweep to find the outer feasible envelope.
+    // The lob constraint can make feasibility non-monotone in T, so a single
+    // binary search may miss the true boundary. Sweep first, refine second.
+    const int N_SWEEP = 64;
+    float dt_sweep = T_upper_bound / float(N_SWEEP);
+    float global_t_min = T_upper_bound;
+    float global_t_max = 0.f;
+
+    for (int i = 1; i <= N_SWEEP; ++i) {
+        float t = float(i) * dt_sweep;
+        if (is_feas(t)) {
+            global_t_min = std::min(global_t_min, t);
+            global_t_max = std::max(global_t_max, t);
+        }
+    }
+
+    if (global_t_max <= 0.f) return {0.f, 0.f};
+
+    // Phase 2: binary-search refine the outer edges of the feasible region.
+    // Refine t_max in [global_t_max, global_t_max + dt_sweep]
+    float lo = global_t_max;
+    float hi = std::min(global_t_max + dt_sweep, T_upper_bound);
     while (hi - lo > tol) {
         float m = 0.5f * (lo + hi);
         if (is_feas(m)) lo = m; else hi = m;
     }
     float t_max = lo;
-    if (t_max <= 0.f) return {0.f, 0.f};
 
-    // Binary search for t_min (lower edge — minimum flight time)
-    lo = 0.f; hi = t_max;
+    // Refine t_min in [global_t_min - dt_sweep, global_t_min]
+    lo = std::max(global_t_min - dt_sweep, tol);
+    hi = global_t_min;
     while (hi - lo > tol) {
         float m = 0.5f * (lo + hi);
         if (is_feas(m)) hi = m; else lo = m;

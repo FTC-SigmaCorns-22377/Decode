@@ -14,8 +14,8 @@ static TurretBounds   bounds{-3.14f, 3.14f, 0.f, 1.4f, 15.f, 2000.f};
 static TurretWeights  weights{0.05f, 0.08f, 0.0005f};
 
 static float robust_move_cost(const ShotParams& s1, const ShotParams& s2,
-                              float omega_drop) {
-    float om1 = omega_map_eval(om, s1.phi, s1.v_exit) - omega_drop;
+                              float drop_fraction) {
+    float om1 = omega_map_eval(om, s1.phi, s1.v_exit) * (1.f - drop_fraction);
     float om2 = omega_map_eval(om, s2.phi, s2.v_exit);
     float d_omega = std::abs(om1 - om2);
     float d_phi   = std::abs(s1.phi   - s2.phi);
@@ -27,7 +27,7 @@ static float robust_move_cost(const ShotParams& s1, const ShotParams& s2,
 
 void test_robust_matches_grid() {
     printf("\n=== test_robust_matches_grid ===\n");
-    const float omega_drop = 5.f;
+    const float drop_fraction = 0.005f;  // ~0.5% proportional drop
 
     // Two distinct targets (different xyz → different theta, phi).
     float t1x = 3.0f, t1y = 0.0f, t1z = 1.5f;
@@ -53,7 +53,7 @@ void test_robust_matches_grid() {
             float T2 = iv2.t_lo + (iv2.t_hi - iv2.t_lo) * float(j) / float(N);
             ShotParams s2 = ballistics_solve(0,0,0, t2x, t2y, t2z, 0, 0, T2, cfg, om);
             if (!ballistics_is_feasible(s2, T2, bounds, cfg)) continue;
-            float cost = robust_move_cost(s1, s2, omega_drop);
+            float cost = robust_move_cost(s1, s2, drop_fraction);
             if (cost < best_grid_cost) {
                 best_grid_cost = cost;
                 best_T1 = T1;
@@ -68,7 +68,7 @@ void test_robust_matches_grid() {
     // Solver.
     RobustShotResult r = flight_time_robust(
         0,0,0, t1x, t1y, t1z, t2x, t2y, t2z,
-        0, 0, omega_drop, weights, bounds, cfg, om,
+        0, 0, drop_fraction, weights, bounds, cfg, om,
         /*tol=*/0.01f, /*maxIter=*/200);
 
     printf("solver: feasible=%d  T1=%.4f  T2=%.4f  J=%.6f\n",
@@ -80,7 +80,7 @@ void test_robust_matches_grid() {
     assert(r.feasible);
 
     // Recompute cost from the solver output (J should match robust_move_cost).
-    float solver_cost = robust_move_cost(r.s1, r.s2, omega_drop);
+    float solver_cost = robust_move_cost(r.s1, r.s2, drop_fraction);
     printf("solver cost (recomputed): %.6f   solver J: %.6f\n", solver_cost, r.J);
     assert(std::abs(solver_cost - r.J) < 1e-4f);
 
@@ -105,7 +105,7 @@ void test_infeasible_interval() {
 
 // Helper: reference objective for flight_time_robust_adjust.
 static float adjust_cost(const ShotParams& s1, const ShotParams& s2,
-                         const TurretState& cur, float omega_drop) {
+                         const TurretState& cur, float drop_fraction) {
     // A = J_Δ(cur, s1) with Δθ wrap.
     float a_d_theta = std::abs(s1.theta - cur.theta);
     if (a_d_theta > 3.14159265f) a_d_theta = 6.28318530f - a_d_theta;
@@ -115,7 +115,7 @@ static float adjust_cost(const ShotParams& s1, const ShotParams& s2,
                         weights.w_phi   * a_d_phi,
                         weights.w_omega * a_d_omega});
     // B = J_Δ(s1_reduced, s2)
-    float b_om1 = s1.omega_flywheel - omega_drop;
+    float b_om1 = s1.omega_flywheel * (1.f - drop_fraction);
     float b_d_omega = std::abs(b_om1 - s2.omega_flywheel);
     float b_d_phi   = std::abs(s1.phi   - s2.phi);
     float b_d_theta = std::abs(s1.theta - s2.theta);
@@ -127,7 +127,7 @@ static float adjust_cost(const ShotParams& s1, const ShotParams& s2,
 
 void test_adjust_matches_grid() {
     printf("\n=== test_adjust_matches_grid ===\n");
-    const float omega_drop = 5.f;
+    const float drop_fraction = 0.005f;  // ~0.5% proportional drop
     // Current turret state deliberately offset from any optimal shot so the
     // A term (cur → s1 slew) is non-trivial.
     TurretState cur{-0.3f, 0.4f, 900.f};
@@ -151,7 +151,7 @@ void test_adjust_matches_grid() {
             float T2 = iv2.t_lo + (iv2.t_hi - iv2.t_lo) * float(j) / float(N);
             ShotParams s2 = ballistics_solve(0,0,0, t2x, t2y, t2z, 0, 0, T2, cfg, om);
             if (!ballistics_is_feasible(s2, T2, bounds, cfg)) continue;
-            float cost = adjust_cost(s1, s2, cur, omega_drop);
+            float cost = adjust_cost(s1, s2, cur, drop_fraction);
             if (cost < best_grid_cost) {
                 best_grid_cost = cost;
                 best_T1 = T1;
@@ -164,14 +164,14 @@ void test_adjust_matches_grid() {
 
     RobustShotResult r = flight_time_robust_adjust(
         0,0,0, t1x, t1y, t1z, t2x, t2y, t2z,
-        0, 0, cur, omega_drop, weights, bounds, cfg, om,
+        0, 0, cur, drop_fraction, weights, bounds, cfg, om,
         /*tol=*/0.01f, /*maxIter=*/200);
 
     printf("solver: feasible=%d  T1=%.4f  T2=%.4f  J=%.6f\n",
            r.feasible, r.T1, r.T2, r.J);
     assert(r.feasible);
 
-    float solver_cost = adjust_cost(r.s1, r.s2, cur, omega_drop);
+    float solver_cost = adjust_cost(r.s1, r.s2, cur, drop_fraction);
     printf("solver cost (recomputed): %.6f   solver J: %.6f\n", solver_cost, r.J);
     assert(std::abs(solver_cost - r.J) < 1e-4f);
 
@@ -184,7 +184,7 @@ void test_adjust_matches_grid() {
 
 void test_adjust_same_target_drop_zero() {
     printf("\n=== test_adjust_same_target_drop_zero ===\n");
-    // With omega_drop=0 and target1==target2, the B term is minimized at T1=T2
+    // With drop_fraction=0 and target1==target2, the B term is minimized at T1=T2
     // and the objective degenerates to A = J_Δ(cur → s1). The solver should
     // pick (T1, T2) with T1 ≈ T2 and a small J.
     TurretState cur{0.1f, 0.5f, 700.f};
@@ -192,7 +192,7 @@ void test_adjust_same_target_drop_zero() {
 
     RobustShotResult r = flight_time_robust_adjust(
         0,0,0, tx, ty, tz, tx, ty, tz,
-        0, 0, cur, /*omega_drop=*/0.f, weights, bounds, cfg, om,
+        0, 0, cur, /*drop_fraction=*/0.f, weights, bounds, cfg, om,
         /*tol=*/0.005f, /*maxIter=*/100);
 
     printf("feasible=%d  T1=%.4f  T2=%.4f  J=%.6f\n", r.feasible, r.T1, r.T2, r.J);

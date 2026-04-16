@@ -5,6 +5,7 @@
 #include "turret_planner/ballistics.h"
 #include "turret_planner/flight_time.h"
 #include "turret_planner/robust_shot.h"
+#include "turret_planner/robust_3shot.h"
 #include "turret_planner/path_scan.h"
 #include "turret_planner/preposition.h"
 #include "turret_planner/zone_tracker.h"
@@ -12,7 +13,7 @@
 
 // ---------------------------------------------------------------------------
 // Config-array layouts (match TurretPlannerBridge.kt constants)
-//   physConfig  [2]:  g, rH
+//   physConfig  [3]:  g, rH, dragK
 //   bounds      [6]:  thetaMin, thetaMax, phiMin, phiMax, vExitMax, omegaMax
 //   weights     [3]:  wTheta, wPhi, wOmega
 //   omegaCoeffs [6]:  c0..c5
@@ -26,7 +27,7 @@
 // ---------------------------------------------------------------------------
 
 static inline PhysicsConfig unpack_physics(const jfloat* p) {
-    return PhysicsConfig{p[0], p[1]};
+    return PhysicsConfig{p[0], p[1], p[2]};
 }
 
 static inline TurretBounds unpack_bounds(const jfloat* p) {
@@ -105,6 +106,30 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_solve(
 
     float buf[4] = {p.theta, p.phi, p.v_exit, p.omega_flywheel};
     return make_result(env, buf, 4);
+}
+
+// ---------------------------------------------------------------------------
+// JNI: shotError
+// Forward-simulate a shot and return the horizontal miss distance (m).
+// ---------------------------------------------------------------------------
+extern "C" JNIEXPORT jfloat JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_shotError(
+    JNIEnv* env, jobject,
+    jfloat turretX, jfloat turretY, jfloat turretZ,
+    jfloat targetX, jfloat targetY, jfloat targetZ,
+    jfloat robotVx, jfloat robotVy,
+    jfloat theta, jfloat phi, jfloat vExit, jfloat omega,
+    jfloat T,
+    jfloatArray jPhys)
+{
+    ScopedArray ph(env, jPhys);
+    if (!ph) return 1e9f;
+    ShotParams p{theta, phi, vExit, omega};
+    return ballistics_shot_error(
+        turretX, turretY, turretZ,
+        targetX, targetY, targetZ,
+        robotVx, robotVy, p, T,
+        unpack_physics(ph));
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +297,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robustShot(
     jfloat t1X, jfloat t1Y, jfloat t1Z,
     jfloat t2X, jfloat t2Y, jfloat t2Z,
     jfloat robotVx, jfloat robotVy,
-    jfloat omegaDrop,
+    jfloat dropFraction,
     jfloatArray jWeights,
     jfloatArray jBounds,
     jfloatArray jPhys,
@@ -288,7 +313,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robustShot(
         turretX, turretY, turretZ,
         t1X, t1Y, t1Z,
         t2X, t2Y, t2Z,
-        robotVx, robotVy, omegaDrop,
+        robotVx, robotVy, dropFraction,
         unpack_weights(w), unpack_bounds(b),
         unpack_physics(ph), unpack_omega(om),
         tol, (int)maxIter);
@@ -317,7 +342,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robustAdjust(
     jfloat t2X, jfloat t2Y, jfloat t2Z,
     jfloat robotVx, jfloat robotVy,
     jfloat curTheta, jfloat curPhi, jfloat curOmega,
-    jfloat omegaDrop,
+    jfloat dropFraction,
     jfloatArray jWeights,
     jfloatArray jBounds,
     jfloatArray jPhys,
@@ -335,7 +360,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_robustAdjust(
         t2X, t2Y, t2Z,
         robotVx, robotVy,
         unpack_turret(curTheta, curPhi, curOmega),
-        omegaDrop,
+        dropFraction,
         unpack_weights(w), unpack_bounds(b),
         unpack_physics(ph), unpack_omega(om),
         tol, (int)maxIter);
@@ -364,7 +389,7 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_computeRobustPreposition(
     jfloat tAvailable,
     jfloat lambdaDecay,
     jint   kSamples,
-    jfloat omegaDrop,
+    jfloat dropFraction,
     jfloatArray jWeights,
     jfloatArray jBounds,
     jfloatArray jPhys,
@@ -382,12 +407,69 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_computeRobustPreposition(
         turretX, turretY, turretZ,
         robotVx, robotVy, targetZ,
         unpack_turret(curTheta, curPhi, curOmega),
-        tAvailable, lambdaDecay, (int)kSamples, omegaDrop,
+        tAvailable, lambdaDecay, (int)kSamples, dropFraction,
         unpack_weights(w), unpack_bounds(b), unpack_physics(ph), unpack_omega(om));
 
     float buf[4] = {r.target.theta, r.target.phi, r.target.omega_flywheel,
                     r.expected_earliest_t};
     return make_result(env, buf, 4);
+}
+
+// ---------------------------------------------------------------------------
+// JNI: robust3ShotPlan
+// trajectory: flat FloatArray, 6 floats/state [t, x, y, heading, vx, vy]
+// Returns [feasible, idx1, idx2, idx3, J, J_12, J_23, T1, T2, T3,
+//          s1.theta, s1.phi, s1.vExit, s1.omega,
+//          s2.theta, s2.phi, s2.vExit, s2.omega,
+//          s3.theta, s3.phi, s3.vExit, s3.omega]   = 22 floats
+// ---------------------------------------------------------------------------
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_robust3ShotPlan(
+    JNIEnv* env, jobject,
+    jfloatArray jTrajectory, jint nStates,
+    jfloat turretZ,
+    jfloat targetX, jfloat targetY, jfloat targetZ,
+    jfloat curTheta, jfloat curPhi, jfloat curOmega,
+    jint   nBalls,
+    jfloat tRemaining,
+    jfloat transferTime,
+    jfloat dropFraction,
+    jfloatArray jWeights,
+    jfloatArray jBounds,
+    jfloatArray jPhys,
+    jfloatArray jOmega,
+    jfloat tol,
+    jint   maxIter)
+{
+    ScopedArray traj(env, jTrajectory);
+    ScopedArray w(env, jWeights), b(env, jBounds),
+                        ph(env, jPhys),   om(env, jOmega);
+    if (!traj || !w || !b || !ph || !om) return nullptr;
+
+    static_assert(sizeof(FutureState) == 6 * sizeof(float), "FutureState layout mismatch");
+    const FutureState* states = reinterpret_cast<const FutureState*>(traj.ptr);
+
+    Robust3ShotResult r = robust_3shot_plan(
+        states, (int)nStates,
+        turretZ,
+        targetX, targetY, targetZ,
+        unpack_turret(curTheta, curPhi, curOmega),
+        (int)nBalls,
+        tRemaining, transferTime, dropFraction,
+        unpack_weights(w), unpack_bounds(b),
+        unpack_physics(ph), unpack_omega(om),
+        tol, (int)maxIter);
+
+    float buf[22] = {
+        r.feasible ? 1.f : 0.f,
+        float(r.idx1), float(r.idx2), float(r.idx3),
+        r.J, r.J_12, r.J_23,
+        r.T1, r.T2, r.T3,
+        r.s1.theta, r.s1.phi, r.s1.v_exit, r.s1.omega_flywheel,
+        r.s2.theta, r.s2.phi, r.s2.v_exit, r.s2.omega_flywheel,
+        r.s3.theta, r.s3.phi, r.s3.v_exit, r.s3.omega_flywheel
+    };
+    return make_result(env, buf, 22);
 }
 
 // ---------------------------------------------------------------------------

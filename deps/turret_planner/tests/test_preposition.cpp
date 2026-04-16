@@ -182,7 +182,7 @@ void test_robust_feasibility() {
         cur, 10.f, 0.f, K, weights, bounds, cfg, om_rich);
     PrepositionResult rob0 = preposition_robust_compute(
         path, K, 0,0,0, 0,0, 1.f,
-        cur, 10.f, 0.f, K, /*omega_drop=*/0.f, weights, bounds, cfg, om_rich);
+        cur, 10.f, 0.f, K, /*drop_fraction=*/0.f, weights, bounds, cfg, om_rich);
 
     printf("plain theta=%.4f phi=%.4f om=%.2f\n",
         plain.target.theta, plain.target.phi, plain.target.omega_flywheel);
@@ -201,7 +201,7 @@ void test_robust_feasibility() {
 }
 
 // -------------------------------------------------------------------------
-// test 6: a non-zero omega_drop should produce a different preposition
+// test 6: a non-zero drop_fraction should produce a different preposition
 // (sanity check that the drop parameter actually flows through).
 // -------------------------------------------------------------------------
 void test_robust_drop_shifts_target() {
@@ -223,11 +223,11 @@ void test_robust_drop_shifts_target() {
         cur, 10.f, 0.f, K, 0.f, weights, bounds, cfg, om_rich);
     PrepositionResult r1 = preposition_robust_compute(
         path, K, 0,0,0, 0,0, 1.f,
-        cur, 10.f, 0.f, K, 30.f, weights, bounds, cfg, om_rich);
+        cur, 10.f, 0.f, K, 0.15f, weights, bounds, cfg, om_rich);
 
-    printf("drop=0  theta=%.4f phi=%.4f om=%.2f\n",
+    printf("drop=0    theta=%.4f phi=%.4f om=%.2f\n",
         r0.target.theta, r0.target.phi, r0.target.omega_flywheel);
-    printf("drop=30 theta=%.4f phi=%.4f om=%.2f\n",
+    printf("drop=0.15 theta=%.4f phi=%.4f om=%.2f\n",
         r1.target.theta, r1.target.phi, r1.target.omega_flywheel);
 
     // Something (theta, phi, or omega) should differ meaningfully.
@@ -236,7 +236,7 @@ void test_robust_drop_shifts_target() {
     float d_om    = std::abs(r0.target.omega_flywheel - r1.target.omega_flywheel);
     printf("|dtheta|=%.4f  |dphi|=%.4f  |dom|=%.4f\n", d_theta, d_phi, d_om);
     assert(d_theta + d_phi + d_om > 1e-3f
-           && "non-zero omega_drop should change the preposition target");
+           && "non-zero drop_fraction should change the preposition target");
     printf("PASS robust_drop_shifts_target\n");
 }
 

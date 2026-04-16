@@ -28,7 +28,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): AutoCloseable {
+class Robot(val io: SigmaIO, val blue: Boolean, useNativeAim: Boolean = false): AutoCloseable {
     // Subsystems
     val shooter = Shooter(this)
     val drive = Drivetrain()
@@ -42,8 +42,9 @@ class Robot(val io: SigmaIO, blue: Boolean, useNativeAim: Boolean = false): Auto
 
     val ltv = LTVClient(
         drivetrainParameters,
-        aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd),
-        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight)
+        aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd)*100,
+        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight)*100,
+        aTipTau = 0.2
     )
 
     val dispatcher = PollableDispatcher(io)

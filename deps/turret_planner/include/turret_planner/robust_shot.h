@@ -12,9 +12,10 @@
 //   J(T1, T2) = max(w_θ|Δθ|, w_φ|Δφ|, w_ω|Δω_adj|)
 //
 // where s1 = ballistics_solve(target1, T1), s2 = ballistics_solve(target2, T2),
-// Δω_adj = (ω(s1.phi, s1.v_exit) - omega_drop) - ω(s2.phi, s2.v_exit).
+// Δω_adj = ω(s1.phi, s1.v_exit)*(1-drop_fraction) - ω(s2.phi, s2.v_exit).
 //
-// This matches ShotSolver.optimalRobustShot on the Kotlin side.
+// drop_fraction models the proportional flywheel speed loss per shot:
+// after firing, the flywheel retains (1-drop_fraction) of its speed.
 // ---------------------------------------------------------------------------
 
 struct RobustShotResult {
@@ -32,7 +33,7 @@ RobustShotResult flight_time_robust(
     float target1_x, float target1_y, float target1_z,
     float target2_x, float target2_y, float target2_z,
     float robot_vx, float robot_vy,
-    float omega_drop,
+    float drop_fraction,
     const TurretWeights& weights,
     const TurretBounds&  bounds,
     const PhysicsConfig& cfg,
@@ -50,7 +51,7 @@ RobustShotResult flight_time_robust(
 //     J(T1, T2) = J_Δ(cur → s1(T1))  +  J_Δ(s1(T1)_reduced → s2(T2))
 //
 // where J_Δ is the max-of-weighted-arms slew time and s1_reduced is s1 with
-// its required flywheel speed decreased by omega_drop. The first term wraps
+// its required flywheel speed scaled by (1-drop_fraction). The first term wraps
 // Δθ to [-π, π] because `cur` may be in a different half-turn than s1; the
 // second term matches the plain flight_time_robust convention (no wrap).
 // ---------------------------------------------------------------------------
@@ -60,7 +61,7 @@ RobustShotResult flight_time_robust_adjust(
     float target2_x, float target2_y, float target2_z,
     float robot_vx, float robot_vy,
     const TurretState& current,
-    float omega_drop,
+    float drop_fraction,
     const TurretWeights& weights,
     const TurretBounds&  bounds,
     const PhysicsConfig& cfg,

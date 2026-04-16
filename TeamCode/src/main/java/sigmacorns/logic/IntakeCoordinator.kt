@@ -6,6 +6,7 @@ import sigmacorns.constants.robotSize
 import sigmacorns.constants.turretPos
 import sigmacorns.math.PolygonOverlapDetection
 import sigmacorns.subsystem.IntakeTransfer
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -25,6 +26,8 @@ class IntakeCoordinator(val robot: Robot) {
     companion object {
         /** Flywheel velocity (rad/s) above which intake is suppressed. */
         const val FLYWHEEL_MIN_VEL = 50.0
+        /** Minimum flywheel target (rad/s) considered a real shot — below this, auto-shoot is disabled (e.g. idle always-on). */
+        const val MIN_SHOT_TARGET = 300.0
     }
 
     /** When true, transitions to READY_TO_SHOOT state when robot enters a shooting zone. */
@@ -50,23 +53,34 @@ class IntakeCoordinator(val robot: Robot) {
 
         // Auto-shoot zone detection
         if (autoShootEnabled) {
-            val shooterAtSpeed = flywheelTarget > 0.0 &&
-                kotlin.math.abs(flywheelVel - flywheelTarget) < FLYWHEEL_MIN_VEL
+            if(robot.aimFlywheel) {
+                robot.aim.shotRequested = inShootingZone
+            } else {
+                val shooterAtSpeed = flywheelTarget >= MIN_SHOT_TARGET &&
+                        kotlin.math.abs(flywheelVel - flywheelTarget) < FLYWHEEL_MIN_VEL
 
-            if (inShootingZone && shooterAtSpeed) {
-                // In zone and ready — transfer immediately (blocker already open from pre-open below)
-                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
-            } else if (shooterAtSpeed) {
-                // Flywheel at speed but not yet in zone — pre-open blocker so entry is instant
-                robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
-            } else if (inShootingZone) {
-                // In zone but shooter still spinning up — hold blocker open, wait for speed
-                robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
-            } else if (robot.intakeTransfer.state == IntakeTransfer.State.READY_TO_SHOOT
+                if (inShootingZone && shooterAtSpeed) {
+                    // In zone and ready — transfer immediately (blocker already open from pre-open below)
+                    robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+                } else if (shooterAtSpeed) {
+                    // Flywheel at speed but not yet in zone — pre-open blocker so entry is instant
+                    robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
+                } else if (inShootingZone) {
+                    // In zone but shooter still spinning up — hold blocker open, wait for speed
+                    robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
+                } else if (robot.intakeTransfer.state == IntakeTransfer.State.READY_TO_SHOOT
                     || robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING
-                || (flywheelVel > FLYWHEEL_MIN_VEL && robot.intakeTransfer.state == IntakeTransfer.State.INTAKING)) {
-                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                    || (flywheelVel > FLYWHEEL_MIN_VEL && robot.intakeTransfer.state == IntakeTransfer.State.INTAKING)) {
+                    robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                }
             }
+        }
+
+        if(robot.aimFlywheel && robot.aim.shotRequested) {
+             if(robot.aim.readyToShoot)
+                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+            else if(robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING)
+                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         }
     }
 
