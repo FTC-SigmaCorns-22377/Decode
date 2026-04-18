@@ -14,6 +14,8 @@ import sigmacorns.control.aim.TurretPlannerBridge
 import sigmacorns.control.aim.TurretPlannerBridge.OptimalTIdx
 import sigmacorns.control.aim.TurretPlannerBridge.PrepositionIdx
 import sigmacorns.control.aim.TurretPlannerBridge.RobustShotIdx
+import sigmacorns.control.aim.tune.AdaptiveTuner
+import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
@@ -66,6 +68,12 @@ class NativeAutoAim(
     // ------------------------------------------------------------------
 
     private val bridge = TurretPlannerBridge()
+
+    // ------------------------------------------------------------------
+    // Empirical tuner (loaded from SD card data points)
+    // ------------------------------------------------------------------
+
+    private var empiricalTuner: AdaptiveTuner? = null
 
     /** Approach-prepositioning helper, lazily created when [AimConfig.prepositionHorizon] > 0. */
     private var prepositioner: ApproachPrepositioner? = null
@@ -126,6 +134,11 @@ class NativeAutoAim(
         )
 
         autoAim.enabled = true
+
+        // Load empirical shot data from SD card
+        val store = ShotDataStore("/sdcard/FIRST/shooter_tuner_data.json")
+        store.load()
+        empiricalTuner = if (store.getEmpiricalCount() >= 2) AdaptiveTuner(store) else null
 
         val omegaMax = flywheelMotor.freeSpeed
         val vMax = omegaMax*flywheelRadius* AimConfig.launchEfficiency
@@ -339,8 +352,19 @@ class NativeAutoAim(
             }
         }
 
+        // Apply empirical hood/flywheel before any early return so the flywheel
+        // always spins up when requested, even if the native solver can't solve.
+        val empHoodRad = empiricalTuner?.getRecommendedHoodAngle(targetDistance)?.let { Math.toRadians(it) }
+        val empOmega   = empiricalTuner?.getRecommendedSpeed(targetDistance)
+
+        if (robot.aimFlywheel) {
+            shooter.hoodAngle      = empHoodRad ?: lastPhi.toDouble()
+            shooter.flywheelTarget = empOmega   ?: lastOmega.toDouble()
+        }
+
         if (!solved && !prepositioned) {
             // No feasible solve this tick and no preposition update — bail out.
+            // Flywheel is already spinning from the empirical block above.
             lastTStar = null
             readyToShoot = false
             primaryShotState = null
@@ -370,17 +394,14 @@ class NativeAutoAim(
             turret.fieldTargetAngle = lastTheta.toDouble()
         }
 
-        if (robot.aimFlywheel) {
-            shooter.hoodAngle = lastPhi.toDouble()
-            shooter.flywheelTarget = lastOmega.toDouble()
-        }
-
         // Readiness only counts when we have a real shot solve — a preposition
         // target is a pre-aim, not an alignment to an actual feasible shot.
         if (solved) {
+            val targetPhi   = empHoodRad ?: lastPhi.toDouble()
+            val targetOmega = empOmega   ?: lastOmega.toDouble()
             val thetaErr = abs(wrapAngle(turret.pos + fusedPose.rot - lastTheta))
-            val phiErr   = abs(shooter.computedHoodAngle - lastPhi)
-            val omegaErr = abs(robot.io.flywheelVelocity() - lastOmega)
+            val phiErr   = abs(shooter.computedHoodAngle - targetPhi)
+            val omegaErr = abs(robot.io.flywheelVelocity() - targetOmega)
             readyToShoot = thetaErr < turretTol && phiErr < hoodTol && omegaErr < omegaTol
         } else {
             readyToShoot = false
