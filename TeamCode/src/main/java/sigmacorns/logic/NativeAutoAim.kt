@@ -522,8 +522,10 @@ class NativeAutoAim(
         }
 
         // ── Fire: only in zone, only when solver confirms all balls feasible ──
-        // During a burst with look-ahead active, we're already committed so
-        // readyToShoot stays true even if we go out of tolerance
+        // burstActive is managed independently of the turret check so a jerk that
+        // throws the turret off only *pauses* the transfer (readyToShoot = false)
+        // rather than aborting the burst entirely — the transfer resumes once the
+        // turret corrects back within burstTurretTolerance.
         if (shotRequested && (burstActive || inTolerance) && allBallsFeasible) {
             if (!burstActive) {
                 burstActive = true
@@ -533,11 +535,12 @@ class NativeAutoAim(
                 lastBallExitTime = null
                 plannedShot = null  // plan consumed — burst is now executing
             }
-            readyToShoot = true
         } else {
-            readyToShoot = false
             burstActive = false
         }
+
+        val turretErr = kotlin.math.abs(turret.pos - turret.effectiveTargetAngle)
+        readyToShoot = burstActive && turretErr < AimConfig.burstTurretTolerance
     }
 
     private fun wrapAngle(a: Double): Double {

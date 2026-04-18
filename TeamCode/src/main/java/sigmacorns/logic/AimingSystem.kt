@@ -317,6 +317,13 @@ object AimConfig {
     /** Assumed deceleration rate when approaching a zone (m/s²). */
     @JvmField var decelRate = 2.0f
 
+    /**
+     * Max turret error (rad) allowed to fire. If the turret diverges beyond this during a burst
+     * (e.g. jerky driver movement), readyToShoot goes false and the transfer pauses until the
+     * turret corrects. ~15 degrees — generous enough not to block normal shots.
+     */
+    @JvmField var burstTurretTolerance = Math.toRadians(15.0)
+
 }
 
 object ShotSolverConfig {

@@ -64,7 +64,7 @@ class IntakeTransfer(val io: SigmaIO) {
     }
 
     /** Whether the blocker has had enough time to physically open. */
-    var blockerReady: Boolean = true
+    var blockerReady: Boolean = false
         private set
 
     private var blockerDisengagedAt: Duration = Duration.ZERO

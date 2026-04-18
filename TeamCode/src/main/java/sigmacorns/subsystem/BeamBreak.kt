@@ -14,7 +14,9 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 class BeamBreak(val io: SigmaIO) {
 
-    var holdMs: Long = 600L
+    var holdMs0: Long = 120L
+    var holdMs1: Long = 50L
+    var holdMs2: Long = 0L
 
     // 3 slots: true = ball present (including cooldown hold)
     val slots: BooleanArray = booleanArrayOf(false, false, false)
@@ -42,7 +44,8 @@ class BeamBreak(val io: SigmaIO) {
                 val expiry = holdExpiry[i]
                 if (slots[i] && expiry == null) {
                     // just went false — start the cooldown
-                    holdExpiry[i] = now + holdMs.milliseconds
+                    val hold = when (i) { 0 -> holdMs0; 1 -> holdMs1; else -> holdMs2 }
+                    holdExpiry[i] = now + hold.milliseconds
                     slots[i] = true
                 } else if (expiry != null && now < expiry) {
                     slots[i] = true  // still within hold window
