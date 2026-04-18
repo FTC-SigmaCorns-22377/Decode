@@ -14,8 +14,6 @@ import kotlin.math.sin
  * Cross-subsystem coordinator for the intake-transfer and beam break subsystems.
  *
  * Enforces rules that span both subsystems:
- * - Feeds beam break full-state into IntakeTransfer
- * - Auto-stops intake when 3 balls are held
  * - Coordinates blocker engagement when starting intake
  * - Auto-shoot zone detection (transitions to READY_TO_SHOOT state when in zone)
  *
@@ -47,9 +45,6 @@ class IntakeCoordinator(val robot: Robot) {
 
         inShootingZone = computeInShootingZone()
 
-        if (robot.beamBreak.isFull && robot.intakeTransfer.state == IntakeTransfer.State.INTAKING) {
-            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-        }
 
         // Auto-shoot zone detection
         if (autoShootEnabled) {
@@ -77,10 +72,21 @@ class IntakeCoordinator(val robot: Robot) {
         }
 
         if(robot.aimFlywheel && robot.aim.shotRequested) {
-             if(robot.aim.readyToShoot)
-                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
-            else if(robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING)
-                 robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+            val cur = robot.intakeTransfer.state
+            if(robot.aim.readyToShoot && cur != IntakeTransfer.State.INTAKING) {
+                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+            } else if(cur == IntakeTransfer.State.TRANSFERRING && robot.intakeTransfer.blockerReady && !robot.aim.readyToShoot) {
+                // Blocker fully open but not ready to shoot — shot complete or failed, stop motor
+                robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
+            } else if(cur != IntakeTransfer.State.TRANSFERRING && cur != IntakeTransfer.State.INTAKING) {
+                // Not yet committed — pre-open blocker while waiting for readyToShoot
+                robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
+            }
+            // If already TRANSFERRING (!blockerReady) or user is INTAKING, don't override
+        } else if ((robot.intakeTransfer.state == IntakeTransfer.State.READY_TO_SHOOT
+            || robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING)
+            && (autoShootEnabled || robot.aimFlywheel)) {
+            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         }
     }
 
@@ -90,7 +96,6 @@ class IntakeCoordinator(val robot: Robot) {
      * rules are enforced reactively in update().
      */
     fun startIntake() {
-        if (robot.beamBreak.isFull) return
         robot.intakeTransfer.state = IntakeTransfer.State.INTAKING
     }
 

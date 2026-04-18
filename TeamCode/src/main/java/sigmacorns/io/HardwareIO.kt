@@ -87,7 +87,7 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override var turretLeft: Double = 0.5
     override var turretRight: Double = 0.5
     override var hood: Double = ShooterConfig.minServo
-    override var blocker: Double = IntakeTransfer.BLOCKER_DISENGAGED
+    override var blocker: Double = IntakeTransfer.BLOCKER_ENGAGED
 
     private var savedVoltage: Double = 12.0
 

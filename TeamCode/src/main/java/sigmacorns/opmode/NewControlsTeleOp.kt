@@ -264,9 +264,13 @@ class NewControlsTeleOp : SigmaOpMode() {
                 robot.aim.shotRequested = false
             } else {
                 robot.aimFlywheel = autoAimEnabled
-                if (!autoAimEnabled) robot.aim.shotRequested = false
-                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
-                    robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                if (!autoAimEnabled) {
+                    robot.aim.shotRequested = false
+                    // In manual mode, release trigger = stop transfer.
+                    // In auto-aim mode, the coordinator owns TRANSFERRING/READY_TO_SHOOT.
+                    if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
+                        robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+                    }
                 }
                 robot.shooter.flywheelTarget = if (flywheelAlwaysOn) 240.0 else 0.0
             }
