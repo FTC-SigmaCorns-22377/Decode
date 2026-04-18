@@ -42,6 +42,17 @@ class ShotDataStore(private val dataFile: String = DEFAULT_DATA_FILE) {
     fun getPoints(): List<SpeedPoint> = points.toList()
 
     @Synchronized
+    fun getPoints(includePhysicsEstimates: Boolean): List<SpeedPoint> =
+        if (includePhysicsEstimates) points.toList()
+        else points.filter { !it.physicsEstimate }
+
+    @Synchronized
+    fun getPhysicsEstimateCount(): Int = points.count { it.physicsEstimate }
+
+    @Synchronized
+    fun getEmpiricalCount(): Int = points.count { !it.physicsEstimate }
+
+    @Synchronized
     fun getPointsSorted(): List<SpeedPoint> = points.sortedBy { it.distance }
 
     @Synchronized
@@ -61,10 +72,10 @@ class ShotDataStore(private val dataFile: String = DEFAULT_DATA_FILE) {
     private fun saveCsv() {
         try {
             val csvFile = File(CSV_FILE)
-            val sb = StringBuilder("distance_m,speed_rad_s,speed_rpm,hood_angle_deg\n")
+            val sb = StringBuilder("distance_m,speed_rad_s,speed_rpm,hood_angle_deg,physics_estimate\n")
             for (p in points) {
                 val rpm = p.speed * 60.0 / (2.0 * Math.PI)
-                sb.append("%.3f,%.1f,%.0f,%.1f\n".format(p.distance, p.speed, rpm, p.hoodAngle))
+                sb.append("%.3f,%.1f,%.0f,%.1f,%s\n".format(p.distance, p.speed, rpm, p.hoodAngle, p.physicsEstimate))
             }
             csvFile.writeText(sb.toString())
         } catch (e: Exception) {
@@ -92,10 +103,10 @@ class ShotDataStore(private val dataFile: String = DEFAULT_DATA_FILE) {
 
     @Synchronized
     fun exportCsv(): String {
-        val sb = StringBuilder("distance_m,speed_rad_s,speed_rpm,hood_angle_deg\n")
+        val sb = StringBuilder("distance_m,speed_rad_s,speed_rpm,hood_angle_deg,physics_estimate\n")
         for (p in points.sortedBy { it.distance }) {
             val rpm = p.speed * 60.0 / (2.0 * Math.PI)
-            sb.append("%.3f,%.1f,%.0f,%.1f\n".format(p.distance, p.speed, rpm, p.hoodAngle))
+            sb.append("%.3f,%.1f,%.0f,%.1f,%s\n".format(p.distance, p.speed, rpm, p.hoodAngle, p.physicsEstimate))
         }
         return sb.toString()
     }
