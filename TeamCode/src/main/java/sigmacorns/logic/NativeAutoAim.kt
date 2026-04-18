@@ -11,6 +11,8 @@ import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.aim.Ballistics
 import sigmacorns.control.aim.TurretPlannerBridge
 import sigmacorns.control.aim.TurretPlannerBridge.Robust3ShotPlanIdx
+import sigmacorns.control.aim.tune.AdaptiveTuner
+import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
@@ -60,6 +62,7 @@ class NativeAutoAim(
 
     private val bridge = TurretPlannerBridge()
 
+    private var empiricalTuner: AdaptiveTuner? = null
     private var lastTheta: Float = 0f
     private var lastPhi:   Float = 0f
     private var lastOmega: Float = 0f
@@ -117,6 +120,11 @@ class NativeAutoAim(
             allowedTagIds = FieldLandmarks.landmarkTagIds
         )
         autoAim.enabled = true
+
+        // Load empirical shot data from SD card
+        val store = ShotDataStore("/sdcard/FIRST/shooter_tuner_data.json")
+        store.load()
+        empiricalTuner = if (store.getEmpiricalCount() >= 2) AdaptiveTuner(store) else null
 
         val omegaMax = flywheelMotor.freeSpeed
         val vMax = omegaMax * flywheelRadius * AimConfig.launchEfficiency
@@ -437,6 +445,16 @@ class NativeAutoAim(
                     " shotReq=$shotRequested inZone=${robot.intakeCoordinator.inShootingZone}")
         }
 
+        // Apply empirical hood/flywheel before any early return so the flywheel
+        // always spins up when requested, even if the native solver can't solve.
+        val empHoodRad = empiricalTuner?.getRecommendedHoodAngle(targetDistance)?.let { Math.toRadians(it) }
+        val empOmega   = empiricalTuner?.getRecommendedSpeed(targetDistance)
+
+        if (robot.aimFlywheel) {
+            shooter.hoodAngle      = empHoodRad ?: lastPhi.toDouble()
+            shooter.flywheelTarget = empOmega   ?: lastOmega.toDouble()
+        }
+
         if (!solved) {
             readyToShoot = false
             primaryShotState = null
@@ -486,11 +504,11 @@ class NativeAutoAim(
                         || timeToZone <= AimConfig.spinupLeadTime)
 
         if (robot.aimFlywheel) {
-            shooter.hoodAngle = targetPhi
+            shooter.hoodAngle = empHoodRad ?: targetPhi
             // Only spin up the flywheel when close enough to a launch zone.
             // When idle, leave flywheelTarget alone so the opmode's idle speed holds.
             if (prespin || burstActive) {
-                shooter.flywheelTarget = targetOmega
+                shooter.flywheelTarget = empOmega ?: targetOmega
             }
         }
 
