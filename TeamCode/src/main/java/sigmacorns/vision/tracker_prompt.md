@@ -477,4 +477,81 @@ Re-run the STEP parser whenever the CAD changes:
 python3 tools/parse_step.py [path/to/file.step]
 ```
 
+---
+
+# Session status — end of 2026-04-20 (Apr 20 EDT)
+
+Continuing from the 2026-04-19 handoff. The tracker core and end-to-end
+sim are now green. Hardware, logic layer, and viewer extensions remain.
+
+## What landed this session
+
+| Commit | Scope |
+|---|---|
+| `37e5e47` | `feat(vision)`: `TrackerConfig` loads `config/ball_tracker.json` into typed Kotlin. Walks up from `$projectDir` / `user.dir`. 4 tests. |
+| `ba25e37` | `feat(vision)`: `KalmanTrack` constant-velocity KF (predict/update/markMissed/positionAt). 9 tests. |
+| `d6592dd` | `feat(vision)`: `PoseBuffer` ring with wrap-aware theta interpolation. 11 tests. |
+| `c356a96` | `feat(vision)`: `Association` Mahalanobis-gated greedy assignment + `FieldDetection`. 10 tests. |
+| `70dd27e` | `feat(vision)`: `Gating` — intake mask, field bounds, ramp, footprint. 17 tests. |
+| `04dd2f0` | `feat(vision)`: `Tracker.tick` pipeline with birth/coast/deletion + `selectTarget`. 8 integration tests. |
+| `0a7829f` | `feat(io)`: `SimulatedCamera` + `SimCameraConfig` + `SigmaIO.getBallDetections` default + `JoltSimIO` override. 7 tests. |
+| `969f77e` | `test(sim)`: `BallTrackerSimTest` — 7 scenarios pass end-to-end. Pure-Kotlin scenario harness. CSVs under `build/reports/ball_tracker/`. |
+
+All **91 vision tests** pass. Run with:
+```
+./gradlew :TeamCode:testDebugUnitTest --tests "sigmacorns.test.vision.*"
+```
+
+## Headline numbers (BallTrackerSimTest)
+
+| Scenario | Metric | Threshold | Actual |
+|---|---|---|---|
+| zero-noise stationary | RMS last 3 s | < 1e-3 m | 0.0000 m |
+| pixel noise only | RMS last 3 s | < 2e-2 m | 0.0030 m |
+| pixel + pose noise | RMS last 3 s | < 5e-2 m | 0.0422 m |
+| full noise (drop + FP) | RMS last 3 s | < 10e-2 m | 0.0700 m |
+| full noise | target persistence | >= 95% | 98.8% |
+| ball on ramp | tracks inside ramp | 0 | 0 |
+| ball in/out of frame | gap bridged | yes | yes |
+| headless chase | final robot→ball | < 0.15 m | 0.1014 m |
+
+## What still needs to be built
+
+### Deferred for this iteration
+- [ ] `sigmacorns/logic/BallTrackingSystem.kt` — mirror `AimingSystem`; Tracker + PoseBuffer + IO wiring on a `Robot` reference.
+- [ ] `sigmacorns/logic/ChaseCoordinator.kt` — drive to `targetBallField` via existing `Drivetrain` math.
+- [ ] `sigmacorns/vision/viz/VizPublisher.kt` — extend the existing `SimVizServer` payload (new fields: `camera`, `detections_px`, `detections_field`, `tracks`, `target_id`, `scenario`, `rms_error_m`). Triggered by `BALL_TRACKER_VIZ_WEB=1`.
+- [ ] `TeamCode/src/test/resources/web/scene.js` — track + covariance overlays on the existing field plane; new camera-view panel (pixel-space detections, intake-mask region, re-projected covariance ellipses, scenario-selector UI).
+- [ ] `BallTrackerSimTest` JoltSim-backed runner (`runScenarioJolt(...)`) for hardware-realistic dynamics validation.
+
+### Hardware (after viz + logic)
+- [ ] `HardwareIO.getBallDetections` real impl via Limelight color pipeline (currently inherits the `SigmaIO` default `emptyList()`).
+- [ ] Calibrate Cam Global Shutter intrinsics (checkerboard → `teamwebcamcalibrations.xml` and/or `config/ball_tracker.json`).
+- [ ] Extrinsic verification op-mode: ball at known field point, projected `(x, y)` vs. tape measure within 3 cm at 1–2 m. Adjust `CAM_POS_R` / `CAM_PITCH_DOWN_RAD` if not.
+- [ ] `BallChaseTeleOp` with manual abort.
+
+## Design decisions worth remembering
+
+1. **Sim harness is pure Kotlin, not JoltSim-backed.** The tracker doesn't need physics to be validated — it needs accurate forward projection and pose interpolation. The kinematic harness is deterministic, seed-controlled, and runs in ~200 ms per scenario. JoltSim-backed scenarios can be added in a follow-up for dynamics-coupled tests; they are not a prerequisite.
+2. **`BallTrackerSimTest` uses pitchDown 0.15 rad, not the 0.268 rad (15.4°) / −0.199 rad values in `config/ball_tracker.json`.** The sim scenarios own their own extrinsics in `baseExtrinsics` so test geometry is independent of robot-side tuning. The config pitch is still up for hardware verification (see the prompt's "Open verifications" section).
+3. **`selectTarget` requires confirmation (`hits >= MIN_HITS_FOR_CONFIRMED`).** RMS is only graded on confirmed targets — spurious single-hit tracks from a full-noise false positive never contaminate the metric.
+4. **Last-known-target is covariance-gated in the chase scenario.** When the ball drops below the image bottom at close range, the track coasts and its position-covariance trace grows. We only trust the target estimate for the chase goal when `positionCovTrace < 0.05` — transient horizon blowups don't get latched as the commanded goal.
+5. **SimulatedCamera does NOT know about ball radius.** Callers pass ball CENTER positions in field frame; the tracker's ground-plane intersection happens at `config.ballRadiusM`. This lets sim scenarios place balls at any height (e.g., in-the-air test cases) without threading special-case flags.
+
+## How to pick up next session
+
+1. Re-read this status block.
+2. Start `BallTrackingSystem.kt` — mirror `AimingSystem`:
+   - holds a `Tracker`, `PoseBuffer`, and a `SigmaIO` ref.
+   - each update: push `io.position()` into the buffer at `io.time()`, call `io.getBallDetections(t, pose)`, pose-interpolate to the detection capture timestamps, `tracker.tick(...)`, `selectTarget`, expose `targetBallField`.
+3. Then `ChaseCoordinator.kt` — reads `BallTrackingSystem.targetBallField` and commands drivetrain velocity. Reuse the kinematic controller pattern from `BallTrackerSimTest.headlessChaseScenario` as a reference.
+4. Viz can be built in parallel — find the existing transport in a `SimVizServer` reference and append the new fields. The viewer extension goes in the same directory as the current `scene.js`.
+5. Hardware path after viz is proven.
+
+Run tests individually per the CLAUDE.md note:
+```
+./gradlew :TeamCode:testDebugUnitTest --tests "sigmacorns.test.vision.BallTrackerSimTest"
+```
+
+
 The parser prints `Cam Global Shutter` position in the `Top Level` Onshape frame; convert to robot frame using the `diag(-1, +1, -1) · v_TL + (0.959, 0.099, 0.373)` mapping documented in `config/cad/extraction_notes.md` (anchor: chassis back-left-bottom corner at robot `(-0.184, +0.183, 0)`).
