@@ -85,3 +85,9 @@ lint/generated/
 lint/outputs/
 lint/tmp/
 # lint/reports/
+
+# CAD source files (large, exported from Onshape)
+config/cad/*.step
+config/cad/*.stp
+config/cad/*.STEP
+config/cad/*.STP
