@@ -15,6 +15,8 @@ import sigmacorns.sim.FlywheelState
 import sigmacorns.sim.JoltNative
 import sigmacorns.sim.MecanumDynamics
 import sigmacorns.subsystem.IntakeTransfer
+import sigmacorns.vision.sim.SimulatedCamera
+import sigmacorns.vision.tracker.PixelDetection
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -51,6 +53,13 @@ class JoltSimIO(
 
     val heldBalls = mutableListOf<BallColor>()
     private var autoShootTimer = 0.0
+
+    /**
+     * Optional simulated camera. Wire up in a test by assigning a [SimulatedCamera]
+     * instance; getBallDetections() will then forward-project the Jolt world balls
+     * through it. Null = no vision pipeline attached (getBallDetections returns empty).
+     */
+    var simulatedCamera: SimulatedCamera? = null
 
 
     override var driveFL: Double = 0.0
@@ -94,6 +103,20 @@ class JoltSimIO(
     override fun configurePinpoint() {}
 
     override fun voltage(): Double = 12.0
+
+    /**
+     * Forward-project every Jolt ball in the world through [simulatedCamera]
+     * and return the resulting pixel detections. Returns empty if no camera
+     * is attached. Held balls (in `heldBalls`) are already removed from the
+     * Jolt world on pickup, so they are naturally excluded.
+     */
+    override fun getBallDetections(t: Double, robotPose: Pose2d): List<PixelDetection> {
+        val cam = simulatedCamera ?: return emptyList()
+        val balls = getBallStates().map { b ->
+            org.joml.Vector3d(b.x.toDouble(), b.y.toDouble(), b.z.toDouble())
+        }
+        return cam.frame(balls, t, robotPose)
+    }
 
     override fun update() {
         val dtSeconds = SIM_UPDATE_TIME.toDouble(DurationUnit.SECONDS)

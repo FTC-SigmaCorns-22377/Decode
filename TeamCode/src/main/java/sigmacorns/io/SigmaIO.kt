@@ -1,6 +1,7 @@
 package sigmacorns.io
 
 import sigmacorns.math.Pose2d
+import sigmacorns.vision.tracker.PixelDetection
 import kotlin.time.Duration
 
 interface SigmaIO {
@@ -39,4 +40,13 @@ interface SigmaIO {
     fun configurePinpoint()
     fun voltage(): Double
     fun update()
+
+    /**
+     * Ball detections visible this tick. Default: empty (no vision pipeline).
+     * JoltSimIO returns detections from the SimulatedCamera; HardwareIO will
+     * return detections from the Limelight pipeline once the hardware side
+     * is wired. Implementations should attach the CAPTURE timestamp to each
+     * detection so the tracker can pose-interpolate correctly.
+     */
+    fun getBallDetections(t: Double, robotPose: Pose2d): List<PixelDetection> = emptyList()
 }
