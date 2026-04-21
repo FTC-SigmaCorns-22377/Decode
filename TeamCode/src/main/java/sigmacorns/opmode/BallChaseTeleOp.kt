@@ -64,7 +64,9 @@ class BallChaseTeleOp : SigmaOpMode() {
             .build()
 
         val hardware = io as? HardwareIO
-        hardware?.ballDetectionProvider = { processor.detectedBalls }
+        hardware?.ballDetectionProvider = {
+            processor.detectedBalls to processor.lastCaptureTimeSec
+        }
 
         // --- Tracker + chase ---
         val config = TrackerConfig.loadDefault()

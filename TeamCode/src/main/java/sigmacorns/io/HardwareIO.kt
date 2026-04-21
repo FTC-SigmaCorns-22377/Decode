@@ -268,34 +268,37 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override fun voltage(): Double = savedVoltage
 
     /**
-     * Pluggable source of on-robot ball detections. The vision pipeline lives
-     * in the opmode (e.g. `BallChaseTeleOp` owns the `VisionPortal` +
-     * `BallDetectionProcessor`) — when the opmode calls
-     *   hardwareIO.ballDetectionProvider = { processor.detectedBalls }
-     * `getBallDetections` starts returning `PixelDetection` entries built from
-     * each bounding-box center. Null = no camera pipeline attached (default).
+     * Pluggable source of on-robot ball detections — bboxes plus the capture
+     * timestamp of the frame that produced them. The opmode owns the
+     * VisionPortal + BallDetectionProcessor:
+     *   hardwareIO.ballDetectionProvider = {
+     *       processor.detectedBalls to processor.lastCaptureTimeSec
+     *   }
+     * Null (default) = no camera pipeline attached.
      */
     @Volatile
-    var ballDetectionProvider: (() -> List<sigmacorns.vision.DetectedBall>)? = null
+    var ballDetectionProvider:
+        (() -> Pair<List<sigmacorns.vision.DetectedBall>, Double>)? = null
 
     /**
-     * Bbox-center → (u, v) pixel detection. No Limelight — the vision pipeline
-     * runs on the Control Hub off the Global Shutter webcam via FTC SDK's
-     * VisionPortal + [sigmacorns.vision.BallDetectionProcessor]. Detections
-     * are stamped with the caller's loop time.
+     * Bbox-center → (u, v) pixel detection, stamped with the provider's
+     * capture time so the tracker's PoseBuffer pose-interpolates to frame
+     * capture, not frame arrival (the latter lags 10-30 ms on Control Hub).
      */
     override fun getBallDetections(
         t: Double,
         robotPose: sigmacorns.math.Pose2d,
     ): List<sigmacorns.vision.tracker.PixelDetection> {
         val provider = ballDetectionProvider ?: return emptyList()
-        val dets = provider.invoke()
+        val (dets, captureTime) = provider.invoke()
         if (dets.isEmpty()) return emptyList()
+        // If capture time hasn't been written yet (first tick) fall back to t.
+        val stamp = if (captureTime > 0.0) captureTime else t
         val out = ArrayList<sigmacorns.vision.tracker.PixelDetection>(dets.size)
         for (d in dets) {
             val u = d.bbox.x + d.bbox.width  / 2.0
             val v = d.bbox.y + d.bbox.height / 2.0
-            out.add(sigmacorns.vision.tracker.PixelDetection(u = u, v = v, t = t))
+            out.add(sigmacorns.vision.tracker.PixelDetection(u = u, v = v, t = stamp))
         }
         return out
     }

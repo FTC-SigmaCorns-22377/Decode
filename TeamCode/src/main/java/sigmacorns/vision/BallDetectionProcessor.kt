@@ -43,6 +43,16 @@ class BallDetectionProcessor : VisionProcessor {
     var detectedBalls: List<DetectedBall> = emptyList()
         private set
 
+    /**
+     * Capture timestamp (seconds, monotonic since Control Hub boot) of the
+     * frame that produced [detectedBalls]. The tracker uses this to pose-
+     * interpolate correctly via PoseBuffer, rather than stamping with loop
+     * time (which lags frame arrival by ~10-30 ms).
+     */
+    @Volatile
+    var lastCaptureTimeSec: Double = 0.0
+        private set
+
     /** Left-to-right color sequence, e.g. "GPG". */
     val ballColorString: String
         get() = detectedBalls.joinToString("") { it.color.code.toString() }
@@ -50,6 +60,7 @@ class BallDetectionProcessor : VisionProcessor {
     override fun init(width: Int, height: Int, calibration: CameraCalibration?) {}
 
     override fun processFrame(frame: Mat, captureTimeNanos: Long): Any? {
+        lastCaptureTimeSec = captureTimeNanos / 1e9
         Imgproc.cvtColor(frame, hsv, Imgproc.COLOR_RGB2HSV)
         Imgproc.cvtColor(frame, ycrcb, Imgproc.COLOR_RGB2YCrCb)
 
