@@ -9,6 +9,8 @@ import sigmacorns.constants.turretPos
 import sigmacorns.control.aim.TurretPlannerBridge
 import sigmacorns.control.aim.TurretPlannerBridge.OptimalTIdx
 import sigmacorns.control.aim.TurretPlannerBridge.ZoneTrackerIdx
+import sigmacorns.control.aim.tune.OmegaCoefFitter
+import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.logic.AimConfig
 import sigmacorns.logic.ShotSolverConfig
 import sigmacorns.math.Pose2d
@@ -123,9 +125,8 @@ class TurretPlannerDebugOpMode : SigmaOpMode() {
             ShotSolverConfig.wOmega.toFloat()
         )
 
-        // omega(phi, vExit) = c1 * vExit,  c1 = 1 / (radius * efficiency)
-        val c1 = (1.0 / (flywheelRadius * AimConfig.launchEfficiency)).toFloat()
-        val omegaCoeffs = floatArrayOf(0f, c1, 0f, 0f, 0f, 0f)
+        val tuningStore = ShotDataStore().also { it.load() }
+        val omegaCoeffs = OmegaCoefFitter.fit(tuningStore.getPoints())
 
         // ── zone configs ──────────────────────────────────────────────────────
         // Zone 1: top wall (+y), half-plane n=(0,1), d = FIELD_HALF − ZONE1_HALF_HYP
