@@ -13,7 +13,7 @@ import sigmacorns.sim.MecanumDynamics
 class Drivetrain(val antiWheelieFilter: AntiWheelieFilter? = null) {
     private val mecanumDynamics = MecanumDynamics(drivetrainParameters)
     private var speedMultiplier = 1.0
-    var fieldCentric = true
+    var fieldCentric = false
     /** Heading (radians) used for field-centric rotation. Set each loop from fused localization. */
     var fieldCentricHeading: Double? = null
 
