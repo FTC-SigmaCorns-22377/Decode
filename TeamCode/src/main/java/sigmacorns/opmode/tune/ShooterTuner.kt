@@ -8,6 +8,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import sigmacorns.Robot
 import sigmacorns.constants.turretPos
+import sigmacorns.control.aim.tune.PhysicsEstimateGenerator
 import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.control.aim.tune.SpeedPoint
 import sigmacorns.logic.AimConfig
@@ -68,6 +69,15 @@ class ShooterTuner : SigmaOpMode() {
         val dataStore = ShotDataStore(DATA_FILE)
         dataStore.load()
 
+        // Inject physics-estimated seed points on first use
+        if (dataStore.getPhysicsEstimateCount() == 0) {
+            val physicsPoints = PhysicsEstimateGenerator.loadFromResources()
+            for (p in physicsPoints) {
+                dataStore.addPoint(p)
+            }
+            dataStore.save()
+        }
+
         // --- Fitter ---
         val fitter = ShooterFitter(
             goalHeight = AimConfig.goalHeight,
@@ -78,7 +88,7 @@ class ShooterTuner : SigmaOpMode() {
         val fitting = AtomicBoolean(false)
         val fitScope = CoroutineScope(Dispatchers.Default + Job())
 
-        var usePhysicsEstimates = false
+        var usePhysicsEstimates = true
 
         fun refit() {
             val points = dataStore.getPoints(includePhysicsEstimates = usePhysicsEstimates)

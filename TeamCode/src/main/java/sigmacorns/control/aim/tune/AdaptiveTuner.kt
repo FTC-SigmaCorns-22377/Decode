@@ -31,7 +31,7 @@ class AdaptiveTuner(
     }
 
     private fun interpolate(distance: Double, extract: (SpeedPoint) -> Double): Double? {
-        val points = dataStore.getPoints(includePhysicsEstimates = false)
+        val points = dataStore.getPoints()
         if (points.size < 2) return null
 
         val sorted = points.sortedBy { it.distance }
@@ -85,7 +85,7 @@ class AdaptiveTuner(
 
     fun pointCount(): Int = dataStore.getPoints().size
 
-    fun canInterpolate(): Boolean = dataStore.getPoints(includePhysicsEstimates = false).size >= 2
+    fun canInterpolate(): Boolean = dataStore.getPoints().size >= 2
 
     fun save() = dataStore.save()
 }
