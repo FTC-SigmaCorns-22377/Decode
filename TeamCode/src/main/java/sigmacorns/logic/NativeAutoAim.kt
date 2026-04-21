@@ -22,6 +22,7 @@ import sigmacorns.subsystem.ShooterConfig
 import sigmacorns.subsystem.TurretServoConfig
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.time.Duration
 
@@ -181,7 +182,11 @@ class NativeAutoAim(
         val turret  = robot.turret
         val fusedPose = autoAim.fusedPose
         val now = robot.io.time()
-        val nBalls = robot.beamBreak.ballCount
+        var nBalls = robot.beamBreak.ballCount
+
+        if(shotRequested && nBalls==0) {
+            nBalls = 1
+        }
 
         // ── Burst sequencing: detect ball exits ──────────────────────
         if (burstActive) {
@@ -470,7 +475,7 @@ class NativeAutoAim(
             targetPhi   = nextShotState.phi
             targetOmega = lastOmega.toDouble()  // hold current shot's flywheel
         } else {
-            targetTheta = lastTheta.toDouble()
+            targetTheta = if(timeToZone>0) atan2(goal.y-fusedPose.v.y,goal.x-fusedPose.v.x) else lastTheta.toDouble()
             targetPhi   = lastPhi.toDouble()
             targetOmega = lastOmega.toDouble()
         }
