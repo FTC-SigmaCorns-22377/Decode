@@ -4,8 +4,8 @@ import org.joml.Vector2d
 import org.joml.Vector3d
 import org.junit.jupiter.api.Test
 import sigmacorns.io.JoltSimIO
+import sigmacorns.logic.BallChaseAutoFSM
 import sigmacorns.logic.BallTrackingSystem
-import sigmacorns.logic.ChaseCoordinator
 import sigmacorns.math.Pose2d
 import sigmacorns.sim.viz.SimVizServer
 import sigmacorns.subsystem.Drivetrain
@@ -83,15 +83,25 @@ class BallChaseVizTest {
 
         val tracking = BallTrackingSystem(config = cfg, io = sim)
         val drivetrain = Drivetrain()
-        val chase = ChaseCoordinator(
-            drivetrain = drivetrain,
-            tracking = tracking,
-            io = sim,
-            maxSpeed = 0.6,
-            stopRadiusM = 0.25,
-            slowDownRadiusM = 0.8,
+
+        // Shooting zone: position near the red goal facing it. Field frame.
+        val goal = sigmacorns.constants.FieldLandmarks.redGoalPosition
+        val shootingZone = Pose2d(
+            goal.x - 1.0, goal.y - 0.6,
+            kotlin.math.atan2(goal.y - (goal.y - 0.6), goal.x - (goal.x - 1.0)),
         )
-        chase.enabled = false
+
+        val fsm = BallChaseAutoFSM(
+            tracking = tracking,
+            drivetrain = drivetrain,
+            io = sim,
+            shootingZone = shootingZone,
+            maxSpeed = 1.0,
+            arrivalRadiusM = 0.18,
+            chasePullInRadiusM = 0.35,
+            flywheelShootSpeed = 1.0,
+            heldBallCountFn = { sim.heldBalls.size },
+        )
 
         val server = SimVizServer(sim)
         val sigmaAtomic = java.util.concurrent.atomic.AtomicReference(Scenario.LIVE)
@@ -120,8 +130,8 @@ class BallChaseVizTest {
             }
         }
         server.onChaseToggle = { on ->
-            chase.enabled = on
-            println("[BallChaseViz] chase -> $on")
+            fsm.enabled = on
+            println("[BallChaseViz] autoFSM -> $on")
         }
         server.trackerStateProvider = {
             val t = sim.time().inWholeMilliseconds / 1000.0
@@ -191,10 +201,11 @@ class BallChaseVizTest {
             while (!Thread.currentThread().isInterrupted) {
                 server.syncGamepads(gp1, gp2)
 
-                // Toggle auto-chase with gp1.a (rising edge).
+                // Toggle auto-FSM with gp1.a (rising edge). Same toggle is
+                // also driven by the browser button via onChaseToggle.
                 if (gp1.a && !lastChaseToggleSent) {
-                    chase.enabled = !chase.enabled
-                    println("[BallChaseViz] chase = ${chase.enabled}")
+                    fsm.enabled = !fsm.enabled
+                    println("[BallChaseViz] autoFSM = ${fsm.enabled}")
                 }
                 lastChaseToggleSent = gp1.a
 
@@ -203,8 +214,8 @@ class BallChaseVizTest {
                 // Step tracker first (consumes the latest detections).
                 tracking.update(tNow)
 
-                if (chase.enabled) {
-                    chase.update()
+                if (fsm.enabled) {
+                    fsm.update()
                 } else {
                     // Manual driver control.
                     drivetrain.update(gp1, sim)

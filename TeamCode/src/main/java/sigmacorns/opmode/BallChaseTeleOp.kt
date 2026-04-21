@@ -2,28 +2,30 @@ package sigmacorns.opmode
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import sigmacorns.Robot
+import sigmacorns.constants.FieldLandmarks
 import sigmacorns.constants.Limelight
 import sigmacorns.io.HardwareIO
+import sigmacorns.logic.BallChaseAutoFSM
 import sigmacorns.logic.BallTrackingSystem
-import sigmacorns.logic.ChaseCoordinator
 import sigmacorns.math.Pose2d
 import sigmacorns.vision.tracker.TrackerConfig
 import kotlin.time.DurationUnit
 
 /**
- * First-light ball-chase opmode.
+ * Ball-chase opmode with an auto-cycle state machine.
  *
- * Behavior:
- *   - Initializes the Robot + Limelight (BALL_PIPELINE). If no Limelight is
- *     present (e.g. running against SimIO without a camera), the tracking
- *     pipeline returns empty detections and the robot stays in manual drive.
- *   - Holds right bumper = AUTO-CHASE enabled. Release = manual drive resumes
- *     immediately. This is the manual-override abort the tracker prompt asks
- *     for — the driver can always reclaim the robot by releasing the bumper.
- *   - Drivetrain during manual drive: same gamepad mapping as MainTeleOp
- *     (left stick translate, right stick x rotate).
+ * Right bumper HELD = auto-chase ON: tracker picks the nearest confirmed ball,
+ * the robot drives straight at it with the intake running. When the 3 beam
+ * breaks report a full hopper, the robot drives to a shooting zone near the
+ * goal, spins up, disengages the blocker and fires. When the hopper empties,
+ * it goes back to chasing. Release right bumper at any time to reclaim
+ * manual drive immediately — the FSM stops commanding subsystems and zeros
+ * intake / flywheel / blocker outputs.
  *
- * Telemetry: tracks seen, target id, distance to target.
+ * Requires Limelight pipeline [Limelight.BALL_PIPELINE] to be configured as
+ * a color detector tuned for the DECODE artifact. Camera intrinsics +
+ * extrinsics are loaded from config/ball_tracker.json — calibrate + verify
+ * before trusting the position estimates.
  */
 @TeleOp(name = "Ball Chase TeleOp", group = "Chase")
 class BallChaseTeleOp : SigmaOpMode() {
@@ -33,66 +35,63 @@ class BallChaseTeleOp : SigmaOpMode() {
         robotRef = robot
         robot.init(Pose2d(), apriltagTracking = false)
 
-        // Swap Limelight to the ball pipeline. We do this once here rather than
-        // every tick so VisionTracker is not fighting us for pipeline ownership.
         (io as? HardwareIO)?.limelight?.pipelineSwitch(Limelight.BALL_PIPELINE)
 
         val config = TrackerConfig.loadDefault()
         val tracking = BallTrackingSystem(config = config, io = io)
-        val chase = ChaseCoordinator(
-            drivetrain = robot.drive,
-            tracking = tracking,
-            io = io,
-            maxSpeed = 0.6,
-            stopRadiusM = 0.25,
-            slowDownRadiusM = 0.8,
-            rotateToTarget = true,
-        )
-        chase.enabled = false
 
-        telemetry.addLine("Ball Chase TeleOp ready. Hold RB to auto-chase; release to regain manual drive.")
+        // Shooting zone: 1.0 m out, 0.6 m to the side of the red goal.
+        val goal = FieldLandmarks.redGoalPosition
+        val zoneX = goal.x - 1.0
+        val zoneY = goal.y - 0.6
+        val shootingZone = Pose2d(zoneX, zoneY, kotlin.math.atan2(goal.y - zoneY, goal.x - zoneX))
+
+        val fsm = BallChaseAutoFSM(
+            tracking = tracking,
+            drivetrain = robot.drive,
+            io = io,
+            shootingZone = shootingZone,
+            maxSpeed = 1.0,
+            arrivalRadiusM = 0.18,
+            chasePullInRadiusM = 0.35,
+            flywheelShootSpeed = 1.0,
+        )
+
+        telemetry.addLine("Ball Chase TeleOp ready. Hold RB for auto-cycle; release for manual.")
         telemetry.update()
 
         waitForStart()
 
-        ioLoop { state, dt ->
+        ioLoop { state, _ ->
             val t = state.timestamp.toDouble(DurationUnit.SECONDS)
 
-            // 1. Run tracker every tick so the estimate stays warm even when
-            //    auto-chase is disabled (lets the driver see what the tracker
-            //    knows before committing).
             tracking.update(t)
 
-            // 2. Chase is gated behind right bumper. Release = manual.
-            val wantChase = gamepad1.right_bumper
-            chase.enabled = wantChase
-            if (wantChase) {
-                chase.update()
+            val wantAuto = gamepad1.right_bumper
+            fsm.enabled = wantAuto
+            if (wantAuto) {
+                fsm.update()
             } else {
                 robot.drive.update(gamepad1, io)
             }
 
-            telemetry.addData("scenario", if (wantChase) "AUTO-CHASE" else "MANUAL")
+            telemetry.addData("mode", if (wantAuto) fsm.phase else "MANUAL")
             telemetry.addData("tracks", tracking.tracker.tracks.size)
             val tgt = tracking.target
             if (tgt != null) {
                 val p = tgt.positionAt(t)
                 val pose = io.position()
-                val dx = p.x - pose.v.x; val dy = p.y - pose.v.y
-                val d = kotlin.math.hypot(dx, dy)
-                telemetry.addData("target", "#${tgt.id} (hits=${tgt.hits})")
-                telemetry.addData("target pos", "(%.2f, %.2f)".format(p.x, p.y))
-                telemetry.addData("distance", "%.2f m".format(d))
+                val d = kotlin.math.hypot(p.x - pose.v.x, p.y - pose.v.y)
+                telemetry.addData("target", "#${tgt.id} (hits=${tgt.hits})  d=%.2fm".format(d))
             } else {
                 telemetry.addLine("no target")
             }
+            telemetry.addData("held", BallChaseAutoFSM.countHeldFromBeamBreaks(io))
             telemetry.update()
 
             false
         }
 
-        // Leave the Limelight pipeline back on AprilTags on exit so a later
-        // opmode that needs localization isn't surprised.
         (io as? HardwareIO)?.limelight?.pipelineSwitch(Limelight.APRILTAG_PIPELINE)
     }
 }
