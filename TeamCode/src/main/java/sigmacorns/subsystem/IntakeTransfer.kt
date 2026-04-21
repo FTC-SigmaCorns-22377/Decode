@@ -55,8 +55,8 @@ class IntakeTransfer(val io: SigmaIO) {
         const val INTAKE_POWER = 1.0
         const val OUTTAKE_POWER = -1.0
         const val TRANSFER_POWER = 1.0
-        const val BLOCKER_ENGAGED = 0.23
-        const val BLOCKER_DISENGAGED = 0.45
+        const val BLOCKER_ENGAGED = 0.1429
+        const val BLOCKER_DISENGAGED = 0.345
 
         // SET TO ZERO FOR TESTING AUTO AIM
         // when blocker is reinstalled NativeAutoAim will need to be refactored to account for delay

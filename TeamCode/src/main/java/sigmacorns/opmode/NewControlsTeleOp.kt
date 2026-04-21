@@ -20,8 +20,8 @@ import kotlin.math.max
  *   X                    - Toggle field-centric drive
  *
  *   Left trigger         - Hold to intake balls
+ *   Right trigger        - Hold to shoot (manual transfer, no auto-aim required)
  *   B                    - Hold to reverse intake (spit balls out)
- *   Right trigger        - Hold to shoot (flywheel + transfer)
  *
  * GAMEPAD 2 (Operator):
  *   Left stick           - Translate (mecanum drive, when GP2 drive enabled)
@@ -184,13 +184,13 @@ class NewControlsTeleOp : SigmaOpMode() {
             lastStart2 = gamepad2.start
 
             // --- Intake: GP1 left trigger, or GP2 left trigger when GP2 drive active ---
+            val gp1Shoot = gamepad1.right_trigger > 0.1
+            val gp2Shoot = gp2DriveEnabled && gamepad2.right_trigger > 0.1
             val intakeTriggered = gamepad1.left_trigger > 0.1 ||
                 (gp2DriveEnabled && gamepad2.left_trigger > 0.1)
-            val shootTriggered = gamepad1.right_trigger > 0.1 ||
-                (gp2DriveEnabled && gamepad2.right_trigger > 0.1)
-            if (intakeTriggered && !shootTriggered) {
+            if (intakeTriggered && !gp2Shoot) {
                 robot.intakeCoordinator.startIntake()
-            } else if (!gamepad1.b && !gamepad2.b) {
+            } else if (!gamepad1.b && !gamepad2.b && !gp1Shoot && !gp2Shoot) {
                 if (robot.intakeTransfer.state == IntakeTransfer.State.INTAKING ||
                     robot.intakeTransfer.state == IntakeTransfer.State.REVERSING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
@@ -247,9 +247,13 @@ class NewControlsTeleOp : SigmaOpMode() {
                 )
             }
 
-            // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
-            if (shootTriggered) {
-                if(autoAimEnabled) {
+            // --- Shooting and flywheel ---
+            // GP1 right trigger: direct manual shoot regardless of auto-aim or zone
+            // GP2 right trigger (when GP2 drive enabled): auto-aim shot
+            if (gp1Shoot) {
+                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+            } else if (gp2Shoot) {
+                if (autoAimEnabled) {
                     robot.aimFlywheel = true
                     robot.aim.shotRequested = true
                 } else {
@@ -263,21 +267,22 @@ class NewControlsTeleOp : SigmaOpMode() {
                 robot.aimFlywheel = false
                 robot.aim.shotRequested = false
             } else {
-                robot.aimFlywheel = autoAimEnabled
-                if (!autoAimEnabled) {
-                    robot.aim.shotRequested = false
-                    // In manual mode, release trigger = stop transfer.
-                    // In auto-aim mode, the coordinator owns TRANSFERRING/READY_TO_SHOOT.
-                    if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
-                        robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-                    }
+                robot.aim.shotRequested = false
+                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING && !robot.aimFlywheel) {
+                    robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 }
-                robot.shooter.flywheelTarget = if (flywheelAlwaysOn) 240.0 else 0.0
+                robot.aimFlywheel = autoAimEnabled && flywheelAlwaysOn
+                when {
+                    !flywheelAlwaysOn -> robot.shooter.flywheelTarget = 0.0
+                    !autoAimEnabled   -> robot.shooter.flywheelTarget = 240.0
+                    // autoAimEnabled && flywheelAlwaysOn: NativeAutoAim owns flywheelTarget
+                }
             }
 
             // ============================================================
             // Robot update
             // ============================================================
+            robot.intakeCoordinator.manualShooting = gp1Shoot
             robot.update()
             io.update()
 
@@ -334,7 +339,7 @@ class NewControlsTeleOp : SigmaOpMode() {
             })
             telemetry.addData("Intake1 RPM", "%.0f", intake1RPM)
             telemetry.addData("Transfer", if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) "RUNNING" else "IDLE")
-            telemetry.addData("Blocker", if (io.blocker == 0.0) "ENGAGED" else "DISENGAGED")
+            telemetry.addData("Blocker", if (io.blocker <= sigmacorns.subsystem.IntakeTransfer.BLOCKER_ENGAGED) "ENGAGED" else "DISENGAGED")
             telemetry.addData("Auto-Shoot", if (robot.intakeCoordinator.autoShootEnabled) "ON" else "OFF")
             telemetry.addData("In Shoot Zone", robot.intakeCoordinator.inShootingZone)
             telemetry.addData("Flywheel Always-On", if (flywheelAlwaysOn) "ON" else "OFF")

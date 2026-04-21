@@ -96,6 +96,51 @@ class NativeAutoAim(
         }
     private var plannedShotSetTime: kotlin.time.Duration? = null
 
+    // ── Diagnostic hooks (DebuggingTeleOp) ───────────────────────────
+    /** When true, skips the empirical tuner and uses the raw solver omega/hood. */
+    var diagDisableEmpTuner: Boolean = false
+    /** When non-null, substitutes this value for the measured flywheel ω fed to the solver. */
+    var diagForceCurOmega: Float? = null
+
+    /** Latest empirical-tuner omega (null if tuner not applied) — for telemetry. */
+    var diagLastEmpOmega: Double? = null
+        private set
+    /** Latest solver-produced target omega — for telemetry. */
+    var diagLastSolverTargetOmega: Double = 0.0
+        private set
+    /** Did the latest solve return all-balls-feasible? */
+    var diagLastAllBallsFeasible: Boolean = false
+        private set
+    /** Did the latest forward-sim check say we'd hit? */
+    var diagLastInTolerance: Boolean = false
+        private set
+    /** Did the latest solver call return any solution? */
+    var diagLastSolverSolved: Boolean = false
+        private set
+    /** Latest ω actually handed to the solver (after optional [diagForceCurOmega]). */
+    var diagLastCurOmegaToSolver: Float = 0f
+        private set
+
+    /** Count of burstActive false→true transitions since last [diagResetCounters]. */
+    var diagBurstActivations: Int = 0
+        private set
+    /** Count of burstActive true→false transitions since last [diagResetCounters]. */
+    var diagBurstDeactivations: Int = 0
+        private set
+    /** Count of loops where the solver did not flag all-balls-feasible since last reset. */
+    var diagInfeasibleLoops: Int = 0
+        private set
+    /** Count of loops where the solver threw (excluded from infeasible count). */
+    var diagSolverExceptions: Int = 0
+        private set
+
+    fun diagResetCounters() {
+        diagBurstActivations = 0
+        diagBurstDeactivations = 0
+        diagInfeasibleLoops = 0
+        diagSolverExceptions = 0
+    }
+
     // ── Zones (mirrored for alliance) ────────────────────────────────
     private lateinit var goalZone: List<Vector2d>
     private lateinit var farZone: List<Vector2d>
@@ -227,7 +272,8 @@ class NativeAutoAim(
         val gX = goal.x.toFloat(); val gY = goal.y.toFloat(); val gZ = goal.z.toFloat()
         val curTheta = (turret.pos + fusedPose.rot).toFloat()
         val curPhi   = shooter.computedHoodAngle.toFloat()
-        val curOmega = robot.io.flywheelVelocity().toFloat()
+        val curOmega = diagForceCurOmega ?: robot.io.flywheelVelocity().toFloat()
+        diagLastCurOmegaToSolver = curOmega
 
         val robotVx = vel.x.toFloat()
         val robotVy = vel.y.toFloat()
@@ -437,7 +483,12 @@ class NativeAutoAim(
             }
         } catch (e: Exception) {
             if (shouldLog) println("[NativeAutoAim] " + "solver threw: $e")
+            diagSolverExceptions++
         }
+
+        diagLastSolverSolved = solved
+        diagLastAllBallsFeasible = allBallsFeasible
+        if (!allBallsFeasible) diagInfeasibleLoops++
 
         if (shouldLog) {
             println("[NativeAutoAim] " + "solve: solved=$solved feasible=$allBallsFeasible" +
@@ -447,12 +498,14 @@ class NativeAutoAim(
 
         // Apply empirical hood/flywheel before any early return so the flywheel
         // always spins up when requested, even if the native solver can't solve.
-        val empHoodRad = empiricalTuner?.getRecommendedHoodAngle(targetDistance)?.let { Math.toRadians(it) }
-        val empOmega   = empiricalTuner?.getRecommendedSpeed(targetDistance)
+        val tuner = if (diagDisableEmpTuner) null else empiricalTuner
+        val empHoodRad = tuner?.getRecommendedHoodAngle(targetDistance)?.let { Math.toRadians(it) }
+        val empOmega   = tuner?.getRecommendedSpeed(targetDistance)
+        diagLastEmpOmega = empOmega
+        diagLastSolverTargetOmega = lastOmega.toDouble()
 
         if (robot.aimFlywheel) {
-            shooter.hoodAngle      = empHoodRad ?: lastPhi.toDouble()
-            shooter.flywheelTarget = empOmega   ?: lastOmega.toDouble()
+            shooter.hoodAngle = empHoodRad ?: lastPhi.toDouble()
         }
 
         if (!solved) {
@@ -539,11 +592,14 @@ class NativeAutoAim(
             miss && inZone
         }
 
+        diagLastInTolerance = inTolerance
+
         // ── Fire: only in zone, only when solver confirms all balls feasible ──
         // burstActive is managed independently of the turret check so a jerk that
         // throws the turret off only *pauses* the transfer (readyToShoot = false)
         // rather than aborting the burst entirely — the transfer resumes once the
         // turret corrects back within burstTurretTolerance.
+        val wasBurstActive = burstActive
         if (shotRequested && (burstActive || inTolerance) && allBallsFeasible) {
             if (!burstActive) {
                 burstActive = true
@@ -556,6 +612,8 @@ class NativeAutoAim(
         } else {
             burstActive = false
         }
+        if (!wasBurstActive && burstActive) diagBurstActivations++
+        if (wasBurstActive && !burstActive) diagBurstDeactivations++
 
         val turretErr = kotlin.math.abs(turret.pos - turret.effectiveTargetAngle)
         readyToShoot = burstActive && turretErr < AimConfig.burstTurretTolerance

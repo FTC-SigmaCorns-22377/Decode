@@ -55,6 +55,19 @@ class Shooter(
     var hoodServoPosition: Double = 0.5
         private set
 
+    // --- Diagnostic hooks (DebuggingTeleOp) ---
+
+    /** When non-null, overrides the intake-based LQR r weight used by [calculateFlywheelSpeed]. */
+    var diagForceR: Double? = null
+
+    /** Last LQR r weight actually used (for telemetry). */
+    var diagLastR: Double = 0.0
+        private set
+
+    /** Last commanded motor power written to [SigmaIO.flywheel] (for telemetry). */
+    var diagLastPower: Double = 0.0
+        private set
+
     // ========================================================================
     // Update
     // ========================================================================
@@ -76,15 +89,18 @@ class Shooter(
 
         if (flywheelTarget == 0.0) {
             robot.io.flywheel = 0.0
+            diagLastPower = 0.0
             return
         }
 
-        robot.io.flywheel = calculateFlywheelSpeed(
+        val power = calculateFlywheelSpeed(
             robot.io.voltage(),
             flywheelTarget,
             curV,
             dt.toDouble(DurationUnit.SECONDS)
         )
+        robot.io.flywheel = power
+        diagLastPower = power
     }
 
     /**
@@ -109,7 +125,8 @@ class Shooter(
         if (hubVoltage <= 0.0) return 0.0
 
         val q = 1.0 // q
-        val r = if (robot.io.intake > 0.0) { 20.0 } else { 120.0 } // r
+        val r = diagForceR ?: if (robot.io.intake > 0.0) { 20.0 } else { 120.0 } // r
+        diagLastR = r
 
         val inertia = FLYWHEEL_INERTIA
         val referenceVoltage = 12.0
