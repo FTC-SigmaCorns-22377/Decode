@@ -407,7 +407,7 @@ class NativeAutoAim(
             readyToShoot = false
         }
 
-        if (shotRequested && readyToShoot) {
+        if (shotRequested && readyToShoot && robot.intakeCoordinator.inShootingZone) {
             shotRequested = false
             robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
         }
