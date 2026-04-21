@@ -268,41 +268,34 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
     override fun voltage(): Double = savedVoltage
 
     /**
-     * Read ball detections from the Limelight color pipeline.
-     *
-     * Returns empty unless the Limelight is currently on
-     * [sigmacorns.constants.Limelight.BALL_PIPELINE] — this avoids hijacking
-     * the AprilTag pipeline used for localization. The caller is responsible
-     * for pipeline switching (typically at opmode init or during a dedicated
-     * vision phase).
-     *
-     * TODO latency compensation — use `result.captureLatency` (ms) to backdate
-     * each detection's capture timestamp. For now we stamp with the caller's
-     * loop time, which is ~15-30 ms late.
+     * Pluggable source of on-robot ball detections. The vision pipeline lives
+     * in the opmode (e.g. `BallChaseTeleOp` owns the `VisionPortal` +
+     * `BallDetectionProcessor`) — when the opmode calls
+     *   hardwareIO.ballDetectionProvider = { processor.detectedBalls }
+     * `getBallDetections` starts returning `PixelDetection` entries built from
+     * each bounding-box center. Null = no camera pipeline attached (default).
+     */
+    @Volatile
+    var ballDetectionProvider: (() -> List<sigmacorns.vision.DetectedBall>)? = null
+
+    /**
+     * Bbox-center → (u, v) pixel detection. No Limelight — the vision pipeline
+     * runs on the Control Hub off the Global Shutter webcam via FTC SDK's
+     * VisionPortal + [sigmacorns.vision.BallDetectionProcessor]. Detections
+     * are stamped with the caller's loop time.
      */
     override fun getBallDetections(
         t: Double,
         robotPose: sigmacorns.math.Pose2d,
     ): List<sigmacorns.vision.tracker.PixelDetection> {
-        val ll = limelight ?: return emptyList()
-        val status = ll.status ?: return emptyList()
-        if (status.pipelineIndex != sigmacorns.constants.Limelight.BALL_PIPELINE) return emptyList()
-
-        val result = ll.latestResult ?: return emptyList()
-        if (!result.isValid) return emptyList()
-
-        val detectorResults = result.detectorResults ?: return emptyList()
-        if (detectorResults.isEmpty()) return emptyList()
-
-        val out = ArrayList<sigmacorns.vision.tracker.PixelDetection>(detectorResults.size)
-        for (d in detectorResults) {
-            out.add(
-                sigmacorns.vision.tracker.PixelDetection(
-                    u = d.targetXPixels,
-                    v = d.targetYPixels,
-                    t = t,
-                )
-            )
+        val provider = ballDetectionProvider ?: return emptyList()
+        val dets = provider.invoke()
+        if (dets.isEmpty()) return emptyList()
+        val out = ArrayList<sigmacorns.vision.tracker.PixelDetection>(dets.size)
+        for (d in dets) {
+            val u = d.bbox.x + d.bbox.width  / 2.0
+            val v = d.bbox.y + d.bbox.height / 2.0
+            out.add(sigmacorns.vision.tracker.PixelDetection(u = u, v = v, t = t))
         }
         return out
     }
