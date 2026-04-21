@@ -30,12 +30,18 @@ object Gating {
         return v >= cutoff
     }
 
-    /** Field rectangle bounds with an inward margin (meters). */
+    /**
+     * Field rectangle bounds with an inward margin, centered at the origin.
+     *
+     * The FTC DECODE field uses origin-centered coordinates (matches
+     * `FieldLandmarks.fieldHalfExtend` and `sigmacorns.math.Pose2d`), so
+     * valid `p` satisfies `|p.x| <= fieldWidthM/2 - margin` and likewise for y.
+     */
     fun insideField(p: Vector2d, fieldWidthM: Double, fieldHeightM: Double, marginM: Double): Boolean {
-        return p.x >= marginM &&
-               p.x <= fieldWidthM  - marginM &&
-               p.y >= marginM &&
-               p.y <= fieldHeightM - marginM
+        val halfW = fieldWidthM / 2.0 - marginM
+        val halfH = fieldHeightM / 2.0 - marginM
+        return p.x >= -halfW && p.x <= halfW &&
+               p.y >= -halfH && p.y <= halfH
     }
 
     /**

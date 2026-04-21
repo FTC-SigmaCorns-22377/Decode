@@ -39,23 +39,33 @@ class GatingTest {
     // ---- insideField ----
 
     @Test
-    @DisplayName("field bounds accept a center point")
+    @DisplayName("field bounds accept the origin (center of the field)")
     fun fieldCenterAccepted() {
-        assertTrue(Gating.insideField(Vector2d(1.8, 1.8), 3.6576, 3.6576, 0.1))
+        assertTrue(Gating.insideField(Vector2d(0.0, 0.0), 3.6576, 3.6576, 0.1))
     }
 
     @Test
-    @DisplayName("field bounds reject a point outside the rectangle")
+    @DisplayName("field bounds reject points outside the half-extent")
     fun fieldOutsideRejected() {
-        assertFalse(Gating.insideField(Vector2d(-0.5, 1.0), 3.6576, 3.6576, 0.1))
-        assertFalse(Gating.insideField(Vector2d(4.0, 1.0), 3.6576, 3.6576, 0.1))
+        // Half-extent = 1.8288 m; 0.1 m margin → valid |p.x|, |p.y| <= 1.73
+        assertFalse(Gating.insideField(Vector2d(2.0, 0.0), 3.6576, 3.6576, 0.1))
+        assertFalse(Gating.insideField(Vector2d(-2.0, 0.0), 3.6576, 3.6576, 0.1))
+        assertFalse(Gating.insideField(Vector2d(0.0, 2.0), 3.6576, 3.6576, 0.1))
     }
 
     @Test
     @DisplayName("field inward margin rejects points inside the margin band")
     fun fieldMarginBandRejected() {
-        // 5 cm from edge, 10 cm margin -> rejected
-        assertFalse(Gating.insideField(Vector2d(0.05, 1.0), 3.6576, 3.6576, 0.1))
+        // Valid range is [-1.73, 1.73]; 1.80 is inside the 10 cm inward margin.
+        assertFalse(Gating.insideField(Vector2d(1.80, 0.0), 3.6576, 3.6576, 0.1))
+        assertFalse(Gating.insideField(Vector2d(-1.80, 0.0), 3.6576, 3.6576, 0.1))
+    }
+
+    @Test
+    @DisplayName("field bounds accept negative coordinates inside the half-extent")
+    fun fieldNegativeCoordsAccepted() {
+        // Origin-centered: x=-1.0 is well inside [-1.73, 1.73].
+        assertTrue(Gating.insideField(Vector2d(-1.0, -0.5), 3.6576, 3.6576, 0.1))
     }
 
     // ---- insideRamp ----
@@ -173,7 +183,7 @@ class GatingTest {
             pixel = Vector2d(640.0, 200.0),
             imageHeight = 720,
             intakeMaskYMinFrac = 0.66,
-            fieldPoint = Vector2d(1.8, 1.8),
+            fieldPoint = Vector2d(0.5, 0.5),         // comfortably inside half-extent
             fieldWidthM = 3.6576, fieldHeightM = 3.6576, fieldMarginM = 0.1,
             rampPolygon = emptyList(), rampExpandM = 0.2,
             robotPose = Pose2d(0.0, 0.0, 0.0),

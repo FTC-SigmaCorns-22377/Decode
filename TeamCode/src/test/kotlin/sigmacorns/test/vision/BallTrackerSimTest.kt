@@ -59,8 +59,11 @@ class BallTrackerSimTest {
     private fun baseTrackerConfig(
         rampPolygon: List<Vector2d> = emptyList(),
     ) = TrackerConfig(
-        fieldWidthM = 3.6576,
-        fieldHeightM = 3.6576,
+        // Synthetic tracker-only field: generously sized so every scenario's
+        // placement (balls up to ~2.5 m from origin) stays inside the gate.
+        // The real 3.66 x 3.66 field is used in the chase-viz harness.
+        fieldWidthM = 6.0,
+        fieldHeightM = 6.0,
         fieldMarginM = 0.02,
         rampPolygon = rampPolygon,
         rampExpandM = 0.10,

@@ -23,8 +23,10 @@ class TrackerTest {
     private fun makeConfig(): TrackerConfig {
         // Looking forward and down. Camera 0.3 m above the floor, pitched down 25 deg.
         return TrackerConfig(
-            fieldWidthM = 3.6576,
-            fieldHeightM = 3.6576,
+            // Wider synthetic field so test positions (up to ~3 m from origin)
+            // stay inside the gate.
+            fieldWidthM = 8.0,
+            fieldHeightM = 8.0,
             fieldMarginM = 0.02,
             rampPolygon = emptyList(),
             rampExpandM = 0.0,
