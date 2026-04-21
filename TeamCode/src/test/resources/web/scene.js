@@ -510,6 +510,315 @@ function updateShotViz(shotViz) {
     }
 }
 
+// ---- Ball-tracker overlays + robot-POV camera panel ----
+
+/**
+ * Convert a field-frame point (x, y, z) to three.js world coords.
+ *   three.x <- field.y
+ *   three.y <- field.z      (height/up)
+ *   three.z <- field.x
+ * Consistent with the transform used by updateBalls / updateShotViz.
+ */
+function fieldToThree(fx, fy, fz = 0) { return new THREE.Vector3(fy, fz, fx); }
+
+// Pools: we keep stable mesh arrays and show/hide them, so there is no
+// per-frame allocation. Growing the pool is the only thing that allocates.
+const MAX_TRACKS = 16;
+const MAX_TRUTH_BALLS = 64;
+
+const groundTruthGroup = new THREE.Group();
+scene.add(groundTruthGroup);
+const truthBallMeshes = [];
+function ensureTruthBall(i) {
+    while (truthBallMeshes.length <= i) {
+        const geo = new THREE.SphereGeometry(0.04, 12, 8);
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0x8affa3, transparent: true, opacity: 0.55,
+        });
+        const m = new THREE.Mesh(geo, mat);
+        m.visible = false;
+        groundTruthGroup.add(m);
+        truthBallMeshes.push(m);
+    }
+    return truthBallMeshes[i];
+}
+
+const trackGroup = new THREE.Group();
+scene.add(trackGroup);
+const trackMeshes = [];       // small solid spheres at track position
+const trackLabels = [];       // Sprite labels with track id
+const trackEllipses = [];     // 2σ position ellipses as thin rings
+function makeTrackMesh() {
+    const group = new THREE.Group();
+    const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.035, 12, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffd54f }),
+    );
+    group.add(sphere);
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 128; labelCanvas.height = 64;
+    const labelTex = new THREE.CanvasTexture(labelCanvas);
+    const labelMat = new THREE.SpriteMaterial({ map: labelTex, transparent: true });
+    const sprite = new THREE.Sprite(labelMat);
+    sprite.scale.set(0.20, 0.10, 1);
+    sprite.position.set(0, 0.08, 0);
+    group.add(sprite);
+    return { group, sphere, sprite, labelCanvas, labelTex };
+}
+function ensureTrack(i) {
+    while (trackMeshes.length <= i) {
+        const t = makeTrackMesh();
+        t.group.visible = false;
+        trackGroup.add(t.group);
+        trackMeshes.push(t);
+
+        // 2σ ellipse: we use a thin ring deformed to match the 2x2 cov.
+        // Build a unit circle once; scale per frame.
+        const segs = 48;
+        const positions = new Float32Array((segs + 1) * 3);
+        for (let s = 0; s <= segs; s++) {
+            const a = (s / segs) * 2 * Math.PI;
+            positions[s * 3] = Math.cos(a);
+            positions[s * 3 + 1] = 0;
+            positions[s * 3 + 2] = Math.sin(a);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const mat = new THREE.LineBasicMaterial({
+            color: 0x80deea, transparent: true, opacity: 0.9,
+        });
+        const line = new THREE.Line(geo, mat);
+        line.frustumCulled = false;
+        line.visible = false;
+        trackGroup.add(line);
+        trackEllipses.push(line);
+    }
+    return { track: trackMeshes[i], ellipse: trackEllipses[i] };
+}
+
+// Eigendecomposition of a 2x2 symmetric matrix. Returns { angle, l1, l2 }.
+function eig2(a, b, c, d) {
+    // Matrix is [[a,b],[b,d]] assuming symmetry; clamp to symmetric.
+    const sym = (b + c) / 2;
+    const tr = a + d;
+    const det = a * d - sym * sym;
+    const disc = Math.max(0, tr * tr / 4 - det);
+    const s = Math.sqrt(disc);
+    const l1 = tr / 2 + s;
+    const l2 = tr / 2 - s;
+    const angle = Math.atan2(l1 - a, sym || 1e-12);
+    return { angle, l1: Math.max(l1, 0), l2: Math.max(l2, 0) };
+}
+
+const frustumLine = (() => {
+    const geo = new THREE.BufferGeometry();
+    const mat = new THREE.LineBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.35,
+    });
+    const l = new THREE.LineLoop(geo, mat);
+    l.frustumCulled = false;
+    l.visible = false;
+    scene.add(l);
+    return l;
+})();
+
+// ---- Robot-POV camera panel ----
+const camPanelWrap = document.getElementById('camera-panel-wrap');
+const camPanelCanvas = document.createElement('canvas');
+camPanelWrap.insertBefore(camPanelCanvas, camPanelWrap.firstChild);
+const camPanelRenderer = new THREE.WebGLRenderer({ canvas: camPanelCanvas, antialias: true });
+camPanelRenderer.setPixelRatio(window.devicePixelRatio);
+const camPanelCamera = new THREE.PerspectiveCamera(60, 16 / 9, 0.02, 50);
+
+const camPanelOverlayCanvas = document.getElementById('camera-overlay');
+const overlayCtx = camPanelOverlayCanvas.getContext('2d');
+
+function sizeCameraPanel(imageW, imageH) {
+    // Panel width = side-panel width; height chosen to preserve camera aspect.
+    const w = camPanelWrap.clientWidth;
+    const aspect = (imageW && imageH) ? (imageW / imageH) : (16 / 9);
+    const h = Math.round(w / aspect);
+    camPanelWrap.style.height = h + 'px';
+    camPanelRenderer.setSize(w, h, false);
+    camPanelOverlayCanvas.width = w * window.devicePixelRatio;
+    camPanelOverlayCanvas.height = h * window.devicePixelRatio;
+    camPanelOverlayCanvas.style.width = w + 'px';
+    camPanelOverlayCanvas.style.height = h + 'px';
+    overlayCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    camPanelCamera.aspect = aspect;
+    camPanelCamera.updateProjectionMatrix();
+}
+sizeCameraPanel(1280, 720);
+
+let lastCamera = null;     // cached intrinsics so we only resize on change
+
+// Core exported function — called each frame from app.js.
+function updateTracker(trackerState) {
+    // Ground truth balls.
+    for (let i = 0; i < truthBallMeshes.length; i++) truthBallMeshes[i].visible = false;
+    frustumLine.visible = false;
+    for (let i = 0; i < trackMeshes.length; i++) {
+        trackMeshes[i].group.visible = false;
+        trackEllipses[i].visible = false;
+    }
+    // Clear pixel overlay unconditionally.
+    overlayCtx.clearRect(0, 0, camPanelOverlayCanvas.clientWidth, camPanelOverlayCanvas.clientHeight);
+
+    if (!trackerState || !trackerState.camera) return;
+
+    const cam = trackerState.camera;
+    if (!lastCamera || lastCamera.width !== cam.width || lastCamera.height !== cam.height) {
+        sizeCameraPanel(cam.width, cam.height);
+        lastCamera = { width: cam.width, height: cam.height };
+        // Vertical FOV derived from intrinsics.
+        const fovVRad = 2 * Math.atan(cam.height / 2 / cam.fy);
+        camPanelCamera.fov = fovVRad * 180 / Math.PI;
+        camPanelCamera.updateProjectionMatrix();
+    }
+
+    // Ground-truth markers.
+    const truths = trackerState.ballTruth || [];
+    for (let i = 0; i < Math.min(truths.length, MAX_TRUTH_BALLS); i++) {
+        const b = truths[i];
+        const m = ensureTruthBall(i);
+        const v = fieldToThree(b.x, b.y, b.z);
+        m.position.copy(v);
+        m.visible = true;
+    }
+
+    // Camera frustum on the floor.
+    const frustum = cam.frustumGround || [];
+    if (frustum.length >= 2) {
+        const pts = frustum.map(([fx, fy]) => fieldToThree(fx, fy, 0.002));
+        frustumLine.geometry.setFromPoints(pts);
+        frustumLine.visible = true;
+    }
+
+    // Tracks + ellipses.
+    const tracks = trackerState.tracks || [];
+    const targetId = trackerState.targetId;
+    for (let i = 0; i < Math.min(tracks.length, MAX_TRACKS); i++) {
+        const tr = tracks[i];
+        const { track, ellipse } = ensureTrack(i);
+        const pos = fieldToThree(tr.x, tr.y, 0.04);
+        track.group.position.copy(pos);
+
+        const isTarget = (tr.id === targetId);
+        track.sphere.material.color.set(isTarget ? 0xff6e40 : (tr.confirmed ? 0xffd54f : 0x888888));
+        track.sphere.scale.setScalar(isTarget ? 1.3 : 1.0);
+
+        // Label: id + "*" if target + "✓" if confirmed.
+        const ctx2d = track.labelCanvas.getContext('2d');
+        ctx2d.clearRect(0, 0, 128, 64);
+        ctx2d.fillStyle = isTarget ? '#ff6e40' : (tr.confirmed ? '#ffd54f' : '#bbb');
+        ctx2d.font = 'bold 28px monospace';
+        ctx2d.textAlign = 'center';
+        ctx2d.fillText('#' + tr.id + (isTarget ? '*' : ''), 64, 40);
+        track.labelTex.needsUpdate = true;
+
+        track.group.visible = true;
+
+        // 2σ ellipse from 2x2 cov [a,b,c,d].
+        const a = tr.cov[0], b = tr.cov[1], c = tr.cov[2], d = tr.cov[3];
+        const e = eig2(a, b, c, d);
+        // 2σ scaling for 2-dof 95% ~= sqrt(5.991); use 2σ for visibility.
+        const k = 2.0;
+        ellipse.position.copy(pos); ellipse.position.y = 0.003;
+        // Rotate about Y (three.js up); eigenvector angle measured in field XY plane.
+        ellipse.rotation.set(0, -e.angle, 0);
+        ellipse.scale.set(k * Math.sqrt(e.l1), 1, k * Math.sqrt(e.l2));
+        ellipse.material.color.set(isTarget ? 0xff6e40 : 0x80deea);
+        ellipse.visible = true;
+    }
+
+    // Camera panel: position camPanelCamera from camera extrinsics.
+    const [ox, oy, oz] = cam.origin;
+    const R = cam.Rfc;
+    // Columns of R_field_camera = camera axes in field frame.
+    //   col0 = +X_cam (image right) = R[0..2]
+    //   col1 = +Y_cam (image down)  = R[3..5]
+    //   col2 = +Z_cam (forward)     = R[6..8]
+    const fx = R[6], fy = R[7], fz = R[8];
+    const uxF = -R[3], uyF = -R[4], uzF = -R[5];  // camera "up" in field = -Y_cam
+
+    const camPos = fieldToThree(ox, oy, oz);
+    const lookAtF = { x: ox + fx, y: oy + fy, z: oz + fz };
+    const lookAt = fieldToThree(lookAtF.x, lookAtF.y, lookAtF.z);
+
+    camPanelCamera.position.copy(camPos);
+    // Three.js `up` vector in three.js coords (from field up).
+    camPanelCamera.up.set(uyF, uzF, uxF);  // maps (fx_field, fy_field, fz_field) -> (y, z, x)
+    camPanelCamera.lookAt(lookAt);
+
+    camPanelRenderer.render(scene, camPanelCamera);
+
+    // 2D pixel overlays over the panel.
+    drawPixelOverlays(trackerState);
+}
+
+function drawPixelOverlays(state) {
+    const cam = state.camera;
+    const w = camPanelOverlayCanvas.clientWidth;
+    const h = camPanelOverlayCanvas.clientHeight;
+    if (!cam || !w || !h) return;
+    const sx = w / cam.width;
+    const sy = h / cam.height;
+
+    // Intake mask band.
+    const maskTop = cam.intakeMaskYMinFrac * cam.height * sy;
+    overlayCtx.fillStyle = 'rgba(255, 0, 0, 0.18)';
+    overlayCtx.fillRect(0, maskTop, w, h - maskTop);
+    overlayCtx.strokeStyle = 'rgba(255, 80, 80, 0.55)';
+    overlayCtx.lineWidth = 1;
+    overlayCtx.strokeRect(0, maskTop, w, h - maskTop);
+
+    // Raw detections (crosses).
+    overlayCtx.strokeStyle = '#ff1744';
+    overlayCtx.lineWidth = 2;
+    for (const d of state.detectionsPx || []) {
+        const x = d.u * sx; const y = d.v * sy;
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(x - 6, y); overlayCtx.lineTo(x + 6, y);
+        overlayCtx.moveTo(x, y - 6); overlayCtx.lineTo(x, y + 6);
+        overlayCtx.stroke();
+    }
+
+    // Track re-projected covariance ellipses in pixel space.
+    for (const tr of state.tracks || []) {
+        if (tr.u == null || tr.v == null || !tr.covPx) continue;
+        const x = tr.u * sx; const y = tr.v * sy;
+        const e = eig2(tr.covPx[0], tr.covPx[1], tr.covPx[2], tr.covPx[3]);
+        const k = 2.0;
+        const rx = k * Math.sqrt(e.l1) * sx;
+        const ry = k * Math.sqrt(e.l2) * sy;
+        overlayCtx.save();
+        overlayCtx.translate(x, y);
+        overlayCtx.rotate(e.angle);
+        overlayCtx.strokeStyle = (tr.id === state.targetId) ? '#ff6e40' : '#80deea';
+        overlayCtx.lineWidth = 1.5;
+        overlayCtx.beginPath();
+        overlayCtx.ellipse(0, 0, Math.max(rx, 1), Math.max(ry, 1), 0, 0, 2 * Math.PI);
+        overlayCtx.stroke();
+        overlayCtx.restore();
+
+        overlayCtx.fillStyle = (tr.id === state.targetId) ? '#ff6e40' : '#ffd54f';
+        overlayCtx.beginPath();
+        overlayCtx.arc(x, y, 3, 0, 2 * Math.PI);
+        overlayCtx.fill();
+    }
+
+    // HUD text.
+    overlayCtx.fillStyle = 'rgba(0,0,0,0.45)';
+    overlayCtx.fillRect(0, 0, w, 22);
+    overlayCtx.fillStyle = '#cfd8ff';
+    overlayCtx.font = '12px monospace';
+    overlayCtx.fillText(
+        `scenario=${state.scenario}  rms=${state.rmsErrorM == null ? '—' : state.rmsErrorM.toFixed(3) + 'm'}` +
+        `  tracks=${(state.tracks || []).length}  target=${state.targetId == null ? '—' : '#' + state.targetId}`,
+        6, 15,
+    );
+}
+
 // Resize handler
 window.addEventListener('resize', () => {
     const w = container.clientWidth;
@@ -517,6 +826,7 @@ window.addEventListener('resize', () => {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    if (lastCamera) sizeCameraPanel(lastCamera.width, lastCamera.height);
 });
 
 // Render loop
@@ -543,4 +853,4 @@ function updateGoals(goals) {
     updateScoreSprite(blueGoal, 'RED', goals.blueScore || 0, 'rgba(180,40,40,0.8)');
 }
 
-export { updateRobot, updateBalls, updateGoals, updateShotViz };
+export { updateRobot, updateBalls, updateGoals, updateShotViz, updateTracker };

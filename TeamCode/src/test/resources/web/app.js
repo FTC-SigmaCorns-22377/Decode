@@ -1,4 +1,4 @@
-import { updateRobot, updateBalls, updateGoals, updateShotViz } from './scene.js';
+import { updateRobot, updateBalls, updateGoals, updateShotViz, updateTracker } from './scene.js';
 
 const frames = [];
 let isLive = true;
@@ -49,6 +49,7 @@ function applyFrame(state) {
     updateBalls(state.balls || []);
     updateGoals(state.goals);
     updateShotViz(state.shotViz);
+    updateTracker(state.tracker);
     timeDisplay.textContent = state.t.toFixed(3) + 's';
     const held = state.heldBalls ? state.heldBalls.length : 0;
     posDisplay.innerHTML = `X: ${(-state.robot.x).toFixed(3)}<br>Y: ${state.robot.y.toFixed(3)}<br>Flywheel: ${Math.round(state.robot.flywheelRPM)} RPM<br>Held: ${held}/3`;
@@ -259,13 +260,36 @@ function readGamepad(slot) {
 
 function sendInput() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    console.log(readGamepad(0))
-
     ws.send(JSON.stringify({
         keys,
         gamepad1: readGamepad(0),
         gamepad2: readGamepad(1),
     }));
+}
+
+// ---- Scenario selector + auto-chase toggle (ball tracker UI) ----
+const scenarioSelect = document.getElementById('scenario-select');
+if (scenarioSelect) {
+    scenarioSelect.addEventListener('change', () => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: 'scenario', name: scenarioSelect.value }));
+    });
+}
+
+const chaseBtn = document.getElementById('chase-btn');
+let chaseOn = false;
+if (chaseBtn) {
+    chaseBtn.addEventListener('click', () => {
+        chaseOn = !chaseOn;
+        chaseBtn.textContent = 'AUTO-CHASE: ' + (chaseOn ? 'ON' : 'OFF');
+        chaseBtn.classList.toggle('active', chaseOn);
+        // Synthesize a gamepad1.a rising edge next tick via the `keys.space` path
+        // if we wanted — but simpler: fire a one-shot WS message and let the test
+        // treat it as a toggle.
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'chase', on: chaseOn }));
+        }
+    });
 }
 
 document.addEventListener('keydown', (e) => {

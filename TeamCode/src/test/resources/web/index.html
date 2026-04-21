@@ -6,7 +6,50 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a2e; color: #eee; font-family: monospace; overflow: hidden; }
-        #canvas-container { width: 100vw; height: calc(100vh - 40px); }
+
+        #main { display: flex; width: 100vw; height: calc(100vh - 40px); }
+        #canvas-container { flex: 1; min-width: 0; position: relative; }
+        #side-panel {
+            width: 460px; min-width: 360px; max-width: 50vw;
+            background: #16213e; border-left: 1px solid #333;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        #camera-panel-wrap {
+            position: relative;
+            background: #000;
+            border-bottom: 1px solid #333;
+        }
+        #camera-panel-wrap canvas { display: block; width: 100%; }
+        #camera-overlay {
+            position: absolute; top: 0; left: 0; pointer-events: none;
+        }
+        #camera-hud {
+            position: absolute; top: 6px; left: 8px;
+            font-size: 12px; color: #cfd8ff;
+            text-shadow: 0 1px 2px #000;
+            line-height: 1.4;
+            pointer-events: none;
+        }
+
+        #tracker-controls {
+            padding: 10px 12px; border-bottom: 1px solid #333;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        #tracker-controls label { font-size: 12px; color: #9fb3ff; }
+        #tracker-controls select, #tracker-controls button {
+            background: #0f3460; color: #eee; border: 1px solid #555;
+            padding: 6px 10px; cursor: pointer; font-family: monospace; font-size: 13px;
+        }
+        #tracker-controls button.active { background: #e94560; }
+        #tracker-legend {
+            padding: 8px 12px; font-size: 11px; line-height: 1.6;
+            border-bottom: 1px solid #333; color: #bbb;
+        }
+        .legend-swatch {
+            display: inline-block; width: 10px; height: 10px;
+            margin-right: 6px; vertical-align: middle; border-radius: 2px;
+        }
+
         #controls {
             height: 40px; display: flex; align-items: center; gap: 12px;
             padding: 0 16px; background: #16213e; border-top: 1px solid #333;
@@ -20,7 +63,7 @@
         #scrubber { flex: 1; }
         #time-display { min-width: 80px; text-align: right; }
         #pos-display {
-            position: fixed; top: 12px; right: 12px;
+            position: fixed; top: 12px; left: 12px;
             background: rgba(15, 52, 96, 0.85); border: 1px solid #555;
             padding: 8px 14px; font-size: 14px; line-height: 1.6;
             pointer-events: none; z-index: 10;
@@ -29,7 +72,41 @@
 </head>
 <body>
     <div id="pos-display">X: 0.000<br>Y: 0.000</div>
-    <div id="canvas-container"></div>
+
+    <div id="main">
+        <div id="canvas-container"></div>
+
+        <div id="side-panel">
+            <div id="tracker-controls">
+                <label for="scenario-select">NOISE SCENARIO (live-applied)</label>
+                <select id="scenario-select">
+                    <option value="LIVE">LIVE — low noise, default</option>
+                    <option value="PIXEL_ONLY">PIXEL_ONLY — σpx=1.5, no drop/FP</option>
+                    <option value="PIXEL_HEAVY">PIXEL_HEAVY — σpx=3.0</option>
+                    <option value="DROPOUT">DROPOUT — 30% frames dropped</option>
+                    <option value="FALSE_POSITIVES">FALSE_POSITIVES — 20% FP rate</option>
+                    <option value="FULL_NOISE">FULL_NOISE — drops + FPs + σpx=1.5</option>
+                </select>
+                <button id="chase-btn">AUTO-CHASE: OFF</button>
+            </div>
+
+            <div id="tracker-legend">
+                <div><span class="legend-swatch" style="background:#8affa3"></span>Ground-truth balls</div>
+                <div><span class="legend-swatch" style="background:#ffd54f"></span>Tracks (confirmed)</div>
+                <div><span class="legend-swatch" style="background:#ff6e40"></span>Target track</div>
+                <div><span class="legend-swatch" style="background:#80deea"></span>2σ position covariance</div>
+                <div><span class="legend-swatch" style="background:rgba(255,255,255,.4)"></span>Camera frustum (floor)</div>
+                <div><span class="legend-swatch" style="background:#ff1744"></span>Raw pixel detections</div>
+                <div><span class="legend-swatch" style="background:rgba(255,0,0,.25)"></span>Intake mask</div>
+            </div>
+
+            <div id="camera-panel-wrap">
+                <div id="camera-hud">CAMERA (robot POV)</div>
+                <canvas id="camera-overlay"></canvas>
+            </div>
+        </div>
+    </div>
+
     <div id="controls">
         <button id="play-pause">Pause</button>
         <input id="scrubber" type="range" min="0" max="0" value="0" step="1">
