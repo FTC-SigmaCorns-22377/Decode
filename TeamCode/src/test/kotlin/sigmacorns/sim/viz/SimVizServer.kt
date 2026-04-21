@@ -14,6 +14,7 @@ import sigmacorns.control.aim.Ballistics.ShotState
 import sigmacorns.io.JoltSimIO
 import sigmacorns.logic.AimConfig
 import sigmacorns.subsystem.ShooterConfig
+import sigmacorns.vision.viz.TrackerVizState
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import kotlin.math.abs
@@ -71,6 +72,30 @@ class SimVizServer(
     private val firstClientLatch = CountDownLatch(1)
 
     @Volatile private var robot: Robot? = null
+
+    /**
+     * Optional source of ball-tracker viz state. If non-null, the latest value
+     * is attached to each broadcast under the `"tracker"` key. Set this once
+     * at startup from the sim harness (e.g. BallChaseVizTest).
+     */
+    @Volatile var trackerStateProvider: (() -> TrackerVizState?)? = null
+
+    /**
+     * Browser → server scenario switch handler. Receives the scenario name
+     * selected in the viewer UI. Harness wires this to whatever swap logic
+     * it needs (noise profile, ball placement, etc).
+     */
+    @Volatile var onScenarioChange: ((String) -> Unit)? = null
+
+    /**
+     * Browser → server "auto-chase" toggle (bool = on/off). Hooked by the
+     * ball-tracker viz test; no-op otherwise.
+     */
+    @Volatile var onChaseToggle: ((Boolean) -> Unit)? = null
+
+    @Volatile private var lastScenarioFromClient: String? = null
+    /** Last scenario name the client sent over WS, or null if never set. */
+    fun scenarioFromClient(): String? = lastScenarioFromClient
 
     private val vizBallistics = Ballistics(
         rH = ballExitRadius,
@@ -130,6 +155,21 @@ class SimVizServer(
             ws.onMessage { ctx ->
                 try {
                     firstClientLatch.countDown()
+                    val raw = gson.fromJson(ctx.message(), Map::class.java) as Map<*, *>
+                    // Scenario-switch messages are `{"type":"scenario","name":"..."}`
+                    if (raw["type"] == "scenario") {
+                        val name = raw["name"]?.toString()
+                        if (name != null) {
+                            lastScenarioFromClient = name
+                            onScenarioChange?.invoke(name)
+                        }
+                        return@onMessage
+                    }
+                    if (raw["type"] == "chase") {
+                        val on = raw["on"] == true
+                        onChaseToggle?.invoke(on)
+                        return@onMessage
+                    }
                     val input = gson.fromJson(ctx.message(), BrowserInputState::class.java)
                     wasdState = input.keys
                     gamepad1State = input.gamepad1
@@ -161,7 +201,7 @@ class SimVizServer(
 
         val shotViz = buildShotViz()
 
-        val state = mapOf(
+        val base = mutableMapOf<String, Any?>(
             "t" to simIO.time().inWholeMilliseconds / 1000.0,
             "robot" to mapOf(
                 "x" to robotState[0],
@@ -187,6 +227,8 @@ class SimVizServer(
             ),
             "shotViz" to shotViz,
         )
+        trackerStateProvider?.invoke()?.let { base["tracker"] = it }
+        val state: Map<String, Any?> = base
 
         val json = gson.toJson(state)
         clients.removeIf { ctx ->
