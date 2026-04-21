@@ -57,6 +57,14 @@ class BallChaseAutoFSM(
     private val chasePullInRadiusM: Double = 0.30,
     private val flywheelShootSpeed: Double = 1.0,
     private val headingP: Double = 2.0,
+    /**
+     * Yaw rate (rad/s-equivalent power in [-1, 1]) used to sweep the camera
+     * when CHASE has no target — typically right after transitioning back
+     * from the shooting zone, where the camera is pointed toward the goal
+     * and no balls are in view. Spinning slowly sweeps the field, the
+     * tracker catches something, and CHASE commits to it.
+     */
+    private val searchYawRate: Double = 0.6,
     private val heldBallCountFn: () -> Int = { countHeldFromBeamBreaks(io) },
 ) {
     enum class Phase { IDLE, CHASE, DRIVE_TO_SHOOT_ZONE, SHOOT }
@@ -102,7 +110,10 @@ class BallChaseAutoFSM(
 
                 val target = tracking.targetBallField
                 if (target == null) {
-                    drivetrain.drive(Pose2d(0.0, 0.0, 0.0), io)
+                    // No track in view — sweep the camera by rotating in place
+                    // until the tracker locks something. Intake stays on so
+                    // anything we happen to graze on the way gets picked up.
+                    drivetrain.drive(Pose2d(0.0, 0.0, searchYawRate), io)
                     return
                 }
                 driveTowardField(target.v, yawToTargetAllowed = true)

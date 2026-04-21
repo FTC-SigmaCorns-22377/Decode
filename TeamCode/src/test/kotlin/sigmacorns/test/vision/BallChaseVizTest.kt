@@ -79,6 +79,9 @@ class BallChaseVizTest {
             cameraExtrinsics = simExtrinsics(),
             intakeMaskYMinFrac = 0.95,  // near-zero mask in sim
             rampPolygon = emptyList(),
+            // Faster lock-on during a search sweep: one confirmed hit is enough
+            // in sim since we trust Jolt's ball positions. Hardware stays at 3.
+            minHitsForConfirmed = 1,
         )
 
         val tracking = BallTrackingSystem(config = cfg, io = sim)
