@@ -26,20 +26,27 @@ object VizStateBuilder {
         config: TrackerConfig,
         robotPose: Pose2d,
         ballsTruthField: List<Vector3d>,
+        ballsTruthColors: List<String?> = emptyList(),
         rawDetectionsPx: List<PixelDetection>,
         survivingFieldDetections: List<Vector2d>,
         survivingFieldDetectionCovs: List<DoubleArray>,
         targetId: Int?,
     ): TrackerVizState {
         val T_FC = Frames.buildTFC(robotPose, config.TRC)
+        val T_CF = Matrix4d(T_FC).invert()
         val K = config.intrinsics
 
         val camera = buildCameraViz(config, T_FC)
-        val truth = ballsTruthField.map { b ->
+        val truth = ballsTruthField.mapIndexed { idx, b ->
             val uv = Projection.forwardProject(b, K, T_FC)
+            val bc = Vector3d()
+            T_CF.transformPosition(b, bc)
+            val depth = if (bc.z > 0.0) bc.z else null
             BallTruthViz(
                 x = b.x, y = b.y, z = b.z,
                 u = uv?.get(0), v = uv?.get(1),
+                depth = depth,
+                color = ballsTruthColors.getOrNull(idx),
             )
         }
         val detsPx = rawDetectionsPx.map { PixelDetViz(it.u, it.v) }

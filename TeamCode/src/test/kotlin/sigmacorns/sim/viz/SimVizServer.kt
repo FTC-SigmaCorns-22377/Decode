@@ -93,6 +93,13 @@ class SimVizServer(
      */
     @Volatile var onChaseToggle: ((Boolean) -> Unit)? = null
 
+    /**
+     * Browser → server "reset" button. Harness rewinds the sim state — in
+     * [sigmacorns.test.vision.BallChaseVizTest] this clears + respawns
+     * field balls, resets the robot pose, and clears tracker / FSM state.
+     */
+    @Volatile var onReset: (() -> Unit)? = null
+
     @Volatile private var lastScenarioFromClient: String? = null
     /** Last scenario name the client sent over WS, or null if never set. */
     fun scenarioFromClient(): String? = lastScenarioFromClient
@@ -168,6 +175,10 @@ class SimVizServer(
                     if (raw["type"] == "chase") {
                         val on = raw["on"] == true
                         onChaseToggle?.invoke(on)
+                        return@onMessage
+                    }
+                    if (raw["type"] == "reset") {
+                        onReset?.invoke()
                         return@onMessage
                     }
                     val input = gson.fromJson(ctx.message(), BrowserInputState::class.java)

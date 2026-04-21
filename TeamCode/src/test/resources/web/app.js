@@ -283,11 +283,22 @@ if (chaseBtn) {
         chaseOn = !chaseOn;
         chaseBtn.textContent = 'AUTO-CHASE: ' + (chaseOn ? 'ON' : 'OFF');
         chaseBtn.classList.toggle('active', chaseOn);
-        // Synthesize a gamepad1.a rising edge next tick via the `keys.space` path
-        // if we wanted — but simpler: fire a one-shot WS message and let the test
-        // treat it as a toggle.
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'chase', on: chaseOn }));
+        }
+    });
+}
+
+const resetBtn = document.getElementById('reset-btn');
+if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+        if (ws && ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: 'reset' }));
+        // Mirror auto-chase UI back to OFF — the server disables the FSM on reset.
+        if (chaseOn) {
+            chaseOn = false;
+            chaseBtn.textContent = 'AUTO-CHASE: OFF';
+            chaseBtn.classList.remove('active');
         }
     });
 }

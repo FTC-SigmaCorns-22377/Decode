@@ -52,6 +52,14 @@ data class BallTruthViz(
     /** Pre-projected pixel coords for convenience; null if outside the image. */
     val u: Double? = null,
     val v: Double? = null,
+    /**
+     * Camera-frame depth (m) along +Z_camera — used by the client to size the
+     * rendered ball in the pixel-space camera panel (apparent radius = fx * r / depth).
+     * Null if the ball is behind the camera.
+     */
+    val depth: Double? = null,
+    /** "green" or "purple" for DECODE artifacts; null if unknown. */
+    val color: String? = null,
 )
 
 /** A raw pixel detection this frame (before any gating). */

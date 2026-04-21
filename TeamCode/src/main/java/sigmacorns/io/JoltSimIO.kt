@@ -330,6 +330,18 @@ class JoltSimIO(
         }
     }
 
+    /**
+     * Remove every ball from the Jolt world + empty the robot's held-balls
+     * list. Safe to call at any time; paired with [spawnFieldBalls] gives a
+     * clean "reset" for viz demos.
+     */
+    fun clearAllBalls() {
+        while (JoltNative.nativeGetBallCount(handle) > 0) {
+            JoltNative.nativeRemoveBall(handle, 0)
+        }
+        heldBalls.clear()
+    }
+
     fun spawnFieldBalls() {
         val tile = 0.6096f
         val ballOffset = 0.0635f * 2.1f

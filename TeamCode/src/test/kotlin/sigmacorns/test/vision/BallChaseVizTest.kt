@@ -136,11 +136,28 @@ class BallChaseVizTest {
             fsm.enabled = on
             println("[BallChaseViz] autoFSM -> $on")
         }
+        server.onReset = {
+            // Order matters: disable the FSM first so it stops commanding
+            // the drivetrain / subsystems during the respawn. Then zero
+            // the world state, re-place the robot, and clear the tracker.
+            fsm.enabled = false
+            sim.driveFL = 0.0; sim.driveBL = 0.0; sim.driveFR = 0.0; sim.driveBR = 0.0
+            sim.intake = 0.0
+            sim.flywheel = 0.0
+            sim.blocker = sigmacorns.subsystem.IntakeTransfer.BLOCKER_ENGAGED
+            sim.clearAllBalls()
+            sim.spawnFieldBalls()
+            sim.setPosition(Pose2d(0.0, 0.0, 0.0))
+            tracking.reset()
+            println("[BallChaseViz] reset complete.")
+        }
         server.trackerStateProvider = {
             val t = sim.time().inWholeMilliseconds / 1000.0
             val pose = sim.position()
             val rawDetectionsPx = tracking.lastDetectionsPx
-            val ballsTruth = sim.getBallStates().map { Vector3d(it.x.toDouble(), it.y.toDouble(), it.z.toDouble()) }
+            val ballStates = sim.getBallStates()
+            val ballsTruth = ballStates.map { Vector3d(it.x.toDouble(), it.y.toDouble(), it.z.toDouble()) }
+            val ballsColors: List<String?> = ballStates.map { it.color.name.lowercase() }
 
             // Re-run the gating path against live config to populate survivors
             // for the viz. Cheap — same math as Tracker.tick's prefix.
@@ -179,6 +196,7 @@ class BallChaseVizTest {
                 config = cfg,
                 robotPose = pose,
                 ballsTruthField = ballsTruth,
+                ballsTruthColors = ballsColors,
                 rawDetectionsPx = rawDetectionsPx,
                 survivingFieldDetections = survivingPos,
                 survivingFieldDetectionCovs = survivingCov,

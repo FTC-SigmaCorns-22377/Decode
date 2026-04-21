@@ -622,31 +622,37 @@ const frustumLine = (() => {
     return l;
 })();
 
-// ---- Robot-POV camera panel ----
+// ---- Simulated-camera panel ----
+//
+// Pure 2D canvas rendered in pixel space. The robot's simulated camera feed
+// as the tracker would see it: black image, the few things the detector
+// "sees" are drawn with OpenCV-style overlays (filled circles at each ball's
+// projected pixel, bounding boxes, covariance ellipses, raw-detection
+// crosses, intake mask band). No three.js WebGL pass.
 const camPanelWrap = document.getElementById('camera-panel-wrap');
 const camPanelCanvas = document.createElement('canvas');
 camPanelWrap.insertBefore(camPanelCanvas, camPanelWrap.firstChild);
-const camPanelRenderer = new THREE.WebGLRenderer({ canvas: camPanelCanvas, antialias: true });
-camPanelRenderer.setPixelRatio(window.devicePixelRatio);
-const camPanelCamera = new THREE.PerspectiveCamera(60, 16 / 9, 0.02, 50);
+const camCtx = camPanelCanvas.getContext('2d');
 
 const camPanelOverlayCanvas = document.getElementById('camera-overlay');
 const overlayCtx = camPanelOverlayCanvas.getContext('2d');
 
 function sizeCameraPanel(imageW, imageH) {
-    // Panel width = side-panel width; height chosen to preserve camera aspect.
     const w = camPanelWrap.clientWidth;
     const aspect = (imageW && imageH) ? (imageW / imageH) : (16 / 9);
     const h = Math.round(w / aspect);
     camPanelWrap.style.height = h + 'px';
-    camPanelRenderer.setSize(w, h, false);
-    camPanelOverlayCanvas.width = w * window.devicePixelRatio;
-    camPanelOverlayCanvas.height = h * window.devicePixelRatio;
+    const dpr = window.devicePixelRatio;
+    camPanelCanvas.width = w * dpr;
+    camPanelCanvas.height = h * dpr;
+    camPanelCanvas.style.width = w + 'px';
+    camPanelCanvas.style.height = h + 'px';
+    camCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    camPanelOverlayCanvas.width = w * dpr;
+    camPanelOverlayCanvas.height = h * dpr;
     camPanelOverlayCanvas.style.width = w + 'px';
     camPanelOverlayCanvas.style.height = h + 'px';
-    overlayCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
-    camPanelCamera.aspect = aspect;
-    camPanelCamera.updateProjectionMatrix();
+    overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 sizeCameraPanel(1280, 720);
 
@@ -670,10 +676,6 @@ function updateTracker(trackerState) {
     if (!lastCamera || lastCamera.width !== cam.width || lastCamera.height !== cam.height) {
         sizeCameraPanel(cam.width, cam.height);
         lastCamera = { width: cam.width, height: cam.height };
-        // Vertical FOV derived from intrinsics.
-        const fovVRad = 2 * Math.atan(cam.height / 2 / cam.fy);
-        camPanelCamera.fov = fovVRad * 180 / Math.PI;
-        camPanelCamera.updateProjectionMatrix();
     }
 
     // Ground-truth markers.
@@ -731,29 +733,85 @@ function updateTracker(trackerState) {
         ellipse.visible = true;
     }
 
-    // Camera panel: position camPanelCamera from camera extrinsics.
-    const [ox, oy, oz] = cam.origin;
-    const R = cam.Rfc;
-    // Columns of R_field_camera = camera axes in field frame.
-    //   col0 = +X_cam (image right) = R[0..2]
-    //   col1 = +Y_cam (image down)  = R[3..5]
-    //   col2 = +Z_cam (forward)     = R[6..8]
-    const fx = R[6], fy = R[7], fz = R[8];
-    const uxF = -R[3], uyF = -R[4], uzF = -R[5];  // camera "up" in field = -Y_cam
-
-    const camPos = fieldToThree(ox, oy, oz);
-    const lookAtF = { x: ox + fx, y: oy + fy, z: oz + fz };
-    const lookAt = fieldToThree(lookAtF.x, lookAtF.y, lookAtF.z);
-
-    camPanelCamera.position.copy(camPos);
-    // Three.js `up` vector in three.js coords (from field up).
-    camPanelCamera.up.set(uyF, uzF, uxF);  // maps (fx_field, fy_field, fz_field) -> (y, z, x)
-    camPanelCamera.lookAt(lookAt);
-
-    camPanelRenderer.render(scene, camPanelCamera);
-
-    // 2D pixel overlays over the panel.
+    // Synthetic camera panel: black image, each visible ball drawn as a
+    // filled circle at its projected pixel, sized by depth; OpenCV-style
+    // detection bounding box; HUD + legend-style annotations. All the
+    // 2D drawing lives in drawSimulatedCamera / drawPixelOverlays.
+    drawSimulatedCamera(trackerState);
     drawPixelOverlays(trackerState);
+}
+
+const BALL_RADIUS_M_CAM = 0.035;   // DECODE artifact radius (matches TrackerConfig.ballRadiusM default)
+
+function drawSimulatedCamera(state) {
+    const cam = state.camera;
+    const w = camPanelCanvas.clientWidth;
+    const h = camPanelCanvas.clientHeight;
+    if (!cam || !w || !h) {
+        camCtx.fillStyle = '#000'; camCtx.fillRect(0, 0, w, h); return;
+    }
+    const sx = w / cam.width;
+    const sy = h / cam.height;
+
+    camCtx.fillStyle = '#000';
+    camCtx.fillRect(0, 0, w, h);
+
+    // Faint crosshair at the principal point for framing reference.
+    camCtx.strokeStyle = 'rgba(70, 70, 100, 0.35)';
+    camCtx.lineWidth = 1;
+    camCtx.beginPath();
+    camCtx.moveTo(0, cam.cy * sy); camCtx.lineTo(w, cam.cy * sy);
+    camCtx.moveTo(cam.cx * sx, 0); camCtx.lineTo(cam.cx * sx, h);
+    camCtx.stroke();
+
+    // Ground-truth balls as filled circles at their projected pixels, sized
+    // by apparent radius = fx * ball_radius / depth. Order back-to-front so
+    // near balls occlude far balls visually.
+    const balls = (state.ballTruth || []).slice()
+        .filter(b => b.u != null && b.v != null && b.depth != null && b.u >= 0 && b.u <= cam.width && b.v >= 0 && b.v <= cam.height)
+        .sort((a, b) => b.depth - a.depth);   // far first
+    for (const b of balls) {
+        const u = b.u * sx;
+        const v = b.v * sy;
+        const rPx = Math.max(2, cam.fx * BALL_RADIUS_M_CAM / b.depth * sx);
+
+        // Fill color from ball color.
+        const fill = b.color === 'green' ? 'rgba(40, 200, 80, 0.95)'
+                   : b.color === 'purple' ? 'rgba(170, 70, 230, 0.95)'
+                   : 'rgba(180, 180, 180, 0.85)';
+        const stroke = b.color === 'green' ? '#aaffc0'
+                     : b.color === 'purple' ? '#e0b0ff'
+                     : '#eee';
+
+        camCtx.fillStyle = fill;
+        camCtx.beginPath();
+        camCtx.arc(u, v, rPx, 0, 2 * Math.PI);
+        camCtx.fill();
+        camCtx.strokeStyle = stroke;
+        camCtx.lineWidth = 1.5;
+        camCtx.beginPath();
+        camCtx.arc(u, v, rPx, 0, 2 * Math.PI);
+        camCtx.stroke();
+
+        // OpenCV-style detection bounding box + label.
+        const box = rPx * 1.2;
+        camCtx.strokeStyle = stroke;
+        camCtx.setLineDash([4, 3]);
+        camCtx.lineWidth = 1;
+        camCtx.strokeRect(u - box, v - box, 2 * box, 2 * box);
+        camCtx.setLineDash([]);
+
+        camCtx.fillStyle = stroke;
+        camCtx.font = '11px monospace';
+        camCtx.textAlign = 'left';
+        const label = `${b.color || 'ball'}  ${b.depth.toFixed(2)}m`;
+        camCtx.fillText(label, u - box, v - box - 3);
+    }
+
+    // Camera-frustum / HUD border.
+    camCtx.strokeStyle = 'rgba(100, 130, 180, 0.45)';
+    camCtx.lineWidth = 1;
+    camCtx.strokeRect(0.5, 0.5, w - 1, h - 1);
 }
 
 function drawPixelOverlays(state) {
