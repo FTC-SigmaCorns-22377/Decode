@@ -64,7 +64,7 @@ class BallChaseAutoFSM(
      * and no balls are in view. Spinning slowly sweeps the field, the
      * tracker catches something, and CHASE commits to it.
      */
-    private val searchYawRate: Double = 0.6,
+    private val searchYawRate: Double = 1.0,
     private val heldBallCountFn: () -> Int = { countHeldFromBeamBreaks(io) },
 ) {
     enum class Phase { IDLE, CHASE, DRIVE_TO_SHOOT_ZONE, SHOOT }
@@ -163,6 +163,31 @@ class BallChaseAutoFSM(
             return
         }
 
+        // Heading error to the direction of travel (or the caller's override).
+        val headingTarget = desiredHeading ?: if (yawToTargetAllowed) atan2(dy, dx) else pose.rot
+        var err = headingTarget - pose.rot
+        while (err >  Math.PI) err -= 2.0 * Math.PI
+        while (err < -Math.PI) err += 2.0 * Math.PI
+        val absErr = kotlin.math.abs(err)
+
+        // Mecanum wheel-power normalization means spending a full unit on yaw
+        // eats the translation budget. Two-phase control avoids that:
+        //   - If heading error is large (> ALIGN_THRESHOLD), rotate in place
+        //     with no translation. The intake stays on during this rotation
+        //     so balls we graze are still picked up.
+        //   - Once inside the threshold, translate forward with a small
+        //     heading-correction term.
+        val alignThreshold = Math.PI / 6.0   // 30 degrees
+        val shouldRotateOnly = (yawToTargetAllowed || desiredHeading != null) && absErr > alignThreshold
+
+        if (shouldRotateOnly) {
+            val yaw = (headingP * err).coerceIn(-maxSpeed, maxSpeed)
+            drivetrain.drive(Pose2d(0.0, 0.0, yaw), io)
+            return
+        }
+
+        // Robot-frame translation unit vector (use full forward once aligned —
+        // strafing during a ball chase is wasted motion on a front-intake bot).
         val cosH = cos(pose.rot)
         val sinH = sin(pose.rot)
         val dirX = dx / d
@@ -170,20 +195,18 @@ class BallChaseAutoFSM(
         val bodyX =  cosH * dirX + sinH * dirY
         val bodyY = -sinH * dirX + cosH * dirY
 
-        val headingTarget = desiredHeading ?: if (yawToTargetAllowed) atan2(dy, dx) else pose.rot
-        val yaw = if (yawToTargetAllowed || desiredHeading != null) {
-            if (d < chasePullInRadiusM && yawToTargetAllowed) {
-                0.0  // stop yawing right before intake so we don't swing the mouth off the ball
-            } else {
-                var err = headingTarget - pose.rot
-                while (err >  Math.PI) err -= 2.0 * Math.PI
-                while (err < -Math.PI) err += 2.0 * Math.PI
-                (headingP * err).coerceIn(-maxSpeed, maxSpeed)
-            }
+        // Yaw still corrects within the aligned window, but small enough that
+        // translation dominates the per-wheel budget.
+        val smallYaw = if (yawToTargetAllowed || desiredHeading != null) {
+            (headingP * err).coerceIn(-0.3, 0.3)
         } else 0.0
 
+        // Stop yawing once we're inside chasePullInRadiusM so the intake mouth
+        // doesn't swing off the ball right as it enters.
+        val finalYaw = if (d < chasePullInRadiusM && yawToTargetAllowed) 0.0 else smallYaw
+
         drivetrain.drive(
-            Pose2d(maxSpeed * bodyX, maxSpeed * bodyY, yaw),
+            Pose2d(maxSpeed * bodyX, maxSpeed * bodyY, finalYaw),
             io,
         )
     }
