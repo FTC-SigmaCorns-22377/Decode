@@ -267,6 +267,46 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
 
     override fun voltage(): Double = savedVoltage
 
+    /**
+     * Read ball detections from the Limelight color pipeline.
+     *
+     * Returns empty unless the Limelight is currently on
+     * [sigmacorns.constants.Limelight.BALL_PIPELINE] — this avoids hijacking
+     * the AprilTag pipeline used for localization. The caller is responsible
+     * for pipeline switching (typically at opmode init or during a dedicated
+     * vision phase).
+     *
+     * TODO latency compensation — use `result.captureLatency` (ms) to backdate
+     * each detection's capture timestamp. For now we stamp with the caller's
+     * loop time, which is ~15-30 ms late.
+     */
+    override fun getBallDetections(
+        t: Double,
+        robotPose: sigmacorns.math.Pose2d,
+    ): List<sigmacorns.vision.tracker.PixelDetection> {
+        val ll = limelight ?: return emptyList()
+        val status = ll.status ?: return emptyList()
+        if (status.pipelineIndex != sigmacorns.constants.Limelight.BALL_PIPELINE) return emptyList()
+
+        val result = ll.latestResult ?: return emptyList()
+        if (!result.isValid) return emptyList()
+
+        val detectorResults = result.detectorResults ?: return emptyList()
+        if (detectorResults.isEmpty()) return emptyList()
+
+        val out = ArrayList<sigmacorns.vision.tracker.PixelDetection>(detectorResults.size)
+        for (d in detectorResults) {
+            out.add(
+                sigmacorns.vision.tracker.PixelDetection(
+                    u = d.targetXPixels,
+                    v = d.targetYPixels,
+                    t = t,
+                )
+            )
+        }
+        return out
+    }
+
     init {
         //drive motor direction declarations
         driveFLMotor.direction = DcMotorSimple.Direction.REVERSE
