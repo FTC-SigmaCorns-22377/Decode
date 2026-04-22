@@ -287,6 +287,16 @@ class LTVClient private constructor(
 
     suspend fun runPathToCompletion(traj: TrajoptTrajectory, io: SigmaIO) {
         loadTrajectory(traj)
+        runLoadedTrajectory(io)
+    }
+
+    /**
+     * Run the currently-loaded trajectory. Caller must have invoked
+     * [loadTrajectory] first. Splitting this from [runPathToCompletion] lets
+     * callers load synchronously before launching the follower coroutine so
+     * that [estimateProgress] and friends see the new samples immediately.
+     */
+    suspend fun runLoadedTrajectory(io: SigmaIO) {
         val legStart = io.time()
 
         while (true) {

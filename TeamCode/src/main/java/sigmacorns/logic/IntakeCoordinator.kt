@@ -35,6 +35,8 @@ class IntakeCoordinator(val robot: Robot) {
     var inShootingZone: Boolean = false
         private set
 
+    var overrideShot: Boolean = false
+
     /**
      * Called every loop before subsystem updates.
      * Propagates sensor state and enforces cross-subsystem rules.
@@ -87,6 +89,10 @@ class IntakeCoordinator(val robot: Robot) {
             || robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING)
             && (autoShootEnabled || robot.aimFlywheel)) {
             robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+        }
+
+        if(overrideShot) {
+            robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
         }
     }
 

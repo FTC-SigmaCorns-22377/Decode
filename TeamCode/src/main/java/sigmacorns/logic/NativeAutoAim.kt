@@ -190,8 +190,8 @@ class NativeAutoAim(
         val now = robot.io.time()
         var nBalls = robot.beamBreak.ballCount
 
-        if(shotRequested && nBalls==0) {
-            nBalls = 1
+        if(shotRequested && !burstActive) {
+            nBalls = 3
         }
 
         // ── Burst sequencing: detect ball exits ──────────────────────
