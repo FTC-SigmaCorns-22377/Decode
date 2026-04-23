@@ -7,7 +7,7 @@
       "FIELD_WIDTH_M, FIELD_HEIGHT_M": "FTC DECODE 2025-2026 game manual (12 ft x 12 ft = 3.6576 m).",
       "ROBOT_FOOTPRINT_R": "Derived from sigmacorns.constants.RobotModelConstants.robotSize = (0.367, 0.365). Axis-aligned rectangle at robot frame, +/- half-width.",
       "CAM_POS_R, CAM_*_RAD": "Derived 2026-04-19 from user-measured offset (-346.081, -83.748, -242.268) mm of Cam Global Shutter from the back-left-bottom corner of the chassis (in Onshape Top Level frame), combined with STEP-extracted camera position (797, 0, 131) mm in Top Level frame. See config/cad/extraction_notes.md and tools/parse_step.py.",
-      "K, DIST_COEFFS, IMAGE_*_PX": "PLACEHOLDER. Cam Global Shutter intrinsics not yet calibrated; nominal 1280x720 with fx=fy=900, cx/cy at image center, no distortion. Re-calibrate before any hardware use; persist into teamwebcamcalibrations.xml or this file once measured.",
+      "K, DIST_COEFFS, IMAGE_*_PX": "Calibrated 2026-04-22 via OpenCV checkerboard at 1280x720. Calibration was performed on right-side-up frames (calibrate.py applies cv2.rotate(img, ROTATE_180) before findChessboardCorners), matching the ROTATE_180 done by sigmacorns.vision.BallDetectionProcessor.processFrame, so values are used as-is on the device. The webcam MUST stream at 1280x720 (set via VisionPortal.Builder.setCameraResolution) or these intrinsics are wrong by the scale ratio.",
       "RAMP_POLYGON": "PLACEHOLDER. Empty until ramp coordinates are pulled from the FTC DECODE field drawing.",
       "BALL_RADIUS_M": "DECODE artifact (am-3376a) is a 70 mm OD ball; radius = 0.035 m. CONFIRM from current game manual.",
       "tuning constants (SIGMA_*, INIT_VEL_VAR, CHI2_GATE, MAX_COAST_FRAMES, MIN_HITS_FOR_CONFIRMED, INTAKE_MASK_Y_MIN_FRAC, FIELD_MARGIN_M, RAMP_EXPAND_M, MAX_RANGE_M)": "Initial defaults from the Step-S33 prompt. Tune against BallTrackerSimTest noise sweep before changing in response to real-data RMS."
@@ -23,8 +23,8 @@
 
   "BALL_RADIUS_M": 0.035,
 
-  "K": [900.0, 900.0, 640.0, 360.0],
-  "DIST_COEFFS": [0.0, 0.0, 0.0, 0.0, 0.0],
+  "K": [393.0838, 393.0318, 666.1668, 440.4564],
+  "DIST_COEFFS": [0.00194, -0.01958, 0.00071, 0.00020, 0.00259],
   "IMAGE_WIDTH_PX": 1280,
   "IMAGE_HEIGHT_PX": 720,
 

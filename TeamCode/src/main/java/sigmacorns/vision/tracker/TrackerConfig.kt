@@ -60,16 +60,20 @@ data class TrackerConfig(
 
     companion object {
         /**
-         * Load from the canonical path `<repoRoot>/config/ball_tracker.json`.
-         * Walks up from the `projectDir` system property (set by the test
-         * harness to the `:TeamCode` subproject) — and from `user.dir` as a
-         * fallback — until a directory containing `config/ball_tracker.json`
-         * is found. This lets tests and on-robot callers share one entrypoint.
+         * Load from the canonical path. On the robot, prefer
+         * `/sdcard/FIRST/config/ball_tracker.json` (pushed via the
+         * `syncBallTrackerConfig` Gradle task). In tests, walk up from
+         * `projectDir` / `user.dir` looking for `config/ball_tracker.json`.
          */
         fun loadDefault(): TrackerConfig =
             loadFromFile(findDefaultConfigFile())
 
         internal fun findDefaultConfigFile(): File {
+            // Android / on-robot: the repo's config/ dir isn't on the APK,
+            // it gets pushed to /sdcard/FIRST/config/ via adb.
+            val androidPath = File("/sdcard/FIRST/config/ball_tracker.json")
+            if (androidPath.isFile) return androidPath
+
             val starts = listOfNotNull(
                 System.getProperty("projectDir"),
                 System.getProperty("user.dir"),
@@ -84,9 +88,11 @@ data class TrackerConfig(
                 }
             }
             throw IllegalStateException(
-                "Could not locate config/ball_tracker.json starting from " +
+                "Could not locate ball_tracker.json. Checked " +
+                        "${androidPath.absolutePath} and walked up from " +
                         "projectDir=${System.getProperty("projectDir")} " +
-                        "user.dir=${System.getProperty("user.dir")}"
+                        "user.dir=${System.getProperty("user.dir")}. " +
+                        "On the robot, run `./gradlew :TeamCode:syncBallTrackerConfig`."
             )
         }
 

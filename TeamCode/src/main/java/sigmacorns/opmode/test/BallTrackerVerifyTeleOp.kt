@@ -1,5 +1,6 @@
 package sigmacorns.opmode.test
 
+import android.util.Size
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName
 import org.firstinspires.ftc.vision.VisionPortal
@@ -53,6 +54,7 @@ class BallTrackerVerifyTeleOp : SigmaOpMode() {
             .addProcessor(processor)
             .enableLiveView(true)
             .setStreamFormat(VisionPortal.StreamFormat.MJPEG)
+            .setCameraResolution(Size(1280, 720))
             .build()
 
         val hardware = io as? HardwareIO

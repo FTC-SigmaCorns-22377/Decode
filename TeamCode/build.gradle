@@ -298,6 +298,36 @@ tasks.register("syncTrajopt") {
     }
 }
 
+tasks.register("syncBallTrackerConfig") {
+    group = "deployment"
+    description = "Pushes config/ball_tracker.json to /sdcard/FIRST/config/ on the connected device. Run after intrinsics or extrinsics change."
+
+    doLast {
+        def adb = android.adbExecutable
+        if (adb == null || !adb.exists()) {
+            throw new GradleException("adb executable not found. Ensure the Android SDK is configured.")
+        }
+
+        def localFile = file("${rootProject.projectDir}/config/ball_tracker.json")
+        if (!localFile.exists()) {
+            throw new GradleException("Local ${localFile} not found.")
+        }
+
+        def remoteDir = "/sdcard/FIRST/config"
+        project.exec {
+            executable adb.absolutePath
+            args "shell", "mkdir", "-p", remoteDir
+        }
+
+        project.exec {
+            executable adb.absolutePath
+            args "push", localFile.absolutePath, "${remoteDir}/ball_tracker.json"
+        }
+
+        logger.lifecycle("Pushed ${localFile.name} to ${remoteDir}/")
+    }
+}
+
 tasks.register("buildMecanumLtvOcpHost") {
     group = "build"
     description = "Builds mecanum_LTV_OCP for the host machine and copies the JNI library into src/test/jniLibs"

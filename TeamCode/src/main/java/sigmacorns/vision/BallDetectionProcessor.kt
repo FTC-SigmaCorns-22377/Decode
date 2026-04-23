@@ -61,6 +61,10 @@ class BallDetectionProcessor : VisionProcessor {
 
     override fun processFrame(frame: Mat, captureTimeNanos: Long): Any? {
         lastCaptureTimeSec = captureTimeNanos / 1e9
+        // Camera is physically mounted upside-down. Rotate 180° in-place so the
+        // rest of the pipeline (detection, bbox coords, projection with cx/cy
+        // at image center) sees a right-side-up frame.
+        Core.rotate(frame, frame, Core.ROTATE_180)
         Imgproc.cvtColor(frame, hsv, Imgproc.COLOR_RGB2HSV)
         Imgproc.cvtColor(frame, ycrcb, Imgproc.COLOR_RGB2YCrCb)
 
