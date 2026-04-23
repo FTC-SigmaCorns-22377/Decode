@@ -128,6 +128,10 @@ class ShooterTuner : SigmaOpMode() {
         var lastLoggedHood = 0.0
         var lastLoggedDist = 0.0
 
+        var lastShotRads = 0.0
+        var lastShotHood = 0.0
+        var lastShotDist = 0.0
+
         // Debounce flags
         var lastA = false
         var lastX = false
@@ -226,6 +230,9 @@ class ShooterTuner : SigmaOpMode() {
                     robot.shooter.flywheelTarget = flywheelTarget
                     robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
                     shotStartTime = io.time()
+                    lastShotRads = flywheelTarget
+                    lastShotDist = robot.aim.targetDistance
+                    lastShotHood = hoodAngleDeg
                     shotActive = true
                 }
                 // Reverse intake
@@ -277,9 +284,9 @@ class ShooterTuner : SigmaOpMode() {
                 dataStore.addPoint(SpeedPoint(dist, speedRadS, hood))
                 dataStore.save()
 
-                lastLoggedRpm = speedRadS / RAD_S_PER_RPM
-                lastLoggedHood = hood
-                lastLoggedDist = dist
+                lastLoggedRpm = lastShotRads
+                lastLoggedHood = lastShotHood
+                lastLoggedDist = lastShotDist
 
                 refit()
             }

@@ -302,7 +302,7 @@ object AimConfig {
     // the robust shot planner so the first shot's parameters leave the flywheel
     // at a speed compatible with the next shot after this proportional loss.
     // Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var dropFraction = 0.12
+    @JvmField var dropFraction = 0.05
 
     // Trajectory prediction for the robust 3-shot planner.
     @JvmField var predictionHorizon = 1.0   // seconds of trajectory to predict

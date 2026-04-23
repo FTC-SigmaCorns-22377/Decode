@@ -11,6 +11,7 @@ import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.aim.Ballistics
 import sigmacorns.control.aim.TurretPlannerBridge
 import sigmacorns.control.aim.TurretPlannerBridge.Robust3ShotPlanIdx
+import sigmacorns.control.aim.tune.BisectionStore
 import sigmacorns.control.aim.tune.OmegaCoefFitter
 import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.control.localization.GTSAMEstimator
@@ -142,10 +143,10 @@ class NativeAutoAim(
         )
 
 
-//        val tuningStore = ShotDataStore().also { it.load() }
-//        omegaCoeffs = OmegaCoefFitter.fit(tuningStore.getPoints())
-        val c1 = (1.0 / (flywheelRadius * AimConfig.launchEfficiency)).toFloat()
-        omegaCoeffs = floatArrayOf(0f, c1, 0f, 0f, 0f, 0f)
+        val tuningStore = BisectionStore().also { it.load() }
+        omegaCoeffs = OmegaCoefFitter.fitFromMakes(tuningStore.madeSamples())
+//        val c1 = (1.0 / (flywheelRadius * AimConfig.launchEfficiency)).toFloat()
+//        omegaCoeffs = floatArrayOf(0f, c1, 0f, 0f, 0f, 0f)
 
         // Mirror zones for alliance (FieldLandmarks uses red-origin coords)
         goalZone = FieldLandmarks.goalZoneCorners.map {
@@ -193,6 +194,8 @@ class NativeAutoAim(
         if(shotRequested && !burstActive) {
             nBalls = 3
         }
+
+        if(shotRequested && burstActive)
 
         // ── Burst sequencing: detect ball exits ──────────────────────
         if (burstActive) {
