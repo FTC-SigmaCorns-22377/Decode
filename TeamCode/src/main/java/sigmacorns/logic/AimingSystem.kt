@@ -277,7 +277,7 @@ object AimConfig {
     @JvmField var dragK = 0.4
 
     /** Time (seconds) from when shot is requested until ball leaves shooter */
-    @JvmField var transferDelay = 0.2
+    @JvmField var transferDelay = 0.23
 
     @JvmField var launchEfficiency = 0.225
     val omegaMap = object : OmegaMap {
@@ -302,7 +302,7 @@ object AimConfig {
     // the robust shot planner so the first shot's parameters leave the flywheel
     // at a speed compatible with the next shot after this proportional loss.
     // Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var dropFraction = 0.05
+    @JvmField var dropFraction = 0.17
 
     // Trajectory prediction for the robust 3-shot planner.
     @JvmField var predictionHorizon = 1.0   // seconds of trajectory to predict
@@ -327,8 +327,8 @@ object AimConfig {
 }
 
 object ShotSolverConfig {
-    @JvmField var wOmega = 0.005   // s per rad/s flywheel change
+    @JvmField var wOmega = 0.003   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
-    @JvmField var wPhi = 0.07      // s per rad hood change
+    @JvmField var wPhi = 0.03      // s per rad hood change
     @JvmField var tolerance = 0.05
 }

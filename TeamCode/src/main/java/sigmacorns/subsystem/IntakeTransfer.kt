@@ -51,6 +51,8 @@ class IntakeTransfer(val io: SigmaIO) {
             }
         }
 
+    var transferPowerOverride: Double? = null
+
     companion object {
         const val INTAKE_POWER = 1.0
         const val OUTTAKE_POWER = -1.0
@@ -95,7 +97,7 @@ class IntakeTransfer(val io: SigmaIO) {
 
         // Motor power
         io.intake = when (state) {
-            State.TRANSFERRING -> if (blockerReady) TRANSFER_POWER else 0.0
+            State.TRANSFERRING -> if (blockerReady) (transferPowerOverride ?: TRANSFER_POWER) else 0.0
             State.REVERSING -> OUTTAKE_POWER
             State.INTAKING -> INTAKE_POWER
             State.IDLE, State.READY_TO_SHOOT -> 0.0

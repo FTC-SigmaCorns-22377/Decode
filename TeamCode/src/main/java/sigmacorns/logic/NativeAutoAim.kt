@@ -27,7 +27,9 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Auto-aim backed by the C++ turret_planner (JNI).
@@ -82,10 +84,9 @@ class NativeAutoAim(
 
     // ── Burst sequencing ─────────────────────────────────────────────
     private var burstActive = false
-    private var burstStartBallCount = 0
     private var burstShotsFired = 0
     private var burstTotalShots = 0
-    private var lastBallExitTime: Duration? = null
+    private var burstStartTime: kotlin.time.Duration? = null
 
     /** True when the last solve was feasible for all balls (burst is safe to start). */
     private var allBallsFeasible = false
@@ -195,32 +196,28 @@ class NativeAutoAim(
             nBalls = 3
         }
 
-        if(shotRequested && burstActive)
-
-        // ── Burst sequencing: detect ball exits ──────────────────────
+        // ── Burst sequencing: time-based ball accounting ──────────────
         if (burstActive) {
-            val fired = burstStartBallCount - nBalls
-            if (fired > burstShotsFired) {
-                burstShotsFired = fired
-                lastBallExitTime = now
-            }
-            if (burstShotsFired >= burstTotalShots || nBalls == 0) {
+            val elapsed = (now - burstStartTime!!).inWholeMilliseconds / 1000.0
+            burstShotsFired = (elapsed / AimConfig.transferDelay).toInt().coerceAtMost(burstTotalShots)
+            if (burstShotsFired >= burstTotalShots) {
                 burstActive = false
                 burstShotsFired = 0
-                lastBallExitTime = null
+                burstStartTime = null
             }
         }
 
         // ── t_remaining ──────────────────────────────────────────────
-        val tRemaining: Float = if (burstActive && lastBallExitTime != null) {
-            val elapsed = (now - lastBallExitTime!!).inWholeMilliseconds / 1000.0
-            (AimConfig.transferDelay - elapsed).coerceAtLeast(0.0).toFloat()
+        val tRemaining: Float = if (burstActive && burstStartTime != null) {
+            val elapsed = (now - burstStartTime!!).inWholeMilliseconds / 1000.0
+            val slotElapsed = elapsed % AimConfig.transferDelay
+            (AimConfig.transferDelay - slotElapsed).toFloat()
         } else {
-            AimConfig.transferDelay.toFloat()
+            (AimConfig.transferDelay*10.0).toFloat()
         }
 
         val remainingBalls = if (burstActive)
-            (burstTotalShots - burstShotsFired).coerceIn(1, nBalls)
+            (burstTotalShots - burstShotsFired).coerceIn(1, max(1,nBalls))
         else nBalls.coerceAtLeast(1)
 
         val odoVel = Vector2d(robot.io.velocity().v)
@@ -544,9 +541,8 @@ class NativeAutoAim(
             if (!burstActive) {
                 burstActive = true
                 burstShotsFired = 0
-                burstStartBallCount = nBalls
                 burstTotalShots = nBalls
-                lastBallExitTime = null
+                burstStartTime = now + AimConfig.transferDelay.seconds
                 plannedShot = null  // plan consumed — burst is now executing
             }
         } else {
