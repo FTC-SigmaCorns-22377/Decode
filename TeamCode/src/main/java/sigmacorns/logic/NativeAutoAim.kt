@@ -89,6 +89,11 @@ class NativeAutoAim(
         private set
     var diagColdTstar: Float = Float.NaN   // T* from optimalTCold
         private set
+    var missDistance: Float = Float.NaN
+    private set
+
+    var solved = false
+    private set
 
     override var primaryShotState: Ballistics.ShotState? = null
         private set
@@ -266,7 +271,7 @@ class NativeAutoAim(
             traj[base + 5] = robotVy
         }
 
-        var solved = false
+        solved = false
         isRobustActive = false
         secondaryShotState = null
         tertiaryShotState = null
@@ -360,11 +365,12 @@ class NativeAutoAim(
         val actualPhi   = shooter.computedHoodAngle.toFloat()
         val actualOmega = robot.io.flywheelVelocity().toFloat()
         val actualVexit = bridge.vExitFromOmegaH(actualPhi, actualOmega, AimConfig.vMax.toFloat(), omegaHandle)
-        val missDistance = bridge.shotError(
+        missDistance = bridge.shotError(
             tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
             actualTheta, actualPhi, actualVexit, actualOmega,
             lastT1, physConfig
         )
+
         readyToShoot = missDistance < AimConfig.shotTolerance && inZone
     }
 

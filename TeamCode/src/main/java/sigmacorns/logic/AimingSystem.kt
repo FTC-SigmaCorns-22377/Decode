@@ -125,6 +125,9 @@ class AimingSystem(
 
         val fusedPose = autoAim.fusedPose
         targetDistance = hypot(goalPosition.x - fusedPose.v.x, goalPosition.y - fusedPose.v.y)
+
+        // Set localization trusted flag (e.g., if vision is tracking or estimator is confident)
+        robot.turret.localizationTrusted = visionResult != null || autoAim.enabled
     }
 
     /**

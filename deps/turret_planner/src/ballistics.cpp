@@ -232,11 +232,16 @@ float ballistics_shot_error(
     fast_sincos(p.theta, &sin_theta, &cos_theta);
     fast_sincos(p.phi, &sin_phi, &cos_phi);
 
-    // Launch position: barrel projects r_h horizontally in the aiming direction.
-    // This matches the inverse solver (ballistics_intermediate) which assumes
-    // target_x = turret_x + r_h*cos_theta + v_exit*cos_phi*cos_theta*decay.
-    float sx = turret_x + cfg.r_h * cos_theta;
-    float sy = turret_y + cfg.r_h * sin_theta;
+    // Launch position: barrel arc projects the launch point based on hood angle.
+    // This MUST match the solver's geometry exactly.
+    // With hood arc: the launch point is offset along the barrel by r_h,
+    // and the hood angle affects both vertical and horizontal projection.
+    // Match the coordinate system from Kotlin Ballistics.kt:
+    //   x0 = turret.x + rH * (1 - sin(phi)) * cos(theta)
+    //   y0 = turret.y + rH * (1 - sin(phi)) * sin(theta)
+    //   z0 = turret.z + rH * cos(phi)
+    float sx = turret_x + cfg.r_h * (1.f - sin_phi) * cos_theta;
+    float sy = turret_y + cfg.r_h * (1.f - sin_phi) * sin_theta;
 
     // Launch velocity components in field frame
     float vx0 = p.v_exit * cos_phi * cos_theta + robot_vx;
