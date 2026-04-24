@@ -753,10 +753,12 @@ void JoltWorld::updateIntake(float dt) {
     float pivotZ = ROBOT_LENGTH / 2.0f;
 
     // Simulate hinge: check if any ball is pushing the intake upward
+    // Note: robotRot = Ry(+theta) but correct sim-local frame uses Ry(-theta)^-1 = Ry(+theta),
+    // so we use robotRot (not Conjugated) to transform world vectors into sim-local frame.
     float pushAngle = 0.0f;
     for (int i = 0; i < static_cast<int>(balls_.size()); i++) {
         JPH::Vec3 ballPos = bodyInterface.GetPosition(balls_[i].bodyId);
-        JPH::Vec3 localBall = robotRot.Conjugated() * (ballPos - robotPos);
+        JPH::Vec3 localBall = robotRot * (ballPos - robotPos);
 
         // Check if ball is in the intake zone (near the roller)
         float rollerY = pivotY + INTAKE_BAR_LENGTH * std::sin(intake_.hingeAngle);
@@ -785,12 +787,13 @@ void JoltWorld::updateIntake(float dt) {
     }
     intake_.hingeAngle = std::max(INTAKE_MIN_ANGLE, std::min(INTAKE_MAX_ANGLE, intake_.hingeAngle));
 
-    // Move kinematic roller to follow robot
+    // Move kinematic roller to follow robot.
+    // Conjugated() gives the correct world transform: Ry(-theta) maps sim-local to Jolt-world.
     float rollerY = pivotY + INTAKE_BAR_LENGTH * std::sin(intake_.hingeAngle);
     float rollerZ = pivotZ + INTAKE_BAR_LENGTH * std::cos(intake_.hingeAngle);
     JPH::Vec3 localRollerPos(0, rollerY, rollerZ);
-    JPH::Vec3 worldRollerPos = robotPos + robotRot * localRollerPos;
-    bodyInterface.MoveKinematic(intake_.rollerBodyId, worldRollerPos, robotRot, dt);
+    JPH::Vec3 worldRollerPos = robotPos + robotRot.Conjugated() * localRollerPos;
+    bodyInterface.MoveKinematic(intake_.rollerBodyId, worldRollerPos, robotRot.Conjugated(), dt);
 
     // Check for ball pickups if roller is spinning
     if (std::abs(intake_.rollerOmega) < INTAKE_OMEGA_THRESHOLD) return;
@@ -809,7 +812,7 @@ void JoltWorld::updateIntake(float dt) {
         if (immune) continue;
 
         JPH::Vec3 ballPos = bodyInterface.GetPosition(balls_[i].bodyId);
-        JPH::Vec3 localBall = robotRot.Conjugated() * (ballPos - robotPos);
+        JPH::Vec3 localBall = robotRot * (ballPos - robotPos);
 
         // Ball must be in the front half of the robot or beyond the front face
         if (localBall.GetZ() < 0.0f) continue;
@@ -894,8 +897,8 @@ void IntakeContactListener::applyIntakeEffect(const JPH::Body& body1, const JPH:
     auto& bodyInterface = world_->physicsSystem_->GetBodyInterfaceNoLock();
     JPH::Quat robotRot = bodyInterface.GetRotation(world_->robotBodyId_);
 
-    // Robot forward is +Z in Jolt, so "toward chassis" is -Z in robot frame
-    JPH::Vec3 pullDirection = robotRot * JPH::Vec3(0, 0, -1.0f);
+    // "Toward chassis" is -Z in sim-local frame. Conjugated() maps sim-local to Jolt-world.
+    JPH::Vec3 pullDirection = robotRot.Conjugated() * JPH::Vec3(0, 0, -1.0f);
 
     float rollerSpeed = std::abs(world_->intake_.rollerOmega);
     float surfaceSpeed = rollerSpeed * JoltWorld::INTAKE_ROLLER_RADIUS;
