@@ -278,7 +278,6 @@ bool ballistics_is_feasible(
 {
     if (p.v_exit <= 0.f || p.v_exit > bounds.v_exit_max) return false;
     if (p.phi < bounds.phi_min || p.phi > bounds.phi_max) return false;
-    if (!omega_map_in_region(omega, p.phi, p.v_exit)) return false;
 
     // Theta check: convert to robot-relative frame and check bounds.
     // Skip if bounds span full circle (default: theta_min=-π, theta_max=π).

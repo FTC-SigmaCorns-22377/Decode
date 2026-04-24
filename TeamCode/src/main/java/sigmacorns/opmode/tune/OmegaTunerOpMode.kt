@@ -55,8 +55,7 @@ class OmegaTunerOpMode : SigmaOpMode() {
     override fun runOpMode() {
         val robot = Robot(io, blue = false, useNativeAim = true)
         robotRef = robot
-        robot.init(Pose2d(), apriltagTracking = !SIM)
-        robot.startApriltag()
+        robot.init(Pose2d(), apriltagTracking = false)
         robot.aimFlywheel = false
         robot.shooter.autoAdjust = false
 
