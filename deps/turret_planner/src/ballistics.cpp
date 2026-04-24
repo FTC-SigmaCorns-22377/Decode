@@ -232,9 +232,11 @@ float ballistics_shot_error(
     fast_sincos(p.theta, &sin_theta, &cos_theta);
     fast_sincos(p.phi, &sin_phi, &cos_phi);
 
-    // Launch position (barrel offset)
-    float sx = turret_x + cfg.r_h * (1.f - sin_phi) * cos_theta;
-    float sy = turret_y + cfg.r_h * (1.f - sin_phi) * sin_theta;
+    // Launch position: barrel projects r_h horizontally in the aiming direction.
+    // This matches the inverse solver (ballistics_intermediate) which assumes
+    // target_x = turret_x + r_h*cos_theta + v_exit*cos_phi*cos_theta*decay.
+    float sx = turret_x + cfg.r_h * cos_theta;
+    float sy = turret_y + cfg.r_h * sin_theta;
 
     // Launch velocity components in field frame
     float vx0 = p.v_exit * cos_phi * cos_theta + robot_vx;

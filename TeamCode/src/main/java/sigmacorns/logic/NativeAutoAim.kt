@@ -290,7 +290,8 @@ class NativeAutoAim(
             if (r[Robust3ShotPlanIdx.FEASIBLE] > 0.5f) {
                 var solverTheta = r[Robust3ShotPlanIdx.S1_THETA].toDouble()
                 val relAngle = wrapAngle(solverTheta - fusedPose.rot)
-                if (abs(relAngle) > TurretServoConfig.maxAngle) {
+                val thetaInRange = abs(relAngle) <= TurretServoConfig.maxAngle
+                if (!thetaInRange) {
                     solverTheta = wrapAngle(
                         relAngle.coerceIn(TurretServoConfig.minAngle, TurretServoConfig.maxAngle)
                                 + fusedPose.rot
@@ -300,7 +301,9 @@ class NativeAutoAim(
                 lastPhi   = r[Robust3ShotPlanIdx.S1_PHI]
                 lastOmega = r[Robust3ShotPlanIdx.S1_OMEGA]
                 lastT1    = r[Robust3ShotPlanIdx.T1]
-                solved = true
+                // Only mark solved (eligible to fire) when turret can actually reach the angle.
+                // Still set lastTheta/Phi/Omega so the flywheel can prespin.
+                solved = thetaInRange
 
                 if (!inBurst && solveNBalls >= 2) {
                     isRobustActive = true
