@@ -17,8 +17,9 @@ object EstimatorConfig {
     @JvmField var enableRobustTagLoss = true
     @JvmField var robustTagLoss = 0
     @JvmField var robustTagLossK = 1.5
-    @JvmField var enableTagGating = false
-    @JvmField var minTagAreaPx = 50.0
+    @JvmField var enableTagGating = true
+    /** Minimum tag area as % of image (Limelight ta value, 0-100). Tags below this are discarded. */
+    @JvmField var minTagAreaPct = 0.1
     @JvmField var maxTagViewAngleDeg = 60.0
     @JvmField var enableCheiralityCheck = true
     @JvmField var cheiralitySigma = 0.1
@@ -38,7 +39,7 @@ object EstimatorConfig {
     @JvmField var p2 = 0.002753
     @JvmField var cameraOffsetX = 0.143044
     @JvmField var cameraOffsetY = 0.0
-    @JvmField var cameraOffsetZ = 0.317345
+    @JvmField var cameraOffsetZ = 0.30596824
     @JvmField var cameraRoll = -Math.toRadians(80.0)
     @JvmField var cameraPitch = 0.0
     @JvmField var cameraYaw = -PI / 2.0
@@ -54,4 +55,9 @@ object EstimatorConfig {
     @JvmField var multiHypothesisThetaThreshold = 1.0
     @JvmField var enableHeadingFlipRecovery = true
     @JvmField var headingFlipMinTags = 1
+
+    /** Max robot angular velocity (rad/s) before vision updates are suppressed. 0 = disabled. */
+    @JvmField var maxRobotAngularVelForVision = 1.5
+    /** Max turret angular velocity (rad/s) before vision updates are suppressed. 0 = disabled. */
+    @JvmField var maxTurretAngularVelForVision = 2.0
 }

@@ -24,7 +24,7 @@ class BisectionTuner(
     private val getCurrentOmegaCoeffs: () -> FloatArray
 ) {
     companion object {
-        val DISTANCES = listOf(1.25, 1.5, 2.0, 2.5, 3.0, 3.5)
+        val DISTANCES = listOf(1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5)
         val HOOD_DEGS = listOf(
             ShooterConfig.minAngleDeg + 5.0,
             (ShooterConfig.minAngleDeg*3.0 + ShooterConfig.maxAngleDeg) / 4.0,
