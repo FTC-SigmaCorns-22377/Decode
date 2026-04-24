@@ -108,6 +108,7 @@ class IntakeCoordinator(val robot: Robot) {
 
         if(overrideShot) {
             robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
+            transferStartTime = null
         }
     }
 

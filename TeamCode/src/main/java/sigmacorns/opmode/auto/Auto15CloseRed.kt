@@ -51,7 +51,7 @@ class Auto15CloseRed : SigmaOpMode() {
 
         io.setPosition(initialSample.pos)
 
-        val robot = Robot(io, blue = false)
+        val robot = Robot(io, blue = false, useNativeAim = true)
         robot.init(initialSample.pos, apriltagTracking = false)
         robot.aimTurret = true
         robot.aimFlywheel = false
@@ -59,16 +59,11 @@ class Auto15CloseRed : SigmaOpMode() {
         waitForStart()
 
         val job = robot.scope.launch {
-            val firstPose = trajectories.first().getInitialSample()!!.pos
-            val spinupStartedAt = robot.io.time()
             robot.aimFlywheel = true
-            while (robot.io.time() - spinupStartedAt < FIRST_SHOT_SPINUP_HOLD) {
-                robot.ltv.holdPos(robot.io, firstPose)
-                yield()
-            }
 
             trajectories.forEachIndexed { i, traj ->
-                runTrajectoryWithIntakeShoot(robot, traj, enableIntake = i != 0)
+                val isPreload = traj.name == "ShootPreload"
+                runTrajectoryWithIntakeShoot(robot, traj, enableIntake = !isPreload)
 
                 val holdPose = traj.getFinalSample()!!.pos
                 val hold = robot.scope.launch { holdPosition(robot, holdPose) }
@@ -121,7 +116,7 @@ class Auto15CloseRed : SigmaOpMode() {
         runShotSequence(
             robot = robot,
             duration = MAX_TRANSFER_DURATION,
-            allowForcedTransfer = false,
+            allowForcedTransfer = true,
         )
     }
 
@@ -234,7 +229,7 @@ class Auto15CloseRed : SigmaOpMode() {
         robot.ltv.loadTrajectory(traj)
         val isGoToGate = traj.name.startsWith("GoToGate", ignoreCase = true)
         robot.aimFlywheel = !isGoToGate
-        robot.aim.shotRequested = !isGoToGate
+        robot.aim.shotRequested = false
         robot.intakeCoordinator.overrideShot = false
 
         val trajStartTime = io.time()
