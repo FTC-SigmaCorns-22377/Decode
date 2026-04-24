@@ -55,9 +55,10 @@ object OmegaCoefFitter {
         val cosPhi = cos(phiRad)
         val rH = ballExitRadius
 
-        // Launch point in field frame (robot heading = 0, pointing at goal)
-        // turretPos.x is negative (turret behind robot centre)
-        val launchForward = -turretPos.x + rH * (1.0 - sinPhi)   // forward offset from robot centre
+        // Launch point in field frame (robot heading = 0, pointing at goal).
+        // Match native solver convention: turret pivot treated as robot centre (turretPos.x ignored),
+        // barrel offset accounted for via rH*(1-sinPhi) horizontal advance.
+        val launchForward = rH * (1.0 - sinPhi)   // forward offset of launch point from robot centre
         val launchZ = turretPos.z + rH * cosPhi
 
         val dH = targetDistance + launchForward   // horizontal launch-to-goal distance

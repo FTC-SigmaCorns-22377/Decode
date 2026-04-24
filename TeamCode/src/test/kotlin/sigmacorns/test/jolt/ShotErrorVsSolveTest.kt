@@ -23,16 +23,17 @@ class ShotErrorVsSolveTest {
 
     @Test
     fun testShotErrorEqualsZeroForSolvedShot() {
+        data class Case(val tX: Double, val tY: Double, val gX: Double, val gY: Double)
         // Test cases: (turretX, turretY, goalX, goalY)
         val cases = listOf(
             // Close zone
-            Triple(0.0, 0.0, -1.58, 1.6),
-            Triple(-1.2, 0.5, -1.58, 1.6),
-            // Far zone  
-            Triple(0.0, -1.2, -1.58, 1.6),
-            Triple(0.0, -1.5, -1.58, 1.6),
-            Triple(0.0, -1.8, -1.58, 1.6),
-            Triple(0.5, -1.5, -1.58, 1.6),
+            Case(0.0, 0.0, -1.58, 1.6),
+            Case(-1.2, 0.5, -1.58, 1.6),
+            // Far zone
+            Case(0.0, -1.2, -1.58, 1.6),
+            Case(0.0, -1.5, -1.58, 1.6),
+            Case(0.0, -1.8, -1.58, 1.6),
+            Case(0.5, -1.5, -1.58, 1.6),
         )
 
         println("=== shotError(solve(target, T), target) test ===")

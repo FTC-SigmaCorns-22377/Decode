@@ -107,6 +107,9 @@ class BisectionTuner(
                 cell.omegaHi = omegaMeasured.coerceAtMost(cell.omegaHi)
             }
             ShotOutcome.MADE -> {
+                // Tighten bracket around the measured made omega so future shots stay near it.
+                cell.omegaLo = maxOf(cell.omegaLo, omegaMeasured - CONVERGE_WIDTH / 2)
+                cell.omegaHi = minOf(cell.omegaHi, omegaMeasured + CONVERGE_WIDTH / 2)
                 cell.lastOmegaMade = omegaMeasured
                 cell.nMades++
                 if (cell.nMades >= N_MAKES_TARGET) cell.converged = true

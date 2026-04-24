@@ -39,6 +39,7 @@ static inline TurretWeights unpack_weights(const jfloat* p) {
 }
 
 // Reads [N, phi_0, v_exit_0, omega_0, phi_1, ...] into OmegaMapParams for IDW.
+// Also builds piecewise-linear tuned-region bounds (phi_levels, v_lo, v_hi).
 static inline OmegaMapParams unpack_omega(const jfloat* p) {
     OmegaMapParams om;
     int n = static_cast<int>(p[0]);
@@ -57,6 +58,43 @@ static inline OmegaMapParams unpack_omega(const jfloat* p) {
     }
     om.phi_scale = (phi_max > phi_min + 1e-6f) ? 1.f/(phi_max - phi_min) : 1.f;
     om.v_scale   = (v_max   > v_min   + 1e-6f) ? 1.f/(v_max   - v_min)   : 1.f;
+
+    // Build piecewise-linear tuned-region bounds.
+    // Sort point indices by phi, then group into levels (within 1e-3 rad), recording
+    // min/max v_exit per level.
+    if (n >= 2) {
+        // Insertion-sort indices by phi (small n, simple sort is fine).
+        int idx[OmegaMapParams::MAX_POINTS];
+        for (int i = 0; i < n; ++i) idx[i] = i;
+        for (int i = 1; i < n; ++i) {
+            int key = idx[i];
+            int j = i - 1;
+            while (j >= 0 && om.phi[idx[j]] > om.phi[key]) { idx[j+1] = idx[j]; --j; }
+            idx[j+1] = key;
+        }
+
+        int nl = 0;
+        float prev_phi = -1e9f;
+        for (int k = 0; k < n && nl < OmegaMapParams::MAX_LEVELS; ++k) {
+            int i = idx[k];
+            float phi_k = om.phi[i];
+            float v_k   = om.v_exit[i];
+            if (phi_k - prev_phi > 1e-3f) {
+                // New level.
+                om.phi_levels[nl] = phi_k;
+                om.v_lo[nl]       = v_k;
+                om.v_hi[nl]       = v_k;
+                prev_phi          = phi_k;
+                ++nl;
+            } else {
+                // Same level — extend v range.
+                if (v_k < om.v_lo[nl-1]) om.v_lo[nl-1] = v_k;
+                if (v_k > om.v_hi[nl-1]) om.v_hi[nl-1] = v_k;
+            }
+        }
+        om.n_levels = nl;
+    }
+
     return om;
 }
 

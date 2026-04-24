@@ -157,7 +157,7 @@ FlightTimeResult flight_time_cold(
     r.T_star   = best_T;
     r.params   = best_p;
     r.tau      = best_cost;
-    r.feasible = ballistics_is_feasible(best_p, best_T, bounds, cfg);
+    r.feasible = ballistics_is_feasible(best_p, best_T, bounds, cfg, omega);
     return r;
 }
 
@@ -267,6 +267,6 @@ FlightTimeResult flight_time_warm(
     r.T_star   = T;
     r.params   = p_final;
     r.tau      = flight_time_tau(p_final, current, weights, omega);
-    r.feasible = ballistics_is_feasible(p_final, T, bounds, cfg);
+    r.feasible = ballistics_is_feasible(p_final, T, bounds, cfg, omega);
     return r;
 }

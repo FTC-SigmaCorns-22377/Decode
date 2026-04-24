@@ -6,10 +6,22 @@
 #include "turret_planner/ballistics.h"
 #include "turret_planner/flywheel_model.h"
 
-// Use a non-trivial omega map so the flywheel-drop arm actually matters:
-//   omega = 800 + 40*v + 50*phi
+// Use a non-trivial IDW omega map so the flywheel-drop arm actually matters:
+//   omega ≈ 800 + 40*v + 50*phi  (encoded as 4 IDW points spanning operating range)
 static PhysicsConfig  cfg{9.81f, 0.1f};
-static OmegaMapParams om{{800.f, 40.f, 50.f, 0.f, 0.f, 0.f}};
+static OmegaMapParams make_om() {
+    OmegaMapParams m{};
+    m.n = 4;
+    // (phi, v_exit, omega) points where omega = 800 + 40*v + 50*phi
+    m.phi[0] = 0.3f; m.v_exit[0] = 5.f; m.omega[0] = 800.f + 40.f*5.f + 50.f*0.3f;
+    m.phi[1] = 0.3f; m.v_exit[1] = 9.f; m.omega[1] = 800.f + 40.f*9.f + 50.f*0.3f;
+    m.phi[2] = 1.2f; m.v_exit[2] = 5.f; m.omega[2] = 800.f + 40.f*5.f + 50.f*1.2f;
+    m.phi[3] = 1.2f; m.v_exit[3] = 9.f; m.omega[3] = 800.f + 40.f*9.f + 50.f*1.2f;
+    m.phi_scale = 1.f / (1.2f - 0.3f);
+    m.v_scale   = 1.f / (9.f  - 5.f);
+    return m;
+}
+static OmegaMapParams om = make_om();
 static TurretBounds   bounds{-3.14f, 3.14f, 0.f, 1.4f, 15.f, 2000.f};
 static TurretWeights  weights{0.05f, 0.08f, 0.0005f};
 
@@ -48,11 +60,11 @@ void test_robust_matches_grid() {
     for (int i = 0; i <= N; ++i) {
         float T1 = iv1.t_lo + (iv1.t_hi - iv1.t_lo) * float(i) / float(N);
         ShotParams s1 = ballistics_solve(0,0,0, t1x, t1y, t1z, 0, 0, T1, cfg, om);
-        if (!ballistics_is_feasible(s1, T1, bounds, cfg)) continue;
+        if (!ballistics_is_feasible(s1, T1, bounds, cfg, om)) continue;
         for (int j = 0; j <= N; ++j) {
             float T2 = iv2.t_lo + (iv2.t_hi - iv2.t_lo) * float(j) / float(N);
             ShotParams s2 = ballistics_solve(0,0,0, t2x, t2y, t2z, 0, 0, T2, cfg, om);
-            if (!ballistics_is_feasible(s2, T2, bounds, cfg)) continue;
+            if (!ballistics_is_feasible(s2, T2, bounds, cfg, om)) continue;
             float cost = robust_move_cost(s1, s2, drop_fraction);
             if (cost < best_grid_cost) {
                 best_grid_cost = cost;
@@ -146,11 +158,11 @@ void test_adjust_matches_grid() {
     for (int i = 0; i <= N; ++i) {
         float T1 = iv1.t_lo + (iv1.t_hi - iv1.t_lo) * float(i) / float(N);
         ShotParams s1 = ballistics_solve(0,0,0, t1x, t1y, t1z, 0, 0, T1, cfg, om);
-        if (!ballistics_is_feasible(s1, T1, bounds, cfg)) continue;
+        if (!ballistics_is_feasible(s1, T1, bounds, cfg, om)) continue;
         for (int j = 0; j <= N; ++j) {
             float T2 = iv2.t_lo + (iv2.t_hi - iv2.t_lo) * float(j) / float(N);
             ShotParams s2 = ballistics_solve(0,0,0, t2x, t2y, t2z, 0, 0, T2, cfg, om);
-            if (!ballistics_is_feasible(s2, T2, bounds, cfg)) continue;
+            if (!ballistics_is_feasible(s2, T2, bounds, cfg, om)) continue;
             float cost = adjust_cost(s1, s2, cur, drop_fraction);
             if (cost < best_grid_cost) {
                 best_grid_cost = cost;

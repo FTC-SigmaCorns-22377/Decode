@@ -273,10 +273,12 @@ bool ballistics_is_feasible(
     float T,
     const TurretBounds& bounds,
     const PhysicsConfig& cfg,
+    const OmegaMapParams& omega,
     float robot_heading)
 {
     if (p.v_exit <= 0.f || p.v_exit > bounds.v_exit_max) return false;
     if (p.phi < bounds.phi_min || p.phi > bounds.phi_max) return false;
+    if (!omega_map_in_region(omega, p.phi, p.v_exit)) return false;
 
     // Theta check: convert to robot-relative frame and check bounds.
     // Skip if bounds span full circle (default: theta_min=-π, theta_max=π).
@@ -535,7 +537,7 @@ TInterval ballistics_feasible_interval(
         if (T <= 0.f) return false;
         ShotParams p = ballistics_solve(0,0,0, dx,dy,dz, vRx,vRy, T, cfg,
                                         OmegaMapParams{});
-        if (!ballistics_is_feasible(p, T, bounds, cfg)) return false;
+        if (!ballistics_is_feasible(p, T, bounds, cfg, OmegaMapParams{})) return false;
 
         // Reject backwards-pointing shots: the launch direction must have
         // a positive component along the geometric target direction.

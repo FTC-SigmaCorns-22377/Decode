@@ -184,8 +184,8 @@ RobustShotResult flight_time_robust(
                               target2_x, target2_y, target2_z,
                               robot_vx, robot_vy, bestT2, cfg, omega);
     out.J = bestJ;
-    out.feasible = ballistics_is_feasible(out.s1, bestT1, bounds, cfg)
-                && ballistics_is_feasible(out.s2, bestT2, bounds, cfg);
+    out.feasible = ballistics_is_feasible(out.s1, bestT1, bounds, cfg, omega)
+                && ballistics_is_feasible(out.s2, bestT2, bounds, cfg, omega);
     return out;
 }
 
@@ -366,7 +366,7 @@ RobustShotResult flight_time_robust_adjust(
                               target2_x, target2_y, target2_z,
                               robot_vx, robot_vy, bestT2, cfg, omega);
     out.J = bestJ;
-    out.feasible = ballistics_is_feasible(out.s1, bestT1, bounds, cfg)
-                && ballistics_is_feasible(out.s2, bestT2, bounds, cfg);
+    out.feasible = ballistics_is_feasible(out.s1, bestT1, bounds, cfg, omega)
+                && ballistics_is_feasible(out.s2, bestT2, bounds, cfg, omega);
     return out;
 }

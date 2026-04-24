@@ -22,6 +22,24 @@ float omega_map_eval(const OmegaMapParams& m, float phi, float v_exit) {
     return (den > 0.f) ? num / den : 0.f;
 }
 
+bool omega_map_in_region(const OmegaMapParams& m, float phi, float v_exit) {
+    if (m.n_levels < 2) return true;
+    if (phi < m.phi_levels[0] || phi > m.phi_levels[m.n_levels - 1]) return false;
+
+    // Binary search for the surrounding phi levels.
+    int lo = 0, hi = m.n_levels - 2;
+    while (lo < hi) {
+        int mid = (lo + hi + 1) / 2;
+        if (m.phi_levels[mid] <= phi) lo = mid; else hi = mid - 1;
+    }
+    // Linearly interpolate v_lo and v_hi between levels lo and lo+1.
+    float span = m.phi_levels[lo + 1] - m.phi_levels[lo];
+    float t = (span > 1e-6f) ? (phi - m.phi_levels[lo]) / span : 0.f;
+    float v_lo = m.v_lo[lo] + t * (m.v_lo[lo + 1] - m.v_lo[lo]);
+    float v_hi = m.v_hi[lo] + t * (m.v_hi[lo + 1] - m.v_hi[lo]);
+    return v_exit >= v_lo && v_exit <= v_hi;
+}
+
 // Central finite differences, step ~0.1% of normalized range
 void omega_map_partials(const OmegaMapParams& m, float phi, float v_exit,
                         float* d_omega_dphi, float* d_omega_dvexit) {
