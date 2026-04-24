@@ -3,10 +3,12 @@ package sigmacorns.subsystem
 import sigmacorns.Robot
 import sigmacorns.io.SigmaIO
 import sigmacorns.math.normalizeAngle
+import sigmacorns.control.SlewRateLimiter
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.absoluteValue
 import kotlin.math.min
+import kotlin.math.sign
 import kotlin.time.Duration
 
 /**
@@ -43,6 +45,12 @@ class Turret(val io: SigmaIO) {
 
     /** If non-null, bypasses all angle logic and writes this value directly to both servos. */
     var servoOverride: Double? = null
+
+    /** Whether the localization system is currently trusted */
+    var localizationTrusted: Boolean = false
+
+    /** Slew rate limiter for untrusted localization (90 deg/s) */
+    private val angleSlewLimiter = SlewRateLimiter(PI/2)
 
     // Current turret angle in radians from sensor feedback
     var pos = 0.0
@@ -89,10 +97,26 @@ class Turret(val io: SigmaIO) {
             }) + manualOffset
         )
 
-        goalTargetAngle = rawTarget
+        // Apply localization-trusted clamping or slew rate limiting
+        val processedTarget = if (localizationTrusted) {
+            // Clamp to 90 degrees (PI/2) from current position, using signed angular difference
+            val diff = normalizeAngle(rawTarget - pos)
+            val signedDiff = if (diff > PI) diff - 2*PI else diff
+            if (abs(signedDiff) > PI/2) {
+                val clampedTarget = pos + sign(signedDiff) * PI/2
+                normalizeAngle(clampedTarget)
+            } else {
+                rawTarget
+            }
+        } else {
+            // Slew rate limit using angle traversal (not shortest normalized distance)
+            angleSlewLimiter.calculate(rawTarget, dt)
+        }
+
+        goalTargetAngle = processedTarget
 
         // Check aliases - use sensor feedback to pick closest reachable target
-        val candidates = listOf(rawTarget, rawTarget - 2 * PI, rawTarget + 2 * PI)
+        val candidates = listOf(processedTarget, processedTarget - 2 * PI, processedTarget + 2 * PI)
         val validCandidates = candidates.filter { it in angleLimits }
 
         val targetToUse = if (validCandidates.isNotEmpty()) {

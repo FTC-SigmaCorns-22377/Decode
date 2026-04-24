@@ -246,6 +246,7 @@ class   MainTeleOp : SigmaOpMode() {
             if (aim is sigmacorns.logic.NativeAutoAim) {
                 telemetry.addData("Solver feasible", "%.1f", aim.lastSolveFeasible)
                 telemetry.addData("Solver exception", aim.lastSolveException)
+                telemetry.addData("Solved?", aim.solved)
                 telemetry.addData("Omega data pts", aim.omegaDataPoints)
                 telemetry.addData("Goal dist", "%.2f m", aim.diagGoalDist)
                 telemetry.addData("Probe phi@T=0.5", "%.1f deg", aim.diagPhi05)
@@ -255,6 +256,7 @@ class   MainTeleOp : SigmaOpMode() {
                 telemetry.addData("Cold phi", "%.1f deg", aim.diagColdPhi)
                 telemetry.addData("minAngle", "%.1f deg", ShooterConfig.minAngleDeg)
                 telemetry.addData("maxAngle", "%.1f deg", ShooterConfig.maxAngleDeg)
+                telemetry.addData("predicted miss distance", aim.missDistance)
                 telemetry.addData("Ready to shoot", aim.readyToShoot)
                 telemetry.addData("In zone", robot.intakeCoordinator.inShootingZone)
             }

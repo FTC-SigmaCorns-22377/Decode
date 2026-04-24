@@ -89,6 +89,11 @@ class NativeAutoAim(
         private set
     var diagColdTstar: Float = Float.NaN   // T* from optimalTCold
         private set
+    var missDistance: Float = Float.NaN
+    private set
+
+    var solved = false
+    private set
 
     override var primaryShotState: Ballistics.ShotState? = null
         private set
@@ -266,7 +271,7 @@ class NativeAutoAim(
             traj[base + 5] = robotVy
         }
 
-        var solved = false
+        solved = false
         isRobustActive = false
         secondaryShotState = null
         tertiaryShotState = null
@@ -290,7 +295,8 @@ class NativeAutoAim(
             if (r[Robust3ShotPlanIdx.FEASIBLE] > 0.5f) {
                 var solverTheta = r[Robust3ShotPlanIdx.S1_THETA].toDouble()
                 val relAngle = wrapAngle(solverTheta - fusedPose.rot)
-                if (abs(relAngle) > TurretServoConfig.maxAngle) {
+                val thetaInRange = abs(relAngle) <= TurretServoConfig.maxAngle
+                if (!thetaInRange) {
                     solverTheta = wrapAngle(
                         relAngle.coerceIn(TurretServoConfig.minAngle, TurretServoConfig.maxAngle)
                                 + fusedPose.rot
@@ -300,7 +306,9 @@ class NativeAutoAim(
                 lastPhi   = r[Robust3ShotPlanIdx.S1_PHI]
                 lastOmega = r[Robust3ShotPlanIdx.S1_OMEGA]
                 lastT1    = r[Robust3ShotPlanIdx.T1]
-                solved = true
+                // Only mark solved (eligible to fire) when turret can actually reach the angle.
+                // Still set lastTheta/Phi/Omega so the flywheel can prespin.
+                solved = thetaInRange
 
                 if (!inBurst && solveNBalls >= 2) {
                     isRobustActive = true
@@ -357,11 +365,12 @@ class NativeAutoAim(
         val actualPhi   = shooter.computedHoodAngle.toFloat()
         val actualOmega = robot.io.flywheelVelocity().toFloat()
         val actualVexit = bridge.vExitFromOmegaH(actualPhi, actualOmega, AimConfig.vMax.toFloat(), omegaHandle)
-        val missDistance = bridge.shotError(
+        missDistance = bridge.shotError(
             tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
             actualTheta, actualPhi, actualVexit, actualOmega,
             lastT1, physConfig
         )
+
         readyToShoot = missDistance < AimConfig.shotTolerance && inZone
     }
 
