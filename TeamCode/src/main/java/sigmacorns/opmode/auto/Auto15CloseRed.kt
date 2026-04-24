@@ -182,12 +182,10 @@ class Auto15CloseRed : SigmaOpMode() {
 
             if (transferring) {
                 transferAt = robot.io.time()
-                robot.aim.shotRequested = false
             } else if (robot.io.time() - startedAt >= forceTimeout) {
                 transferAt = robot.io.time()
                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
                 robot.intakeCoordinator.overrideShot = true
-                robot.aim.shotRequested = false
             } else {
                 yield()
             }
@@ -196,6 +194,7 @@ class Auto15CloseRed : SigmaOpMode() {
         var sawBeamBreakDuringTransfer = robot.beamBreak.slots.any { it } ||
             robot.io.beamBreak1() || robot.io.beamBreak2() || robot.io.beamBreak3()
         while (true) {
+            robot.aim.shotRequested = true
             val elapsed = robot.io.time() - transferAt
             val beamBreak1 = robot.io.beamBreak1()
             val beamBreak2 = robot.io.beamBreak2()
@@ -217,7 +216,6 @@ class Auto15CloseRed : SigmaOpMode() {
 
         robot.intakeCoordinator.overrideShot = false
         robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-        robot.aimFlywheel = false
         robot.aim.shotRequested = false
     }
 
