@@ -53,14 +53,16 @@ class BallChaseTestTeleOp : SigmaOpMode() {
             drivetrain = robot.drive,
             tracking = tracking,
             io = io,
-            maxSpeed = 0.6,
-            stopRadiusM = 0.20,
-            slowDownRadiusM = 0.6,
+            maxSpeed = 1.0,
+            stopRadiusM = 0.18,
+            slowDownRadiusM = 0.30,
             rotateToTarget = true,
         )
         chase.enabled = false
 
+        val hasPinpoint = hardware?.pinpoint != null
         telemetry.addLine("Ball Chase TEST — hold right bumper to auto-chase.")
+        telemetry.addData("pinpoint", if (hasPinpoint) "FOUND" else "MISSING (pose stuck at 0)")
         telemetry.update()
 
         waitForStart()
@@ -92,8 +94,16 @@ class BallChaseTestTeleOp : SigmaOpMode() {
                 if (target != null) {
                     val p = target.positionAt(t)
                     val pose = io.position()
-                    val d = kotlin.math.hypot(p.x - pose.v.x, p.y - pose.v.y)
+                    val dx = p.x - pose.v.x
+                    val dy = p.y - pose.v.y
+                    val d = kotlin.math.hypot(dx, dy)
+                    val c = kotlin.math.cos(-pose.rot)
+                    val s = kotlin.math.sin(-pose.rot)
+                    val rx = c * dx - s * dy
+                    val ry = s * dx + c * dy
                     telemetry.addData("target", "#${target.id}  d=%.2fm".format(d))
+                    telemetry.addData("ball field", "(%.2f, %.2f) m".format(p.x, p.y))
+                    telemetry.addData("ball rel-bot", "(%.2f, %.2f) m".format(rx, ry))
                 } else {
                     telemetry.addLine("no target")
                 }
