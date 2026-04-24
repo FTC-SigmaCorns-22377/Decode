@@ -574,3 +574,173 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_omegaMapEval(
     OmegaMapParams om = unpack_omega(omC);
     return omega_map_eval(om, phi, vExit);
 }
+
+// ---------------------------------------------------------------------------
+// JNI: vExitFromOmega
+// Bisection (30 iters) to invert the IDW map: find v_exit s.t. omega_map(phi,v)==targetOmega.
+// Replaces 30 separate omegaMapEval JNI round-trips.
+// ---------------------------------------------------------------------------
+extern "C" JNIEXPORT jfloat JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_vExitFromOmega(
+    JNIEnv* env, jobject,
+    jfloat phi, jfloat targetOmega, jfloat vMax,
+    jfloatArray jOmega)
+{
+    ScopedArray omC(env, jOmega);
+    if (!omC) return 0.f;
+    OmegaMapParams om = unpack_omega(omC);
+    float lo = 0.f, hi = vMax;
+    for (int i = 0; i < 30; ++i) {
+        float mid = 0.5f * (lo + hi);
+        if (omega_map_eval(om, phi, mid) < targetOmega) lo = mid; else hi = mid;
+    }
+    return 0.5f * (lo + hi);
+}
+
+// ---------------------------------------------------------------------------
+// OmegaMap native handle: parse once, reuse across calls — avoids per-call unpack.
+// ---------------------------------------------------------------------------
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_createOmegaMap(
+    JNIEnv* env, jobject,
+    jfloatArray jOmega)
+{
+    ScopedArray omC(env, jOmega);
+    if (!omC) return 0L;
+    OmegaMapParams* om = new(std::nothrow) OmegaMapParams(unpack_omega(omC));
+    return reinterpret_cast<jlong>(om);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_destroyOmegaMap(
+    JNIEnv*, jobject,
+    jlong handle)
+{
+    delete reinterpret_cast<OmegaMapParams*>(handle);
+}
+
+// Helper: dereference a handle created by createOmegaMap.
+static inline const OmegaMapParams& omega_h(jlong h) {
+    return *reinterpret_cast<const OmegaMapParams*>(h);
+}
+
+// ---------------------------------------------------------------------------
+// Handle-based variants: no per-call unpack_omega — use cached OmegaMapParams.
+// ---------------------------------------------------------------------------
+
+extern "C" JNIEXPORT jfloat JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_vExitFromOmegaH(
+    JNIEnv*, jobject,
+    jfloat phi, jfloat targetOmega, jfloat vMax,
+    jlong omHandle)
+{
+    const OmegaMapParams& om = omega_h(omHandle);
+    float lo = 0.f, hi = vMax;
+    for (int i = 0; i < 30; ++i) {
+        float mid = 0.5f * (lo + hi);
+        if (omega_map_eval(om, phi, mid) < targetOmega) lo = mid; else hi = mid;
+    }
+    return 0.5f * (lo + hi);
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_solveH(
+    JNIEnv* env, jobject,
+    jfloat turretX, jfloat turretY, jfloat turretZ,
+    jfloat targetX, jfloat targetY, jfloat targetZ,
+    jfloat robotVx, jfloat robotVy,
+    jfloat T,
+    jfloatArray jPhys,
+    jlong omHandle)
+{
+    ScopedArray phys(env, jPhys);
+    if (!phys) return nullptr;
+
+    ShotParams p = ballistics_solve(
+        turretX, turretY, turretZ,
+        targetX, targetY, targetZ,
+        robotVx, robotVy, T, unpack_physics(phys), omega_h(omHandle));
+
+    float buf[4] = {p.theta, p.phi, p.v_exit, p.omega_flywheel};
+    return make_result(env, buf, 4);
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_optimalTColdH(
+    JNIEnv* env, jobject,
+    jfloat turretX, jfloat turretY, jfloat turretZ,
+    jfloat targetX, jfloat targetY, jfloat targetZ,
+    jfloat robotVx, jfloat robotVy,
+    jfloat curTheta, jfloat curPhi, jfloat curOmega,
+    jfloatArray jWeights,
+    jfloatArray jBounds,
+    jfloatArray jPhys,
+    jlong omHandle,
+    jfloat tol)
+{
+    ScopedArray w(env, jWeights), b(env, jBounds), ph(env, jPhys);
+    if (!w || !b || !ph) return nullptr;
+
+    FlightTimeResult r = flight_time_cold(
+        turretX, turretY, turretZ,
+        targetX, targetY, targetZ,
+        robotVx, robotVy,
+        unpack_turret(curTheta, curPhi, curOmega),
+        unpack_weights(w), unpack_bounds(b), unpack_physics(ph), omega_h(omHandle),
+        tol);
+
+    float buf[7] = {r.T_star, r.tau,
+                    r.params.theta, r.params.phi, r.params.v_exit,
+                    r.params.omega_flywheel,
+                    r.feasible ? 1.f : 0.f};
+    return make_result(env, buf, 7);
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_robust3ShotPlanH(
+    JNIEnv* env, jobject,
+    jfloatArray jTrajectory, jint nStates,
+    jfloat turretZ,
+    jfloat targetX, jfloat targetY, jfloat targetZ,
+    jfloat curTheta, jfloat curPhi, jfloat curOmega,
+    jint   nBalls,
+    jfloat tRemaining,
+    jfloat transferTime,
+    jfloat dropFraction,
+    jfloatArray jWeights,
+    jfloatArray jBounds,
+    jfloatArray jPhys,
+    jlong omHandle,
+    jfloat tol,
+    jint   maxIter)
+{
+    ScopedArray traj(env, jTrajectory);
+    ScopedArray w(env, jWeights), b(env, jBounds), ph(env, jPhys);
+    if (!traj || !w || !b || !ph) return nullptr;
+
+    static_assert(sizeof(FutureState) == 6 * sizeof(float), "FutureState layout mismatch");
+    const FutureState* states = reinterpret_cast<const FutureState*>(traj.ptr);
+
+    Robust3ShotResult r = robust_3shot_plan(
+        states, (int)nStates,
+        turretZ,
+        targetX, targetY, targetZ,
+        unpack_turret(curTheta, curPhi, curOmega),
+        (int)nBalls,
+        tRemaining, transferTime, dropFraction,
+        unpack_weights(w), unpack_bounds(b),
+        unpack_physics(ph), omega_h(omHandle),
+        tol, (int)maxIter);
+
+    float buf[22] = {
+        r.feasible ? 1.f : 0.f,
+        float(r.idx1), float(r.idx2), float(r.idx3),
+        r.J, r.J_12, r.J_23,
+        r.T1, r.T2, r.T3,
+        r.s1.theta, r.s1.phi, r.s1.v_exit, r.s1.omega_flywheel,
+        r.s2.theta, r.s2.phi, r.s2.v_exit, r.s2.omega_flywheel,
+        r.s3.theta, r.s3.phi, r.s3.v_exit, r.s3.omega_flywheel
+    };
+    return make_result(env, buf, 22);
+}

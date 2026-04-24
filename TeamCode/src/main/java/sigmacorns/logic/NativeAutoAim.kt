@@ -26,6 +26,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.time.Duration
+import kotlin.time.DurationUnit
 
 /**
  * Auto-aim backed by the C++ turret_planner (JNI).
@@ -57,6 +58,12 @@ class NativeAutoAim(
         private set
 
     private val bridge = TurretPlannerBridge()
+
+    // Native handle to parsed OmegaMapParams — created at init, avoids per-call unpack.
+    private var omegaHandle: Long = 0L
+
+    // Accumulates time since last optimalTColdH diagnostic call (throttled to ~1 Hz).
+    private var diagColdAccumSec: Double = 10.0
 
     private var lastTheta: Float = 0f
     private var lastPhi:   Float = 0f
@@ -153,9 +160,12 @@ class NativeAutoAim(
         farZone = FieldLandmarks.farZoneCorners.map {
             if (blue) Vector2d(-it.x, it.y) else Vector2d(it)
         }
+
+        omegaHandle = bridge.createOmegaMap(omegaCoeffs)
     }
 
     override fun update(dt: Duration, aimTurret: Boolean) {
+        diagColdAccumSec += dt.toDouble(DurationUnit.SECONDS)
         updateVision()
         setTurretInputs()
         setShooterInputs(aimTurret)
@@ -165,7 +175,13 @@ class NativeAutoAim(
         }
     }
 
-    override fun close() { autoAim.close() }
+    override fun close() {
+        autoAim.close()
+        if (omegaHandle != 0L) {
+            bridge.destroyOmegaMap(omegaHandle)
+            omegaHandle = 0L
+        }
+    }
 
     // ── Internal ─────────────────────────────────────────────────────
 
@@ -203,9 +219,9 @@ class NativeAutoAim(
 
         diagGoalDist = hypot((gX - tX).toDouble(), (gY - tY).toDouble()).toFloat()
 
-        // Direct ballistics probe at T=0.5s (bypasses robust solver — for diagnostics)
+        // Direct ballistics probe at T=0.5s (diagnostics only — uses cached handle)
         try {
-            val probe = bridge.solve(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy, 0.5f, physConfig, omegaCoeffs)
+            val probe = bridge.solveH(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy, 0.5f, physConfig, omegaHandle)
             diagPhi05   = Math.toDegrees(probe[1].toDouble()).toFloat()
             diagVexit05 = probe[2]
         } catch (e: Exception) {
@@ -213,15 +229,18 @@ class NativeAutoAim(
             diagVexit05 = Float.NaN
         }
 
-        // optimalTCold: exact same path as flight_time_cold inside solve_1ball
-        try {
-            val cold = bridge.optimalTCold(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
-                curTheta, curPhi, curOmega, weights, bounds, physConfig, omegaCoeffs)
-            diagColdFeasible = cold[TurretPlannerBridge.OptimalTIdx.FEASIBLE]
-            diagColdTstar    = cold[TurretPlannerBridge.OptimalTIdx.T_STAR]
-            diagColdPhi      = Math.toDegrees(cold[TurretPlannerBridge.OptimalTIdx.PHI].toDouble()).toFloat()
-        } catch (e: Exception) {
-            diagColdFeasible = -2f
+        // optimalTCold: throttled to ~1 Hz — full Piyavskii-Shubert is expensive
+        if (diagColdAccumSec >= 1.0) {
+            diagColdAccumSec = 0.0
+            try {
+                val cold = bridge.optimalTColdH(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
+                    curTheta, curPhi, curOmega, weights, bounds, physConfig, omegaHandle)
+                diagColdFeasible = cold[TurretPlannerBridge.OptimalTIdx.FEASIBLE]
+                diagColdTstar    = cold[TurretPlannerBridge.OptimalTIdx.T_STAR]
+                diagColdPhi      = Math.toDegrees(cold[TurretPlannerBridge.OptimalTIdx.PHI].toDouble()).toFloat()
+            } catch (e: Exception) {
+                diagColdFeasible = -2f
+            }
         }
 
         val inZone = robot.intakeCoordinator.inShootingZone
@@ -230,8 +249,22 @@ class NativeAutoAim(
         val inBurst = robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING
         val solveNBalls = if (inBurst) 1 else nBalls.coerceAtLeast(1)
 
-        // Single-state trajectory: current robot state only
-        val traj = floatArrayOf(0f, tX, tY, fusedPose.rot.toFloat(), robotVx, robotVy)
+        // Build a predicted trajectory with one state per ball, spaced by transferDelay.
+        // Constant-velocity projection; gives solve_2ball / solve_3ball real future states
+        // instead of the degenerate single-state case where they immediately bail out.
+        val transferDelayF = AimConfig.transferDelay.toFloat()
+        val heading = fusedPose.rot.toFloat()
+        val traj = FloatArray(solveNBalls * 6) { 0f }
+        for (i in 0 until solveNBalls) {
+            val dt = i * transferDelayF
+            val base = i * 6
+            traj[base + 0] = dt
+            traj[base + 1] = tX + robotVx * dt
+            traj[base + 2] = tY + robotVy * dt
+            traj[base + 3] = heading
+            traj[base + 4] = robotVx
+            traj[base + 5] = robotVy
+        }
 
         var solved = false
         isRobustActive = false
@@ -240,15 +273,15 @@ class NativeAutoAim(
         transferPowerCommand = 1.0f
 
         try {
-            val r = bridge.robust3ShotPlan(
-                traj, 1, tZ,
+            val r = bridge.robust3ShotPlanH(
+                traj, solveNBalls, tZ,
                 gX, gY, gZ,
                 curTheta, curPhi, curOmega,
                 solveNBalls,
                 0f,
-                AimConfig.transferDelay.toFloat(),
+                transferDelayF,
                 AimConfig.dropFraction.toFloat(),
-                weights, bounds, physConfig, omegaCoeffs
+                weights, bounds, physConfig, omegaHandle
             )
 
             lastSolveFeasible = r[Robust3ShotPlanIdx.FEASIBLE]
@@ -316,31 +349,20 @@ class NativeAutoAim(
         val prespin = nBalls > 0 && (inZone || shotRequested)
         if (robot.aimFlywheel) {
             shooter.hoodAngle = lastPhi.toDouble()
-            if (prespin) shooter.flywheelTarget = lastOmega.toDouble()
+            if (prespin) shooter.flywheelTarget = lastOmega.toDouble() else shooter.flywheelTarget = 0.0
         }
 
         // readyToShoot: forward-simulate from current actuator state
         val actualTheta = (turret.pos + fusedPose.rot).toFloat()
         val actualPhi   = shooter.computedHoodAngle.toFloat()
         val actualOmega = robot.io.flywheelVelocity().toFloat()
-        val actualVexit = vExitFromOmega(actualPhi, actualOmega)
+        val actualVexit = bridge.vExitFromOmegaH(actualPhi, actualOmega, AimConfig.vMax.toFloat(), omegaHandle)
         val missDistance = bridge.shotError(
             tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
             actualTheta, actualPhi, actualVexit, actualOmega,
             lastT1, physConfig
         )
         readyToShoot = missDistance < AimConfig.shotTolerance && inZone
-    }
-
-    /** Invert the IDW omega map: find v_exit such that omegaMapEval(phi, v_exit) == omega. */
-    private fun vExitFromOmega(phi: Float, omega: Float): Float {
-        var lo = 0f
-        var hi = (AimConfig.vMax).toFloat()
-        repeat(30) {
-            val mid = (lo + hi) / 2f
-            if (bridge.omegaMapEval(phi, mid, omegaCoeffs) < omega) lo = mid else hi = mid
-        }
-        return (lo + hi) / 2f
     }
 
     private fun wrapAngle(a: Double): Double {

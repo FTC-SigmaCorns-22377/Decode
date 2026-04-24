@@ -6,9 +6,10 @@ import sigmacorns.constants.robotSize
 import sigmacorns.constants.turretPos
 import sigmacorns.math.PolygonOverlapDetection
 import sigmacorns.subsystem.IntakeTransfer
-import kotlin.math.PI
+import kotlin.time.Duration
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Cross-subsystem coordinator for the intake-transfer and beam break subsystems.
@@ -26,6 +27,7 @@ class IntakeCoordinator(val robot: Robot) {
         const val FLYWHEEL_MIN_VEL = 50.0
         /** Minimum flywheel target (rad/s) considered a real shot — below this, auto-shoot is disabled (e.g. idle always-on). */
         const val MIN_SHOT_TARGET = 300.0
+        val TRANSFER_DURATION = 3.seconds
     }
 
     /** When true, transitions to READY_TO_SHOOT state when robot enters a shooting zone. */
@@ -36,6 +38,9 @@ class IntakeCoordinator(val robot: Robot) {
         private set
 
     var overrideShot: Boolean = false
+
+    /** Timestamp when native auto-aim first started transferring; null if not in burst. */
+    private var transferStartTime: Duration? = null
 
     /**
      * Called every loop before subsystem updates.
@@ -77,16 +82,22 @@ class IntakeCoordinator(val robot: Robot) {
             robot.intakeTransfer.transferPowerOverride = robot.aim.transferPowerCommand.toDouble()
             val cur = robot.intakeTransfer.state
             if(robot.aim.readyToShoot && cur != IntakeTransfer.State.INTAKING) {
+                if (transferStartTime == null) transferStartTime = robot.io.time()
                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
             } else if(cur == IntakeTransfer.State.TRANSFERRING && robot.intakeTransfer.blockerReady && !robot.aim.readyToShoot) {
-                // Blocker fully open but not ready to shoot — shot complete or failed, stop motor
-                robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
+                val elapsed = robot.io.time() - (transferStartTime ?: robot.io.time())
+                if (elapsed >= TRANSFER_DURATION) {
+                    transferStartTime = null
+                    robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
+                }
+                // else: keep transferring until 3s elapsed
             } else if(cur != IntakeTransfer.State.TRANSFERRING && cur != IntakeTransfer.State.INTAKING) {
                 // Not yet committed — pre-open blocker while waiting for readyToShoot
                 robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
             }
             // If already TRANSFERRING (!blockerReady) or user is INTAKING, don't override
         } else {
+            transferStartTime = null
             robot.intakeTransfer.transferPowerOverride = null
             if ((robot.intakeTransfer.state == IntakeTransfer.State.READY_TO_SHOOT
                 || robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING)

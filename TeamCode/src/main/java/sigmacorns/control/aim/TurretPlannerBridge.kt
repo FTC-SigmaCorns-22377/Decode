@@ -412,6 +412,75 @@ class TurretPlannerBridge {
      */
     external fun omegaMapEval(phi: Float, vExit: Float, omegaCoeffs: FloatArray): Float
 
+    /**
+     * Invert the omega map in native code: find v_exit in [0, vMax] such that
+     * omegaMapEval(phi, v_exit) == targetOmega via 30-step bisection.
+     * One JNI call instead of 30 — use instead of calling [omegaMapEval] in a loop.
+     */
+    external fun vExitFromOmega(phi: Float, targetOmega: Float, vMax: Float, omegaCoeffs: FloatArray): Float
+
+    // ------------------------------------------------------------------
+    // Omega map native handle (parse-once cache, fix 4)
+    // ------------------------------------------------------------------
+
+    /**
+     * Parse [omegaCoeffs] once and return a native handle to a heap-allocated
+     * OmegaMapParams.  Pass the handle to the *H variants below.
+     * Must be paired with [destroyOmegaMap].
+     */
+    external fun createOmegaMap(omegaCoeffs: FloatArray): Long
+
+    /** Free the native OmegaMapParams allocated by [createOmegaMap]. */
+    external fun destroyOmegaMap(handle: Long)
+
+    // ------------------------------------------------------------------
+    // Handle-based hot-path variants: skip per-call unpack_omega
+    // ------------------------------------------------------------------
+
+    /** Like [solve] but uses a pre-parsed omega handle from [createOmegaMap]. */
+    external fun solveH(
+        turretX: Float, turretY: Float, turretZ: Float,
+        targetX: Float, targetY: Float, targetZ: Float,
+        robotVx: Float, robotVy: Float,
+        T: Float,
+        physConfig: FloatArray,
+        omHandle: Long
+    ): FloatArray
+
+    /** Like [optimalTCold] but uses a pre-parsed omega handle. */
+    external fun optimalTColdH(
+        turretX: Float, turretY: Float, turretZ: Float,
+        targetX: Float, targetY: Float, targetZ: Float,
+        robotVx: Float, robotVy: Float,
+        curTheta: Float, curPhi: Float, curOmega: Float,
+        weights: FloatArray,
+        bounds: FloatArray,
+        physConfig: FloatArray,
+        omHandle: Long,
+        tol: Float = 5e-4f
+    ): FloatArray
+
+    /** Like [robust3ShotPlan] but uses a pre-parsed omega handle. */
+    external fun robust3ShotPlanH(
+        trajectory: FloatArray, nStates: Int,
+        turretZ: Float,
+        targetX: Float, targetY: Float, targetZ: Float,
+        curTheta: Float, curPhi: Float, curOmega: Float,
+        nBalls: Int,
+        tRemaining: Float,
+        transferTime: Float,
+        dropFraction: Float,
+        weights: FloatArray,
+        bounds: FloatArray,
+        physConfig: FloatArray,
+        omHandle: Long,
+        tol: Float = 5e-4f,
+        maxIter: Int = 80
+    ): FloatArray
+
+    /** Like [vExitFromOmega] but uses a pre-parsed omega handle — zero array overhead. */
+    external fun vExitFromOmegaH(phi: Float, targetOmega: Float, vMax: Float, omHandle: Long): Float
+
     // ------------------------------------------------------------------
     // Companion
     // ------------------------------------------------------------------
