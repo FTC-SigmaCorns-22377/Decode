@@ -61,6 +61,7 @@ struct TurretWeights {
     float w_theta;   // s / rad
     float w_phi;     // s / rad
     float w_omega;   // s / (rad/s) or s / RPM — matches OmegaMap units
+    float alpha;     // inter-shot transition cost multiplier (J = J_0 + alpha*(J_12+J_23))
 };
 
 // Physical constants for ballistics.

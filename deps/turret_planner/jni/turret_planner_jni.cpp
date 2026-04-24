@@ -35,12 +35,28 @@ static inline TurretBounds unpack_bounds(const jfloat* p) {
 }
 
 static inline TurretWeights unpack_weights(const jfloat* p) {
-    return TurretWeights{p[0], p[1], p[2]};
+    return TurretWeights{p[0], p[1], p[2], p[3]};
 }
 
+// Reads [N, phi_0, v_exit_0, omega_0, phi_1, ...] into OmegaMapParams for IDW.
 static inline OmegaMapParams unpack_omega(const jfloat* p) {
     OmegaMapParams om;
-    for (int i = 0; i < 6; ++i) om.c[i] = p[i];
+    int n = static_cast<int>(p[0]);
+    n = std::min(n, OmegaMapParams::MAX_POINTS);
+    om.n = n;
+    float phi_min = 1e9f, phi_max = -1e9f;
+    float v_min   = 1e9f, v_max   = -1e9f;
+    for (int i = 0; i < n; ++i) {
+        om.phi[i]    = p[1 + i*3 + 0];
+        om.v_exit[i] = p[1 + i*3 + 1];
+        om.omega[i]  = p[1 + i*3 + 2];
+        phi_min = std::min(phi_min, om.phi[i]);
+        phi_max = std::max(phi_max, om.phi[i]);
+        v_min   = std::min(v_min,   om.v_exit[i]);
+        v_max   = std::max(v_max,   om.v_exit[i]);
+    }
+    om.phi_scale = (phi_max > phi_min + 1e-6f) ? 1.f/(phi_max - phi_min) : 1.f;
+    om.v_scale   = (v_max   > v_min   + 1e-6f) ? 1.f/(v_max   - v_min)   : 1.f;
     return om;
 }
 
@@ -541,4 +557,20 @@ Java_sigmacorns_control_aim_TurretPlannerBridge_destroyZoneTracker(
     jlong handle)
 {
     delete reinterpret_cast<ZoneTracker*>(handle);
+}
+
+// ---------------------------------------------------------------------------
+// JNI: omegaMapEval
+// Evaluate the IDW omega map at (phi, vExit). Returns the interpolated omega.
+// ---------------------------------------------------------------------------
+extern "C" JNIEXPORT jfloat JNICALL
+Java_sigmacorns_control_aim_TurretPlannerBridge_omegaMapEval(
+    JNIEnv* env, jobject,
+    jfloat phi, jfloat vExit,
+    jfloatArray jOmega)
+{
+    ScopedArray omC(env, jOmega);
+    if (!omC) return 0.f;
+    OmegaMapParams om = unpack_omega(omC);
+    return omega_map_eval(om, phi, vExit);
 }

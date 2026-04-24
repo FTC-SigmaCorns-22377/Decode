@@ -2,37 +2,52 @@
 #include <cmath>
 #include <algorithm>
 
-// omega(phi, v) = c0 + c1*v + c2*phi + c3*v^2 + c4*phi*v + c5*phi^2
+// IDW p=2: omega = sum(w_i * omega_i) / sum(w_i)  where w_i = 1 / dist2_i
 float omega_map_eval(const OmegaMapParams& m, float phi, float v_exit) {
-    return m.c[0]
-         + m.c[1] * v_exit
-         + m.c[2] * phi
-         + m.c[3] * v_exit * v_exit
-         + m.c[4] * phi * v_exit
-         + m.c[5] * phi * phi;
+    if (m.n <= 0) return 0.f;
+
+    float phi_s = phi    * m.phi_scale;
+    float v_s   = v_exit * m.v_scale;
+
+    float num = 0.f, den = 0.f;
+    for (int i = 0; i < m.n; ++i) {
+        float dp = phi_s  - m.phi[i]    * m.phi_scale;
+        float dv = v_s    - m.v_exit[i] * m.v_scale;
+        float d2 = dp*dp + dv*dv;
+        if (d2 < 1e-12f) return m.omega[i];
+        float w = 1.f / d2;
+        num += w * m.omega[i];
+        den += w;
+    }
+    return (den > 0.f) ? num / den : 0.f;
 }
 
+// Central finite differences, step ~0.1% of normalized range
 void omega_map_partials(const OmegaMapParams& m, float phi, float v_exit,
                         float* d_omega_dphi, float* d_omega_dvexit) {
-    *d_omega_dphi   = m.c[2] + m.c[4] * v_exit + 2.f * m.c[5] * phi;
-    *d_omega_dvexit = m.c[1] + 2.f * m.c[3] * v_exit + m.c[4] * phi;
+    const float h_phi = (m.phi_scale > 0.f) ? 1e-3f / m.phi_scale : 1e-4f;
+    const float h_v   = (m.v_scale   > 0.f) ? 1e-3f / m.v_scale   : 1e-4f;
+    *d_omega_dphi   = (omega_map_eval(m, phi + h_phi, v_exit) -
+                       omega_map_eval(m, phi - h_phi, v_exit)) / (2.f * h_phi);
+    *d_omega_dvexit = (omega_map_eval(m, phi, v_exit + h_v) -
+                       omega_map_eval(m, phi, v_exit - h_v)) / (2.f * h_v);
 }
 
+// Evaluate gradient at a 3×3 grid over the box; take max absolute partials.
 float omega_map_lipschitz(const OmegaMapParams& m,
                           float phi_lo, float phi_hi,
                           float v_lo,   float v_hi,
                           float l_phi, float l_vexit) {
-    // |∂ω/∂φ| max over box: c2 + c4*v + 2*c5*phi
-    // Maximized at the extremes — evaluate at all four corners.
-    float max_dphi   = 0.f;
-    float max_dvexit = 0.f;
-    for (float phi : {phi_lo, phi_hi}) {
-        for (float v : {v_lo, v_hi}) {
+    float max_dphi = 0.f, max_dv = 0.f;
+    float phi_pts[3] = {phi_lo, 0.5f*(phi_lo+phi_hi), phi_hi};
+    float v_pts[3]   = {v_lo,   0.5f*(v_lo+v_hi),     v_hi};
+    for (float phi : phi_pts) {
+        for (float v : v_pts) {
             float dp, dv;
             omega_map_partials(m, phi, v, &dp, &dv);
-            max_dphi   = std::max(max_dphi,   std::abs(dp));
-            max_dvexit = std::max(max_dvexit, std::abs(dv));
+            max_dphi = std::max(max_dphi, std::abs(dp));
+            max_dv   = std::max(max_dv,   std::abs(dv));
         }
     }
-    return max_dphi * l_phi + max_dvexit * l_vexit;
+    return max_dphi * l_phi + max_dv * l_vexit;
 }

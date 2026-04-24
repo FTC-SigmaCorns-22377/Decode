@@ -81,7 +81,7 @@ scrubber.addEventListener('input', () => {
 // Keyboard input — driver (WASD) and operator (number keys, space, shift)
 const keys = {
     w: false, a: false, s: false, d: false, q: false, e: false, r: false, f: false,
-    o: false, p: false,
+    o: false, p: false, h: false, l: false,
     n1: false, n2: false, n3: false, n4: false,
     space: false, shift: false,
 };
@@ -259,7 +259,6 @@ function readGamepad(slot) {
 
 function sendInput() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    console.log(readGamepad(0))
 
     ws.send(JSON.stringify({
         keys,
@@ -270,6 +269,7 @@ function sendInput() {
 
 document.addEventListener('keydown', (e) => {
     const key = mapKey(e);
+    console.log('keydown:', e.key, '-> mapped:', key, 'in keys:', key in keys);
     if (key in toggleKeys) {
         if (!e.repeat) {
             toggleKeys[key] = !toggleKeys[key];

@@ -49,7 +49,7 @@ class JoltTeleOpVisualizerTest {
         Thread.sleep(500)
         println("Client connected. Starting MainTeleOp.")
 
-        val opmode = AutoTeleOp()
+        val opmode = MainTeleOp()
 
         // Launch the opmode; its ioLoop will step physics via io.update().
         val opmodeThread = Thread {

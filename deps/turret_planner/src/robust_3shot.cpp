@@ -203,12 +203,13 @@ static Robust3ShotResult solve_2ball(
         float lom2 = lip_omega_fn(lip2, st2.x, st2.y, st2.vx, st2.vy, iv2.t_lo, iv2.t_hi);
 
         // J_0 depends on T1, J_12 depends on T1 and T2
+        float alpha = weights.alpha;
         float L_J0_T1  = std::max({weights.w_theta * lip1.l_theta, weights.w_phi * lip1.l_phi, weights.w_omega * lom1});
         float L_J12_T1 = std::max({weights.w_theta * lip1.l_theta, weights.w_phi * lip1.l_phi, weights.w_omega * (1.f - drop_fraction) * lom1});
-        float L1 = L_J0_T1 + L_J12_T1;
-        float L2 = std::max({weights.w_theta * lip2.l_theta, weights.w_phi * lip2.l_phi, weights.w_omega * lom2});
+        float L1 = L_J0_T1 + alpha * L_J12_T1;
+        float L2 = alpha * std::max({weights.w_theta * lip2.l_theta, weights.w_phi * lip2.l_phi, weights.w_omega * lom2});
 
-        // Objective with constraint
+        // Objective: J = J_0 + alpha*J_12 (no hard constraint; caller uses J_12 to set transfer speed)
         auto J = [&](float T1, float T2) -> float {
             ShotParams s1 = ballistics_solve(st1.x, st1.y, turret_z, target_x, target_y, target_z,
                                               st1.vx, st1.vy, T1, cfg, omega);
@@ -216,9 +217,7 @@ static Robust3ShotResult solve_2ball(
                                               st2.vx, st2.vy, T2, cfg, omega);
             float j0  = flight_time_tau(s1, current, weights, omega);
             float j12 = move_cost(s1, s2, drop_fraction, weights, omega);
-            // Constraint: J_12 must be achievable within transfer_time
-            if (j12 > transfer_time) return 1e9f;
-            return j0 + j12;
+            return j0 + alpha * j12;
         };
 
         // 2D B&B
@@ -268,19 +267,16 @@ static Robust3ShotResult solve_2ball(
                                                st1.vx, st1.vy, bestT1, cfg, omega);
             ShotParams s2f = ballistics_solve(st2.x, st2.y, turret_z, target_x, target_y, target_z,
                                                st2.vx, st2.vy, bestT2, cfg, omega);
-            // Reject if either shot points away from the goal.
             if (!is_forward_shot(s1f, dx1, dy1) || !is_forward_shot(s2f, dx2, dy2))
                 continue;
             float j12 = move_cost(s1f, s2f, drop_fraction, weights, omega);
-            if (j12 <= transfer_time) {
-                best.J = bestJ_local;
-                best.J_12 = j12;
-                best.feasible = true;
-                best.idx1 = i;
-                best.idx2 = -1;
-                best.T1 = bestT1; best.T2 = bestT2;
-                best.s1 = s1f; best.s2 = s2f;
-            }
+            best.J = bestJ_local;
+            best.J_12 = j12;
+            best.feasible = true;
+            best.idx1 = i;
+            best.idx2 = -1;
+            best.T1 = bestT1; best.T2 = bestT2;
+            best.s1 = s1f; best.s2 = s2f;
         }
     }
 
@@ -350,18 +346,19 @@ static Robust3ShotResult solve_3ball(
         float lom2 = lip_omega_fn(lip2, st2.x, st2.y, st2.vx, st2.vy, iv2.t_lo, iv2.t_hi);
         float lom3 = lip_omega_fn(lip3, st3.x, st3.y, st3.vx, st3.vy, iv3.t_lo, iv3.t_hi);
 
-        // Separable Lipschitz: J = J_0(T1) + J_12(T1,T2) + J_23(T2,T3)
+        // Separable Lipschitz: J = J_0(T1) + alpha*(J_12(T1,T2) + J_23(T2,T3))
+        float alpha = weights.alpha;
         float L_J0_T1  = std::max({weights.w_theta * lip1.l_theta, weights.w_phi * lip1.l_phi, weights.w_omega * lom1});
         float L_J12_T1 = std::max({weights.w_theta * lip1.l_theta, weights.w_phi * lip1.l_phi, weights.w_omega * (1.f - drop_fraction) * lom1});
-        float L1 = L_J0_T1 + L_J12_T1;
+        float L1 = L_J0_T1 + alpha * L_J12_T1;
 
         float L_J12_T2 = std::max({weights.w_theta * lip2.l_theta, weights.w_phi * lip2.l_phi, weights.w_omega * lom2});
         float L_J23_T2 = std::max({weights.w_theta * lip2.l_theta, weights.w_phi * lip2.l_phi, weights.w_omega * (1.f - drop_fraction) * lom2});
-        float L2 = L_J12_T2 + L_J23_T2;
+        float L2 = alpha * (L_J12_T2 + L_J23_T2);
 
-        float L3 = std::max({weights.w_theta * lip3.l_theta, weights.w_phi * lip3.l_phi, weights.w_omega * lom3});
+        float L3 = alpha * std::max({weights.w_theta * lip3.l_theta, weights.w_phi * lip3.l_phi, weights.w_omega * lom3});
 
-        // Objective with constraints
+        // Objective: J = J_0 + alpha*(J_12+J_23) (no hard constraints; caller uses J_12/J_23 to set transfer speed)
         auto J = [&](float T1, float T2, float T3) -> float {
             ShotParams s1 = ballistics_solve(st1.x, st1.y, turret_z, target_x, target_y, target_z,
                                               st1.vx, st1.vy, T1, cfg, omega);
@@ -372,9 +369,7 @@ static Robust3ShotResult solve_3ball(
             float j0  = flight_time_tau(s1, current, weights, omega);
             float j12 = move_cost(s1, s2, drop_fraction, weights, omega);
             float j23 = move_cost(s2, s3, drop_fraction, weights, omega);
-            // Hard constraints: transitions must fit within transfer_time
-            if (j12 > transfer_time || j23 > transfer_time) return 1e9f;
-            return j0 + j12 + j23;
+            return j0 + alpha * (j12 + j23);
         };
 
         // Seed from 27 points
@@ -444,14 +439,12 @@ static Robust3ShotResult solve_3ball(
                 continue;
             float j12 = move_cost(s1f, s2f, drop_fraction, weights, omega);
             float j23 = move_cost(s2f, s3f, drop_fraction, weights, omega);
-            if (j12 <= transfer_time && j23 <= transfer_time) {
-                best.J = bestJ_local;
-                best.J_12 = j12; best.J_23 = j23;
-                best.feasible = true;
-                best.idx1 = i; best.idx2 = -1; best.idx3 = -1;
-                best.T1 = bestT1; best.T2 = bestT2; best.T3 = bestT3;
-                best.s1 = s1f; best.s2 = s2f; best.s3 = s3f;
-            }
+            best.J = bestJ_local;
+            best.J_12 = j12; best.J_23 = j23;
+            best.feasible = true;
+            best.idx1 = i; best.idx2 = -1; best.idx3 = -1;
+            best.T1 = bestT1; best.T2 = bestT2; best.T3 = bestT3;
+            best.s1 = s1f; best.s2 = s2f; best.s3 = s3f;
         }
     }
 

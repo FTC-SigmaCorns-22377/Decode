@@ -71,6 +71,13 @@ interface AutoAim : AutoCloseable {
     val isRobustActive: Boolean
 
     /**
+     * Transfer motor power [0.1, 1.0] derived from solver J_12/J_23 each loop.
+     * Slow transfer = more time for flywheel recovery between shots.
+     */
+    val transferPowerCommand: Float
+        get() = 1.0f
+
+    /**
      * Optional pre-planned shot target from an autonomous routine.
      * When set, the implementation should prespin and pre-aim for the shot at
      * [PlannedShot.state] so it fires with minimal delay on arrival.

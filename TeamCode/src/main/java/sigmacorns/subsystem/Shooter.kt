@@ -108,8 +108,12 @@ class Shooter(
     ): Double {
         if (hubVoltage <= 0.0) return 0.0
 
-        val q = 1.0 // q
-        val r = if (robot.io.intake > 0.0) { 20.0 } else { 120.0 } // r
+        val q = 1.0
+        var r = when {
+            robot.io.intake > 0.0 -> 10.0
+            kotlin.math.abs(targetVelocity - currentVelocity) > 50.0 -> 10.0
+            else -> 120.0
+        }
 
         val inertia = FLYWHEEL_INERTIA
         val referenceVoltage = 12.0
@@ -155,7 +159,7 @@ class Shooter(
 
         if ((currentVelocity-targetVelocity).absoluteValue < velResolution) {
             // deadzone at encoder resolution to prevent chatter
-            xErr = 0.0
+            // r = 120.0
         }
 
         // Continuous-time state-space: dω/dt = stateCoeff*ω + inputCoeff*V

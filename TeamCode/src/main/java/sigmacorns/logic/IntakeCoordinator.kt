@@ -74,6 +74,7 @@ class IntakeCoordinator(val robot: Robot) {
         }
 
         if(robot.aimFlywheel && robot.aim.shotRequested) {
+            robot.intakeTransfer.transferPowerOverride = robot.aim.transferPowerCommand.toDouble()
             val cur = robot.intakeTransfer.state
             if(robot.aim.readyToShoot && cur != IntakeTransfer.State.INTAKING) {
                 robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
@@ -85,10 +86,13 @@ class IntakeCoordinator(val robot: Robot) {
                 robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
             }
             // If already TRANSFERRING (!blockerReady) or user is INTAKING, don't override
-        } else if ((robot.intakeTransfer.state == IntakeTransfer.State.READY_TO_SHOOT
-            || robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING)
-            && (autoShootEnabled || robot.aimFlywheel)) {
-            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+        } else {
+            robot.intakeTransfer.transferPowerOverride = null
+            if ((robot.intakeTransfer.state == IntakeTransfer.State.READY_TO_SHOOT
+                || robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING)
+                && (autoShootEnabled || robot.aimFlywheel)) {
+                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
+            }
         }
 
         if(overrideShot) {

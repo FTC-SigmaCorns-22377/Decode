@@ -11,46 +11,38 @@ import sigmacorns.control.aim.AutoAim
 import sigmacorns.control.aim.Ballistics
 import sigmacorns.control.aim.TurretPlannerBridge
 import sigmacorns.control.aim.TurretPlannerBridge.Robust3ShotPlanIdx
+import sigmacorns.control.aim.tune.BisectionSample
 import sigmacorns.control.aim.tune.BisectionStore
 import sigmacorns.control.aim.tune.OmegaCoefFitter
-import sigmacorns.control.aim.tune.ShotDataStore
 import sigmacorns.control.localization.GTSAMEstimator
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
-import sigmacorns.math.closestPointOnConvexPolygon
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
 import sigmacorns.subsystem.TurretServoConfig
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.hypot
-import kotlin.math.max
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Auto-aim backed by the C++ turret_planner (JNI).
  *
- * Uses `robust3ShotPlan` to plan up to 3 consecutive shots with hard
- * constraints: J_12 <= transferTime and J_23 <= transferTime ensure the
- * flywheel can recover between shots. The burst is only triggered when the
- * solver finds a feasible plan for all loaded balls.
+ * Solves from the current robot state each loop using robust3ShotPlan with a
+ * single-state trajectory. The solver always returns a feasible plan (no hard
+ * inter-shot constraints); J_12 and J_23 are returned so [transferPowerCommand]
+ * can be set to slow the transfer motor if the flywheel needs more recovery time.
  *
- * Zone logic uses [FieldLandmarks.goalZoneCorners] and [FieldLandmarks.farZoneCorners]
- * to determine if the robot is in a shooting zone. Outside the zone, t_remaining
- * is inflated so the solver optimizes purely for inter-shot robustness.
+ * During burst (transfer motor running), switches to 1-ball solve so each ball
+ * is aimed independently. Transfer is paused by IntakeCoordinator whenever
+ * [readyToShoot] is false.
  */
 class NativeAutoAim(
     private val robot: Robot,
     private val blue: Boolean,
 ) : AutoAim {
-    companion object {
-        private val Double.f get() = "%.3f".format(this)
-        private val Float.f  get() = "%.3f".format(this)
-    }
 
     override lateinit var autoAim: GTSAMEstimator
         private set
@@ -71,6 +63,26 @@ class NativeAutoAim(
     private var lastOmega: Float = 0f
     private var lastT1:    Float = 0f
 
+    // Diagnostic fields for telemetry
+    var lastSolveException: String = "none"
+        private set
+    var lastSolveFeasible: Float = -1f
+        private set
+    var omegaDataPoints: Int = 0
+        private set
+    var diagPhi05: Float = Float.NaN       // phi from direct solve at T=0.5s
+        private set
+    var diagVexit05: Float = Float.NaN     // v_exit from direct solve at T=0.5s
+        private set
+    var diagGoalDist: Float = Float.NaN
+        private set
+    var diagColdFeasible: Float = -1f      // feasible flag from optimalTCold directly
+        private set
+    var diagColdPhi: Float = Float.NaN     // phi at T* from optimalTCold
+        private set
+    var diagColdTstar: Float = Float.NaN   // T* from optimalTCold
+        private set
+
     override var primaryShotState: Ballistics.ShotState? = null
         private set
     override var secondaryShotState: Ballistics.ShotState? = null
@@ -80,23 +92,9 @@ class NativeAutoAim(
     override var isRobustActive: Boolean = false
         private set
 
-    private var logFrame = 0
-
-    // ── Burst sequencing ─────────────────────────────────────────────
-    private var burstActive = false
-    private var burstShotsFired = 0
-    private var burstTotalShots = 0
-    private var burstStartTime: kotlin.time.Duration? = null
-
-    /** True when the last solve was feasible for all balls (burst is safe to start). */
-    private var allBallsFeasible = false
-
-    override var plannedShot: PlannedShot? = null
-        set(value) {
-            field = value
-            plannedShotSetTime = if (value != null) robot.io.time() else null
-        }
-    private var plannedShotSetTime: kotlin.time.Duration? = null
+    /** Transfer motor power [0.1, 1.0] derived from solver J_12/J_23 each loop. */
+    override var transferPowerCommand: Float = 1.0f
+        private set
 
     // ── Zones (mirrored for alliance) ────────────────────────────────
     private lateinit var goalZone: List<Vector2d>
@@ -140,16 +138,15 @@ class NativeAutoAim(
         weights = floatArrayOf(
             ShotSolverConfig.wTheta.toFloat(),
             ShotSolverConfig.wPhi.toFloat(),
-            ShotSolverConfig.wOmega.toFloat()
+            ShotSolverConfig.wOmega.toFloat(),
+            AimConfig.interShotAlpha.toFloat()
         )
 
-
         val tuningStore = BisectionStore().also { it.load() }
-        omegaCoeffs = OmegaCoefFitter.fitFromMakes(tuningStore.madeSamples())
-//        val c1 = (1.0 / (flywheelRadius * AimConfig.launchEfficiency)).toFloat()
-//        omegaCoeffs = floatArrayOf(0f, c1, 0f, 0f, 0f, 0f)
+        val makes = tuningStore.madeSamples()
+        omegaDataPoints = makes.size
+        omegaCoeffs = buildOmegaData(makes)
 
-        // Mirror zones for alliance (FieldLandmarks uses red-origin coords)
         goalZone = FieldLandmarks.goalZoneCorners.map {
             if (blue) Vector2d(-it.x, it.y) else Vector2d(it)
         }
@@ -185,40 +182,10 @@ class NativeAutoAim(
     }
 
     private fun setShooterInputs(aimTurret: Boolean) {
-        val shouldLog = (logFrame++ % 25 == 0) && false
         val shooter = robot.shooter
         val turret  = robot.turret
         val fusedPose = autoAim.fusedPose
-        val now = robot.io.time()
-        var nBalls = robot.beamBreak.ballCount
-
-        if(shotRequested && !burstActive) {
-            nBalls = 3
-        }
-
-        // ── Burst sequencing: time-based ball accounting ──────────────
-        if (burstActive) {
-            val elapsed = (now - burstStartTime!!).inWholeMilliseconds / 1000.0
-            burstShotsFired = (elapsed / AimConfig.transferDelay).toInt().coerceAtMost(burstTotalShots)
-            if (burstShotsFired >= burstTotalShots) {
-                burstActive = false
-                burstShotsFired = 0
-                burstStartTime = null
-            }
-        }
-
-        // ── t_remaining ──────────────────────────────────────────────
-        val tRemaining: Float = if (burstActive && burstStartTime != null) {
-            val elapsed = (now - burstStartTime!!).inWholeMilliseconds / 1000.0
-            val slotElapsed = elapsed % AimConfig.transferDelay
-            (AimConfig.transferDelay - slotElapsed).toFloat()
-        } else {
-            (AimConfig.transferDelay*10.0).toFloat()
-        }
-
-        val remainingBalls = if (burstActive)
-            (burstTotalShots - burstShotsFired).coerceIn(1, max(1,nBalls))
-        else nBalls.coerceAtLeast(1)
+        val nBalls = robot.beamBreak.ballCount.coerceAtLeast(if (shotRequested) 1 else 0)
 
         val odoVel = Vector2d(robot.io.velocity().v)
         val vel = odoVel.rotate(fusedPose.rot - robot.io.position().rot)
@@ -231,182 +198,63 @@ class NativeAutoAim(
         val curTheta = (turret.pos + fusedPose.rot).toFloat()
         val curPhi   = shooter.computedHoodAngle.toFloat()
         val curOmega = robot.io.flywheelVelocity().toFloat()
-
         val robotVx = vel.x.toFloat()
         val robotVy = vel.y.toFloat()
 
-        // ── Time to zone estimate ─────────────────────────────────────
-        // Skipped when a planned shot is set — timeUntilPlannedShot carries the
-        // exact countdown instead, so the velocity-projection scan is redundant.
-        val timeToZone = run {
-            if (robot.intakeCoordinator.inShootingZone) return@run 0.0
-            if (plannedShot != null) return@run Double.MAX_VALUE
+        diagGoalDist = hypot((gX - tX).toDouble(), (gY - tY).toDouble()).toFloat()
 
-            val robotPos = Vector2d(fusedPose.v.x, fusedPose.v.y)
-            val speed = hypot(vel.x, vel.y)
-
-            var bestTime = Double.MAX_VALUE
-            for (zone in listOf(goalZone, farZone)) {
-                val closest = closestPointOnConvexPolygon(zone, robotPos)
-                val dx = closest.x - robotPos.x
-                val dy = closest.y - robotPos.y
-                val dist = hypot(dx, dy)
-
-                if (dist < 1e-3) {
-                    bestTime = 0.0
-                    break
-                }
-                if (speed < 1e-3) continue
-                val approachSpeed = (vel.x * dx + vel.y * dy) / dist
-                if (approachSpeed <= 1e-3) continue
-                bestTime = minOf(bestTime, dist / approachSpeed)
-            }
-            bestTime
+        // Direct ballistics probe at T=0.5s (bypasses robust solver — for diagnostics)
+        try {
+            val probe = bridge.solve(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy, 0.5f, physConfig, omegaCoeffs)
+            diagPhi05   = Math.toDegrees(probe[1].toDouble()).toFloat()
+            diagVexit05 = probe[2]
+        } catch (e: Exception) {
+            diagPhi05   = Float.NaN
+            diagVexit05 = Float.NaN
         }
 
-        // Time until the robot reaches the planned shot position, counting down from
-        // when the plan was set.  Used for both prespin gating and solverTRemaining.
-        val timeUntilPlannedShot: Double? = run {
-            val ps = plannedShot ?: return@run null
-            val setTime = plannedShotSetTime ?: return@run null
-            val elapsed = (now - setTime).inWholeMilliseconds / 1000.0
-            (ps.timeToArrival.inWholeMilliseconds / 1000.0 - elapsed).coerceAtLeast(0.0)
+        // optimalTCold: exact same path as flight_time_cold inside solve_1ball
+        try {
+            val cold = bridge.optimalTCold(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
+                curTheta, curPhi, curOmega, weights, bounds, physConfig, omegaCoeffs)
+            diagColdFeasible = cold[TurretPlannerBridge.OptimalTIdx.FEASIBLE]
+            diagColdTstar    = cold[TurretPlannerBridge.OptimalTIdx.T_STAR]
+            diagColdPhi      = Math.toDegrees(cold[TurretPlannerBridge.OptimalTIdx.PHI].toDouble()).toFloat()
+        } catch (e: Exception) {
+            diagColdFeasible = -2f
         }
 
-        // The solver's t_remaining: prefer the exact planned arrival time so the
-        // C++ solver pre-aims for the correct position; fall back to zone estimate.
-        val solverTRemaining = when {
-            burstActive -> tRemaining
-            timeUntilPlannedShot != null -> (tRemaining + timeUntilPlannedShot).toFloat()
-            timeToZone > 0 -> tRemaining + timeToZone.toFloat()
-            else -> tRemaining
-        }
+        val inZone = robot.intakeCoordinator.inShootingZone
 
-        if (shouldLog) {
-            val ps = plannedShot
-            if (ps != null) {
-                val horizon = solverTRemaining + AimConfig.transferDelay * remainingBalls + AimConfig.predictionHorizon
-                println("[NativeAutoAim] plannedShot: eta=${ps.timeToArrival.inWholeMilliseconds}ms" +
-                        " remaining=${timeUntilPlannedShot?.let { "%.2fs".format(it) } ?: "null"}" +
-                        " solverT=${"%.3f".format(solverTRemaining)}s horizon=${"%.3f".format(horizon)}s" +
-                        " balls=$remainingBalls" +
-                        " pos=(${ps.state.pos.v.x.f},${ps.state.pos.v.y.f})" +
-                        " vel=(${ps.state.vel.v.x.f},${ps.state.vel.v.y.f})")
-            } else {
-                println("[NativeAutoAim] plannedShot=null timeToZone=${timeToZone.f}s solverT=${solverTRemaining.f}s")
-            }
-        }
+        // During burst (transfer running), solve only for the current ball
+        val inBurst = robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING
+        val solveNBalls = if (inBurst) 1 else nBalls.coerceAtLeast(1)
+
+        // Single-state trajectory: current robot state only
+        val traj = floatArrayOf(0f, tX, tY, fusedPose.rot.toFloat(), robotVx, robotVy)
 
         var solved = false
         isRobustActive = false
         secondaryShotState = null
         tertiaryShotState = null
-        allBallsFeasible = false
+        transferPowerCommand = 1.0f
 
-        // ── Solve ────────────────────────────────────────────────────
         try {
-            val ps = plannedShot
-            val nSteps: Int
-            val trajArray: FloatArray
-
-            if (ps != null && !burstActive) {
-                // Linearly interpolate from current state to planned state over
-                // [0, solverTRemaining], then hold the planned state for the rest
-                // of the horizon so the solver has room to plan the full burst.
-                val horizon = (solverTRemaining + AimConfig.transferDelay * remainingBalls + AimConfig.predictionHorizon).toFloat()
-                nSteps = 20
-                trajArray = FloatArray(nSteps * 6)
-                val arriveT = if (solverTRemaining > 1e-6f) solverTRemaining else 1e-6f
-                val shotX = ps.state.pos.v.x.toFloat()
-                val shotY = ps.state.pos.v.y.toFloat()
-                val shotVx = ps.state.vel.v.x.toFloat()
-                val shotVy = ps.state.vel.v.y.toFloat()
-                val heading = fusedPose.rot.toFloat()
-                for (i in 0 until nSteps) {
-                    val t = (i.toFloat() / (nSteps - 1)) * horizon
-                    val frac = (t / arriveT).coerceIn(0f, 1f)
-                    trajArray[i * 6 + 0] = t
-                    trajArray[i * 6 + 1] = tX + frac * (shotX - tX)
-                    trajArray[i * 6 + 2] = tY + frac * (shotY - tY)
-                    trajArray[i * 6 + 3] = heading
-                    trajArray[i * 6 + 4] = robotVx + frac * (shotVx - robotVx)
-                    trajArray[i * 6 + 5] = robotVy + frac * (shotVy - robotVy)
-                }
-            } else {
-                val horizon = solverTRemaining + AimConfig.transferDelay * remainingBalls + AimConfig.predictionHorizon
-                val maxSteps = 60
-                val step = maxOf(AimConfig.predictionStep.toFloat(), (horizon / maxSteps).toFloat())
-                nSteps = (horizon / step).toInt().coerceIn(2, maxSteps)
-                trajArray = FloatArray(nSteps * 6)
-
-                // Integrate trajectory with deceleration near shooting zones.
-                // When the predicted position is within 0.5m of a zone, assume the
-                // driver brakes — this prevents the solver from picking backward
-                // solutions caused by high velocity near the goal.
-                var px = tX
-                var py = tY
-                var vx = robotVx
-                var vy = robotVy
-                var decelerating = robot.intakeCoordinator.inShootingZone
-
-                for (i in 0 until nSteps) {
-                    // Check proximity to zones before recording velocity
-                    if (!decelerating) {
-                        val pos = Vector2d(px.toDouble(), py.toDouble())
-                        for (zone in listOf(goalZone, farZone)) {
-                            val closest = closestPointOnConvexPolygon(zone, pos)
-                            if (hypot(closest.x - pos.x, closest.y - pos.y) < AimConfig.decelZoneMargin) {
-                                decelerating = true
-                                break
-                            }
-                        }
-                    }
-
-                    val t = i * step
-                    trajArray[i * 6 + 0] = t
-                    trajArray[i * 6 + 1] = px
-                    trajArray[i * 6 + 2] = py
-                    trajArray[i * 6 + 3] = fusedPose.rot.toFloat()
-                    trajArray[i * 6 + 4] = vx
-                    trajArray[i * 6 + 5] = vy
-
-                    // Advance position, then apply deceleration for the next step
-                    if (i < nSteps - 1) {
-                        px += vx * step
-                        py += vy * step
-
-                        if (decelerating) {
-                            val speed = hypot(vx.toDouble(), vy.toDouble()).toFloat()
-                            if (speed > 0.01f) {
-                                val newSpeed = maxOf(0f, speed - AimConfig.decelRate * step)
-                                vx *= newSpeed / speed
-                                vy *= newSpeed / speed
-                            } else {
-                                vx = 0f; vy = 0f
-                            }
-                        }
-                    }
-                }
-            }
-
             val r = bridge.robust3ShotPlan(
-                trajArray, nSteps, tZ,
+                traj, 1, tZ,
                 gX, gY, gZ,
                 curTheta, curPhi, curOmega,
-                remainingBalls,
-                solverTRemaining,
+                solveNBalls,
+                0f,
                 AimConfig.transferDelay.toFloat(),
                 AimConfig.dropFraction.toFloat(),
                 weights, bounds, physConfig, omegaCoeffs
             )
 
+            lastSolveFeasible = r[Robust3ShotPlanIdx.FEASIBLE]
+            lastSolveException = "none"
+
             if (r[Robust3ShotPlanIdx.FEASIBLE] > 0.5f) {
-                // s1 from the solver is computed at the future trajectory point
-                // where the shot will actually happen. Use it directly as the
-                // actuator target so turret/hood arrive in advance.
-                // Clamp field-frame theta to the turret's reachable range.
-                // The solver uses [-π,π] theta bounds (full circle) but the
-                // physical turret can only reach ±90° from the robot heading.
                 var solverTheta = r[Robust3ShotPlanIdx.S1_THETA].toDouble()
                 val relAngle = wrapAngle(solverTheta - fusedPose.rot)
                 if (abs(relAngle) > TurretServoConfig.maxAngle) {
@@ -420,17 +268,21 @@ class NativeAutoAim(
                 lastOmega = r[Robust3ShotPlanIdx.S1_OMEGA]
                 lastT1    = r[Robust3ShotPlanIdx.T1]
                 solved = true
-                allBallsFeasible = true
 
-                if (remainingBalls >= 2) {
+                if (!inBurst && solveNBalls >= 2) {
                     isRobustActive = true
                     secondaryShotState = Ballistics.ShotState(
                         theta = r[Robust3ShotPlanIdx.S2_THETA].toDouble(),
                         phi   = r[Robust3ShotPlanIdx.S2_PHI].toDouble(),
                         vExit = r[Robust3ShotPlanIdx.S2_OMEGA].toDouble() * flywheelRadius * AimConfig.launchEfficiency,
                     )
+                    // Compute required inter-shot interval; slow transfer if needed
+                    val j12 = r[Robust3ShotPlanIdx.J_12]
+                    val j23 = if (solveNBalls >= 3) r[Robust3ShotPlanIdx.J_23] else 0f
+                    val requiredDt = maxOf(j12, j23).coerceAtLeast(AimConfig.transferDelay.toFloat())
+                    transferPowerCommand = (AimConfig.transferDelay.toFloat() / requiredDt).coerceIn(0.5f, 1.0f)
                 }
-                if (remainingBalls >= 3) {
+                if (!inBurst && solveNBalls >= 3) {
                     tertiaryShotState = Ballistics.ShotState(
                         theta = r[Robust3ShotPlanIdx.S3_THETA].toDouble(),
                         phi   = r[Robust3ShotPlanIdx.S3_PHI].toDouble(),
@@ -439,13 +291,7 @@ class NativeAutoAim(
                 }
             }
         } catch (e: Exception) {
-            if (shouldLog) println("[NativeAutoAim] " + "solver threw: $e")
-        }
-
-        if (shouldLog) {
-            println("[NativeAutoAim] " + "solve: solved=$solved feasible=$allBallsFeasible" +
-                    " balls=$nBalls burst=$burstActive" +
-                    " shotReq=$shotRequested inZone=${robot.intakeCoordinator.inShootingZone}")
+            lastSolveException = e.javaClass.simpleName + ": " + (e.message ?: "")
         }
 
         if (!solved) {
@@ -462,95 +308,39 @@ class NativeAutoAim(
             vExit = lastOmega.toDouble() * flywheelRadius * AimConfig.launchEfficiency,
         )
 
-        // ── Actuator targeting with look-ahead ───────────────────────
-        // During a burst, once a ball is committed to the transfer the hood
-        // angle and turret for that ball are locked in (only flywheel speed
-        // matters at exit). Start moving hood/turret toward the NEXT shot's
-        // parameters immediately so the servos arrive in time.
-        val nextShotState = secondaryShotState  // s2 is always the next shot after s1
-
-        val targetTheta: Double
-        val targetPhi: Double
-        val targetOmega: Double
-
-        if (burstActive && nextShotState != null && tRemaining <= 0.05) {
-            // Ball in transit — keep flywheel on s1's omega (it's what the
-            // current ball needs), but slew hood toward s2 now. Theta stays
-            // on s1 to avoid overcorrection from the future-position angle.
-            targetTheta = lastTheta.toDouble()
-            targetPhi   = nextShotState.phi
-            targetOmega = lastOmega.toDouble()  // hold current shot's flywheel
-        } else {
-            targetTheta = if(timeToZone>0) atan2(goal.y-fusedPose.v.y,goal.x-fusedPose.v.x) else lastTheta.toDouble()
-            targetPhi   = lastPhi.toDouble()
-            targetOmega = lastOmega.toDouble()
-        }
-
         if (aimTurret) {
             turret.fieldRelativeMode = true
-            turret.fieldTargetAngle = targetTheta
+            turret.fieldTargetAngle = lastTheta.toDouble()
         }
 
-        val prespin = nBalls > 0 &&
-                robot.intakeTransfer.state != IntakeTransfer.State.INTAKING &&
-                ((timeUntilPlannedShot != null && timeUntilPlannedShot <= AimConfig.spinupLeadTime)
-                        || timeToZone <= AimConfig.spinupLeadTime)
-
+        val prespin = nBalls > 0 && (inZone || shotRequested)
         if (robot.aimFlywheel) {
-            shooter.hoodAngle = targetPhi
-            // Only spin up the flywheel when close enough to a launch zone.
-            // When idle, leave flywheelTarget alone so the opmode's idle speed holds.
-            if (prespin || burstActive) {
-                shooter.flywheelTarget = targetOmega
-            }
+            shooter.hoodAngle = lastPhi.toDouble()
+            if (prespin) shooter.flywheelTarget = lastOmega.toDouble()
         }
 
-        // readyToShoot: forward-simulate the shot from the current position
-        // with the current actuator state and check if it hits the goal.
-        val inTolerance = run {
-            val actualTheta = (turret.pos + fusedPose.rot).toFloat()
-            val actualPhi   = shooter.computedHoodAngle.toFloat()
-            val actualOmega = robot.io.flywheelVelocity().toFloat()
-            val actualVexit = (actualOmega * flywheelRadius * AimConfig.launchEfficiency).toFloat()
+        // readyToShoot: forward-simulate from current actuator state
+        val actualTheta = (turret.pos + fusedPose.rot).toFloat()
+        val actualPhi   = shooter.computedHoodAngle.toFloat()
+        val actualOmega = robot.io.flywheelVelocity().toFloat()
+        val actualVexit = vExitFromOmega(actualPhi, actualOmega)
+        val missDistance = bridge.shotError(
+            tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
+            actualTheta, actualPhi, actualVexit, actualOmega,
+            lastT1, physConfig
+        )
+        readyToShoot = missDistance < AimConfig.shotTolerance && inZone
+    }
 
-            val missDistance = bridge.shotError(
-                tX, tY, tZ,
-                gX, gY, gZ,
-                robotVx, robotVy,
-                actualTheta, actualPhi, actualVexit, actualOmega,
-                lastT1,
-                physConfig
-            )
-            val miss = missDistance < AimConfig.shotTolerance
-            val inZone = timeToZone <= 0 || timeUntilPlannedShot?.let { it <= 0.0 } == true
-            if (shouldLog) {
-                println("[NativeAutoAim] " + "inTolerance: missDistance=${"%.3f".format(missDistance)} miss=$miss inZone=$inZone" +
-                        " timeToZone=${timeToZone.f} untilPlanned=${timeUntilPlannedShot?.let { "%.2f".format(it) } ?: "null"}" +
-                        " actualOmega=${"%.1f".format(actualOmega)} targetOmega=${"%.1f".format(targetOmega)}" +
-                        " prespin=$prespin")
-            }
-            miss && inZone
+    /** Invert the IDW omega map: find v_exit such that omegaMapEval(phi, v_exit) == omega. */
+    private fun vExitFromOmega(phi: Float, omega: Float): Float {
+        var lo = 0f
+        var hi = (AimConfig.vMax).toFloat()
+        repeat(30) {
+            val mid = (lo + hi) / 2f
+            if (bridge.omegaMapEval(phi, mid, omegaCoeffs) < omega) lo = mid else hi = mid
         }
-
-        // ── Fire: only in zone, only when solver confirms all balls feasible ──
-        // burstActive is managed independently of the turret check so a jerk that
-        // throws the turret off only *pauses* the transfer (readyToShoot = false)
-        // rather than aborting the burst entirely — the transfer resumes once the
-        // turret corrects back within burstTurretTolerance.
-        if (shotRequested && (burstActive || inTolerance) && allBallsFeasible) {
-            if (!burstActive) {
-                burstActive = true
-                burstShotsFired = 0
-                burstTotalShots = nBalls
-                burstStartTime = now + AimConfig.transferDelay.seconds
-                plannedShot = null  // plan consumed — burst is now executing
-            }
-        } else {
-            burstActive = false
-        }
-
-        val turretErr = kotlin.math.abs(turret.pos - turret.effectiveTargetAngle)
-        readyToShoot = burstActive && turretErr < AimConfig.burstTurretTolerance
+        return (lo + hi) / 2f
     }
 
     private fun wrapAngle(a: Double): Double {
@@ -558,5 +348,47 @@ class NativeAutoAim(
         if (r > PI)  r -= 2 * PI
         if (r < -PI) r += 2 * PI
         return r
+    }
+
+    /**
+     * Build the IDW omega data array for the native solver.
+     *
+     * Converts real-world OmegaTuner make samples directly to (phi, v_exit, omega) IDW points.
+     * When no real samples exist, falls back to physics-model anchor points spanning the
+     * operating range so IDW interpolation is well-conditioned and returns achievable omegas.
+     *
+     * Format: [N, phi_0, v_exit_0, omega_0, phi_1, v_exit_1, omega_1, ...]
+     */
+    private fun buildOmegaData(makes: List<BisectionSample>): FloatArray {
+        val pts = makes.mapNotNull { s ->
+            val phi = Math.toRadians(s.hoodAngleDeg)
+            val v = OmegaCoefFitter.distanceHoodToVExit(s.distance, phi) ?: return@mapNotNull null
+            Triple(phi.toFloat(), v.toFloat(), s.omegaMeasured.toFloat())
+        }
+
+        if (pts.isNotEmpty()) {
+            val arr = FloatArray(1 + pts.size * 3)
+            arr[0] = pts.size.toFloat()
+            pts.forEachIndexed { i, (phi, v, omega) ->
+                arr[1 + i*3 + 0] = phi
+                arr[1 + i*3 + 1] = v
+                arr[1 + i*3 + 2] = omega
+            }
+            return arr
+        }
+
+        // No real data yet: physics-model anchor points omega = v / (radius * launchEfficiency).
+        // Three points spanning the hood and speed range so IDW interpolates (not just constant).
+        val omegaMax = flywheelMotor.freeSpeed.toFloat()
+        val vMaxF = (omegaMax * flywheelRadius * AimConfig.launchEfficiency).toFloat()
+        val phiLo = Math.toRadians(ShooterConfig.minAngleDeg).toFloat()
+        val phiHi = Math.toRadians(ShooterConfig.maxAngleDeg).toFloat()
+        val phiMid = (phiLo + phiHi) / 2f
+        return floatArrayOf(
+            3f,
+            phiLo, vMaxF * 0.4f, omegaMax * 0.4f,
+            phiMid, vMaxF * 0.7f, omegaMax * 0.7f,
+            phiHi, vMaxF * 0.95f, omegaMax * 0.95f,
+        )
     }
 }

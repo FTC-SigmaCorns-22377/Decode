@@ -9,8 +9,8 @@ import sigmacorns.opmode.SigmaOpMode.Companion.SIM
  * Config array layouts (must match turret_planner_jni.cpp):
  *   physConfig  [3]:  g (m/s²), rH (barrel offset, m), dragK (1/s, 0=no drag)
  *   bounds      [6]:  thetaMin, thetaMax, phiMin, phiMax, vExitMax, omegaMax
- *   weights     [3]:  wTheta (s/rad), wPhi (s/rad), wOmega (s/unit)
- *   omegaCoeffs [6]:  c0..c5 for ω(φ,v) = c0 + c1·v + c2·φ + c3·v² + c4·φv + c5·φ²
+ *   weights     [4]:  wTheta (s/rad), wPhi (s/rad), wOmega (s/unit), alpha (inter-shot cost multiplier)
+ *   omegaCoeffs [var]: [N, phi_0, v_exit_0, omega_0, phi_1, ...] — N raw IDW data points
  *   zoneConfig  [8]:  nx, ny, d (half-plane n·p >= d), Q_process, p_low, p_high,
  *                     alpha_lpf (0=no smoothing, 1=hold), omega_idle
  *
@@ -401,6 +401,16 @@ class TurretPlannerBridge {
 
     /** Free the native object. Call at OpMode stop. */
     external fun destroyZoneTracker(handle: Long)
+
+    // ------------------------------------------------------------------
+    // Omega map utilities
+    // ------------------------------------------------------------------
+
+    /**
+     * Evaluate the IDW omega map at (phi, vExit).
+     * Use to invert the map: binary-search vExit such that omegaMapEval(phi, v) == targetOmega.
+     */
+    external fun omegaMapEval(phi: Float, vExit: Float, omegaCoeffs: FloatArray): Float
 
     // ------------------------------------------------------------------
     // Companion

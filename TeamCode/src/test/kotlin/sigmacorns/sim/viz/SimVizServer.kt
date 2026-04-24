@@ -23,7 +23,7 @@ import kotlin.math.sin
 data class WasdState(
     val w: Boolean = false, val a: Boolean = false, val s: Boolean = false, val d: Boolean = false,
     val q: Boolean = false, val e: Boolean = false, val r: Boolean = false, val f: Boolean = false,
-    val o: Boolean = false, val p: Boolean = false,
+    val o: Boolean = false, val p: Boolean = false, val h: Boolean = false, val l: Boolean = false,
     val n1: Boolean = false, val n2: Boolean = false, val n3: Boolean = false, val n4: Boolean = false,
     val space: Boolean = false, val shift: Boolean = false,
 )
@@ -106,8 +106,8 @@ class SimVizServer(
         target.left_stick_y  = state.leftStickY + (if(wasdState?.w == true) -1f else 0f) + if(wasdState?.s == true) 1f else 0f
         target.right_stick_x = state.rightStickX + (if(wasdState?.q == true) -1f else 0f) + if(wasdState?.e == true) 1f else 0f
         target.right_stick_y = state.rightStickY
-        target.left_trigger  = state.leftTrigger + (if(wasdState?.q == true) -1f else 0f) + if(wasdState?.e == true) 1f else 0f
-        target.right_trigger = state.rightTrigger
+        target.left_trigger  = state.leftTrigger + (if(wasdState?.h == true) 1f else 0f)
+        target.right_trigger = state.rightTrigger + (if(wasdState?.l == true) 1f else 0f)
         target.a = state.a; target.b = state.b
         target.x = state.x; target.y = state.y
         target.left_bumper  = state.leftBumper

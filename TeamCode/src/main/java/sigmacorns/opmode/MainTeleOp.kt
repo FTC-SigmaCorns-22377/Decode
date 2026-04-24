@@ -204,11 +204,10 @@ class   MainTeleOp : SigmaOpMode() {
                 if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 }
-                if (flywheelAlwaysOn) {
-                    robot.shooter.flywheelTarget = 0.0
-                } else {
+                if (!flywheelAlwaysOn) {
                     robot.shooter.flywheelTarget = 0.0
                 }
+                // flywheelAlwaysOn: leave flywheelTarget at whatever NativeAutoAim last set
             }
 
             // ============================================================
@@ -240,6 +239,25 @@ class   MainTeleOp : SigmaOpMode() {
             telemetry.addLine("=== VISION ===")
             telemetry.addData("Vision Target", robot.aim.autoAim.hasVisionTarget)
             telemetry.addData("Auto-Aim", if (autoAimEnabled) "ON" else "OFF")
+
+            telemetry.addLine("")
+            telemetry.addLine("=== AUTO-AIM SOLVER ===")
+            val aim = robot.aim
+            if (aim is sigmacorns.logic.NativeAutoAim) {
+                telemetry.addData("Solver feasible", "%.1f", aim.lastSolveFeasible)
+                telemetry.addData("Solver exception", aim.lastSolveException)
+                telemetry.addData("Omega data pts", aim.omegaDataPoints)
+                telemetry.addData("Goal dist", "%.2f m", aim.diagGoalDist)
+                telemetry.addData("Probe phi@T=0.5", "%.1f deg", aim.diagPhi05)
+                telemetry.addData("Probe vExit@T=0.5", "%.2f m/s", aim.diagVexit05)
+                telemetry.addData("Cold feasible", "%.0f", aim.diagColdFeasible)
+                telemetry.addData("Cold T*", "%.3f s", aim.diagColdTstar)
+                telemetry.addData("Cold phi", "%.1f deg", aim.diagColdPhi)
+                telemetry.addData("minAngle", "%.1f deg", ShooterConfig.minAngleDeg)
+                telemetry.addData("maxAngle", "%.1f deg", ShooterConfig.maxAngleDeg)
+                telemetry.addData("Ready to shoot", aim.readyToShoot)
+                telemetry.addData("In zone", robot.intakeCoordinator.inShootingZone)
+            }
 
             telemetry.addLine("")
             telemetry.addLine("=== SHOOTER ===")

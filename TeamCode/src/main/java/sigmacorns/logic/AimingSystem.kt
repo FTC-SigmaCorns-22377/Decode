@@ -277,7 +277,7 @@ object AimConfig {
     @JvmField var dragK = 0.4
 
     /** Time (seconds) from when shot is requested until ball leaves shooter */
-    @JvmField var transferDelay = 0.23
+    @JvmField var transferDelay = 0.20
 
     @JvmField var launchEfficiency = 0.225
     val omegaMap = object : OmegaMap {
@@ -302,32 +302,23 @@ object AimConfig {
     // the robust shot planner so the first shot's parameters leave the flywheel
     // at a speed compatible with the next shot after this proportional loss.
     // Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var dropFraction = 0.17
-
-    // Trajectory prediction for the robust 3-shot planner.
-    @JvmField var predictionHorizon = 1.0   // seconds of trajectory to predict
-    @JvmField var predictionStep = 0.04     // seconds between trajectory samples
+    @JvmField var dropFraction = 0.05
 
     /** Flywheel spins up when estimated time to a launch zone is below this (seconds). */
     @JvmField var spinupLeadTime = 1.5
 
-    /** Start decelerating trajectory when within this distance of a shooting zone (m). */
-    @JvmField var decelZoneMargin = 0.25
-
-    /** Assumed deceleration rate when approaching a zone (m/s²). */
-    @JvmField var decelRate = 2.0f
-
     /**
-     * Max turret error (rad) allowed to fire. If the turret diverges beyond this during a burst
-     * (e.g. jerky driver movement), readyToShoot goes false and the transfer pauses until the
-     * turret corrects. ~15 degrees — generous enough not to block normal shots.
+     * Inter-shot transition cost multiplier passed to the native solver.
+     * J = J_0 + alpha*(J_12 + J_23). Higher alpha prefers shots that are easy to transition
+     * between; lower alpha prioritizes minimizing slew from the current actuator state.
+     * J_12 and J_23 are returned by the solver so Kotlin can control transfer speed.
      */
-    @JvmField var burstTurretTolerance = Math.toRadians(15.0)
+    @JvmField var interShotAlpha = 0.0
 
 }
 
 object ShotSolverConfig {
-    @JvmField var wOmega = 0.003   // s per rad/s flywheel change
+    @JvmField var wOmega = 0.005   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
     @JvmField var wPhi = 0.03      // s per rad hood change
     @JvmField var tolerance = 0.05
