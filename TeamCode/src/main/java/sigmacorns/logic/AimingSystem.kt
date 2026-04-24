@@ -120,7 +120,8 @@ class AimingSystem(
      */
     fun updateVision() {
         val visionResult = visionTracker?.read()
-        autoAim.update(robot.io.position(), robot.io.velocity(), robot.io.turretPosition(), visionResult)
+        val turretInRange = robot.turret.pos in robot.turret.angleLimits
+        autoAim.update(robot.io.position(), robot.io.velocity(), robot.io.turretPosition(), if (turretInRange) visionResult else null)
 
         val fusedPose = autoAim.fusedPose
         targetDistance = hypot(goalPosition.x - fusedPose.v.x, goalPosition.y - fusedPose.v.y)
