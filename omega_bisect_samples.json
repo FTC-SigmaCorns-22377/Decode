@@ -1,1001 +1,749 @@
 [
   {
-    "cellId": "d2p39",
-    "distance": 2.003567973583423,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 404.81000375542686,
-    "omegaMeasured": 417.3830239769297,
-    "outcome": "MADE",
-    "timestampMs": 1776902338583
-  },
-  {
-    "cellId": "d2p39",
-    "distance": 2.0083170404428166,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 404.81000375542686,
-    "omegaMeasured": 412.89503447180135,
-    "outcome": "LONG",
-    "timestampMs": 1776902360700
-  },
-  {
-    "cellId": "d2p39",
-    "distance": 2.0102622482297607,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 358.25126864418576,
-    "omegaMeasured": 363.52714991539034,
-    "outcome": "SHORT",
-    "timestampMs": 1776902373848
-  },
-  {
-    "cellId": "d2p39",
-    "distance": 2.0124799168481435,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 388.21109219359585,
-    "omegaMeasured": 394.9430764512883,
-    "outcome": "MADE",
-    "timestampMs": 1776902385543
-  },
-  {
-    "cellId": "d2p39",
-    "distance": 2.0108057562572768,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 388.21109219359585,
-    "omegaMeasured": 399.43106595641655,
-    "outcome": "LONG",
-    "timestampMs": 1776902424570
-  },
-  {
-    "cellId": "d2p39",
-    "distance": 2.010415772950436,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 381.47910793590347,
-    "omegaMeasured": 390.45508694616,
-    "outcome": "MADE",
-    "timestampMs": 1776902435697
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.008634059048218,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 373.89115311191836,
-    "omegaMeasured": 381.47910793590347,
-    "outcome": "MADE",
-    "timestampMs": 1776902463534
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.0085891793089012,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 373.89115311191836,
-    "omegaMeasured": 385.96709744103174,
-    "outcome": "LONG",
-    "timestampMs": 1776902471584
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.008891761159926,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 333.1927311374852,
-    "omegaMeasured": 345.57519189487726,
-    "outcome": "SHORT",
-    "timestampMs": 1776902484825
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.0089949663936677,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 365.7711446679545,
-    "omegaMeasured": 372.5031289256469,
-    "outcome": "MADE",
-    "timestampMs": 1776902491225
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.0087364126977976,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 365.7711446679545,
-    "omegaMeasured": 376.99111843077515,
-    "outcome": "MADE",
-    "timestampMs": 1776902499147
-  },
-  {
-    "cellId": "d2p39",
-    "distance": 2.026301237364125,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 404.81000375542686,
-    "omegaMeasured": 412.89503447180135,
-    "outcome": "LONG",
-    "timestampMs": 1776902839067
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.026141199655555,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 373.89115311191836,
-    "omegaMeasured": 381.47910793590347,
-    "outcome": "LONG",
-    "timestampMs": 1776902909034
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.0262375827433132,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 330.9487363849211,
-    "omegaMeasured": 345.57519189487726,
-    "outcome": "SHORT",
-    "timestampMs": 1776902921476
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.0258802489563488,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 363.5271499153904,
-    "omegaMeasured": 394.9430764512883,
-    "outcome": "MADE",
-    "timestampMs": 1776902931695
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.0260059105672656,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 363.5271499153904,
-    "omegaMeasured": 372.5031289256469,
-    "outcome": "MADE",
-    "timestampMs": 1776902939681
-  },
-  {
-    "cellId": "d2p46",
-    "distance": 2.026124579794376,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 363.5271499153904,
-    "omegaMeasured": 376.99111843077515,
-    "outcome": "MADE",
-    "timestampMs": 1776902950927
-  },
-  {
     "cellId": "d1p39",
-    "distance": 1.2584671190713577,
+    "distance": 1.259309653858225,
     "hoodAngleDeg": 39.0,
     "omegaCommanded": 434.15573308568383,
-    "omegaMeasured": 444.3109610076993,
+    "omegaMeasured": 439.822971502571,
     "outcome": "LONG",
-    "timestampMs": 1776903622438
+    "timestampMs": 1776995001245
   },
   {
     "cellId": "d1p39",
-    "distance": 1.2679883006957067,
+    "distance": 1.2615914313205958,
     "hoodAngleDeg": 39.0,
-    "omegaCommanded": 384.9638804109811,
-    "omegaMeasured": 399.43106595641655,
-    "outcome": "LONG",
-    "timestampMs": 1776903634236
-  },
-  {
-    "cellId": "d1p39",
-    "distance": 1.2691701353465474,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 362.5239328853397,
-    "omegaMeasured": 376.99111843077515,
-    "outcome": "MADE",
-    "timestampMs": 1776903643853
-  },
-  {
-    "cellId": "d1p39",
-    "distance": 1.2695649681286054,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 362.5239328853397,
+    "omegaCommanded": 382.71988565841696,
     "omegaMeasured": 385.96709744103174,
-    "outcome": "MADE",
-    "timestampMs": 1776903661992
+    "outcome": "LONG",
+    "timestampMs": 1776995016290
   },
   {
     "cellId": "d1p39",
-    "distance": 1.2696024595173097,
+    "distance": 1.2599841801332536,
     "hoodAngleDeg": 39.0,
-    "omegaCommanded": 362.5239328853397,
-    "omegaMeasured": 376.99111843077515,
-    "outcome": "MADE",
-    "timestampMs": 1776903669058
+    "omegaCommanded": 355.79194862764734,
+    "omegaMeasured": 363.52714991539034,
+    "outcome": "LONG",
+    "timestampMs": 1776995052994
+  },
+  {
+    "cellId": "d1p39",
+    "distance": 1.2600296098342538,
+    "hoodAngleDeg": 39.0,
+    "omegaCommanded": 344.57197486482664,
+    "omegaMeasured": 350.06318140000553,
+    "outcome": "SHORT",
+    "timestampMs": 1776995057857
   },
   {
     "cellId": "d1p40",
-    "distance": 1.2686432083923112,
+    "distance": 1.259982320626546,
     "hoodAngleDeg": 40.0,
     "omegaCommanded": 416.7008822938059,
     "omegaMeasured": 421.8710134820579,
     "outcome": "LONG",
-    "timestampMs": 1776903696363
+    "timestampMs": 1776995077351
   },
   {
     "cellId": "d1p40",
-    "distance": 1.268943450434004,
+    "distance": 1.2600322651473985,
     "hoodAngleDeg": 40.0,
     "omegaCommanded": 367.19833760120616,
-    "omegaMeasured": 385.96709744103174,
+    "omegaMeasured": 372.5031289256469,
     "outcome": "LONG",
-    "timestampMs": 1776903702293
+    "timestampMs": 1776995083774
   },
   {
     "cellId": "d1p40",
-    "distance": 1.2689294203353634,
+    "distance": 1.2598845784761457,
     "hoodAngleDeg": 40.0,
-    "omegaCommanded": 349.2463795806931,
-    "omegaMeasured": 363.52714991539034,
-    "outcome": "LONG",
-    "timestampMs": 1776903711695
+    "omegaCommanded": 342.5143953230006,
+    "omegaMeasured": 350.06318140000553,
+    "outcome": "MADE",
+    "timestampMs": 1776995092421
   },
   {
     "cellId": "d1p40",
-    "distance": 1.26905415686178,
+    "distance": 1.2599523384161342,
     "hoodAngleDeg": 40.0,
-    "omegaCommanded": 338.0264058178724,
+    "omegaCommanded": 342.5143953230006,
+    "omegaMeasured": 350.06318140000553,
+    "outcome": "MADE",
+    "timestampMs": 1776995102394
+  },
+  {
+    "cellId": "d1p40",
+    "distance": 1.2599970275596322,
+    "hoodAngleDeg": 40.0,
+    "omegaCommanded": 342.5143953230006,
     "omegaMeasured": 354.5511709051338,
     "outcome": "SHORT",
-    "timestampMs": 1776903718117
+    "timestampMs": 1776995106836
   },
   {
     "cellId": "d1p40",
-    "distance": 1.2690915281078132,
+    "distance": 1.2600619358994636,
     "hoodAngleDeg": 40.0,
-    "omegaCommanded": 359.03916041026207,
-    "omegaMeasured": 372.5031289256469,
-    "outcome": "MADE",
-    "timestampMs": 1776903723823
-  },
-  {
-    "cellId": "d1p40",
-    "distance": 1.269121885182424,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 359.03916041026207,
-    "omegaMeasured": 372.5031289256469,
-    "outcome": "MADE",
-    "timestampMs": 1776903728164
-  },
-  {
-    "cellId": "d1p40",
-    "distance": 1.269133691279666,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 359.03916041026207,
-    "omegaMeasured": 376.99111843077515,
-    "outcome": "MADE",
-    "timestampMs": 1776903733855
-  },
-  {
-    "cellId": "d1p46",
-    "distance": 1.2683891449848401,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 353.08783927194787,
+    "omegaCommanded": 363.52714991539034,
     "omegaMeasured": 368.0151394205186,
     "outcome": "LONG",
-    "timestampMs": 1776903746872
+    "timestampMs": 1776995116735
+  },
+  {
+    "cellId": "d1p40",
+    "distance": 1.2598973552714463,
+    "hoodAngleDeg": 40.0,
+    "omegaCommanded": 361.28315516282623,
+    "omegaMeasured": 368.0151394205186,
+    "outcome": "MADE",
+    "timestampMs": 1776995127855
   },
   {
     "cellId": "d1p46",
-    "distance": 1.267673171980999,
+    "distance": 1.2598696922180208,
     "hoodAngleDeg": 46.0,
-    "omegaCommanded": 316.41550943723973,
-    "omegaMeasured": 332.1112233794924,
+    "omegaCommanded": 353.08783927194787,
+    "omegaMeasured": 359.03916041026207,
+    "outcome": "LONG",
+    "timestampMs": 1776995132792
+  },
+  {
+    "cellId": "d1p46",
+    "distance": 1.2597808135213995,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 311.9275199321115,
+    "omegaMeasured": 318.6472548641076,
+    "outcome": "LONG",
+    "timestampMs": 1776995137107
+  },
+  {
+    "cellId": "d1p46",
+    "distance": 1.259817455769396,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 291.7315671590343,
+    "omegaMeasured": 300.69529684359446,
     "outcome": "SHORT",
-    "timestampMs": 1776903861988
+    "timestampMs": 1776995140644
   },
   {
     "cellId": "d1p46",
-    "distance": 1.2674094489118164,
+    "distance": 1.2596503278073943,
     "hoodAngleDeg": 46.0,
-    "omegaCommanded": 350.06318140000553,
-    "omegaMeasured": 363.52714991539034,
-    "outcome": "LONG",
-    "timestampMs": 1776903867007
-  },
-  {
-    "cellId": "d1p46",
-    "distance": 1.2673031974296425,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 347.81918664744137,
-    "omegaMeasured": 359.03916041026207,
-    "outcome": "LONG",
-    "timestampMs": 1776903872720
-  },
-  {
-    "cellId": "d1p46",
-    "distance": 1.267277617468135,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 345.5751918948772,
-    "omegaMeasured": 354.5511709051338,
-    "outcome": "LONG",
-    "timestampMs": 1776903884562
-  },
-  {
-    "cellId": "d1p46",
-    "distance": 1.2668901852589036,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 343.3311971423131,
-    "omegaMeasured": 354.5511709051338,
-    "outcome": "LONG",
-    "timestampMs": 1776903894847
-  },
-  {
-    "cellId": "d1p46",
-    "distance": 1.2668500747615279,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 343.3311971423131,
-    "omegaMeasured": 359.03916041026207,
+    "omegaCommanded": 309.67127585385106,
+    "omegaMeasured": 318.6472548641076,
     "outcome": "MADE",
-    "timestampMs": 1776903898824
+    "timestampMs": 1776995144538
   },
   {
     "cellId": "d1p46",
-    "distance": 1.2665887834491132,
+    "distance": 1.2595626512354887,
     "hoodAngleDeg": 46.0,
-    "omegaCommanded": 343.3311971423131,
-    "omegaMeasured": 354.5511709051338,
-    "outcome": "LONG",
-    "timestampMs": 1776903905297
-  },
-  {
-    "cellId": "d1p46",
-    "distance": 1.2662374328089976,
-    "hoodAngleDeg": 46.0,
-    "omegaCommanded": 343.3311971423131,
-    "omegaMeasured": 354.5511709051338,
+    "omegaCommanded": 309.67127585385106,
+    "omegaMeasured": 314.1592653589793,
     "outcome": "MADE",
-    "timestampMs": 1776903910211
+    "timestampMs": 1776995151948
   },
   {
     "cellId": "d1p46",
-    "distance": 1.2662219881353285,
+    "distance": 1.2594954073160338,
     "hoodAngleDeg": 46.0,
-    "omegaCommanded": 343.3311971423131,
-    "omegaMeasured": 359.03916041026207,
+    "omegaCommanded": 309.67127585385106,
+    "omegaMeasured": 318.6472548641076,
     "outcome": "MADE",
-    "timestampMs": 1776903914782
+    "timestampMs": 1776995155574
   },
   {
     "cellId": "d1p52",
-    "distance": 1.266230190158739,
+    "distance": 1.2595145975644149,
     "hoodAngleDeg": 51.99999999999999,
     "omegaCommanded": 325.4510193223376,
-    "omegaMeasured": 341.08720238974894,
+    "omegaMeasured": 332.1112233794924,
     "outcome": "LONG",
-    "timestampMs": 1776903970389
+    "timestampMs": 1776995158662
   },
   {
     "cellId": "d1p52",
-    "distance": 1.266197574628558,
+    "distance": 1.2595556925239944,
     "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 292.5877334407511,
+    "omegaCommanded": 288.09974393562277,
+    "omegaMeasured": 296.20730733846625,
+    "outcome": "SHORT",
+    "timestampMs": 1776995162975
+  },
+  {
+    "cellId": "d1p52",
+    "distance": 1.259383833369757,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 314.1592653589793,
+    "omegaMeasured": 323.13524436923586,
+    "outcome": "LONG",
+    "timestampMs": 1776995166257
+  },
+  {
+    "cellId": "d1p52",
+    "distance": 1.259084536713719,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 309.67127585385106,
+    "omegaMeasured": 318.6472548641076,
+    "outcome": "LONG",
+    "timestampMs": 1776995170112
+  },
+  {
+    "cellId": "d1p52",
+    "distance": 1.2589601266776271,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 307.4272811012869,
     "omegaMeasured": 309.67127585385106,
-    "outcome": "SHORT",
-    "timestampMs": 1776903975599
-  },
-  {
-    "cellId": "d1p52",
-    "distance": 1.266207779170232,
-    "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 325.37923912179997,
-    "omegaMeasured": 341.08720238974894,
-    "outcome": "LONG",
-    "timestampMs": 1776903980342
-  },
-  {
-    "cellId": "d1p52",
-    "distance": 1.2667114096384617,
-    "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 325.37923912179997,
-    "omegaMeasured": 341.08720238974894,
-    "outcome": "LONG",
-    "timestampMs": 1776903986939
-  },
-  {
-    "cellId": "d1p52",
-    "distance": 1.2667306404158998,
-    "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 325.37923912179997,
-    "omegaMeasured": 341.08720238974894,
     "outcome": "MADE",
-    "timestampMs": 1776903999143
+    "timestampMs": 1776995174223
   },
   {
     "cellId": "d1p52",
-    "distance": 1.2667418844467695,
+    "distance": 1.2587502806278221,
     "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 325.37923912179997,
-    "omegaMeasured": 341.08720238974894,
+    "omegaCommanded": 307.4272811012869,
+    "omegaMeasured": 318.6472548641076,
     "outcome": "LONG",
-    "timestampMs": 1776904005708
+    "timestampMs": 1776995179793
   },
   {
     "cellId": "d1p52",
-    "distance": 1.2666440279169195,
+    "distance": 1.2587121273415776,
     "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 325.37923912179997,
-    "omegaMeasured": 341.08720238974894,
+    "omegaCommanded": 307.4272811012869,
+    "omegaMeasured": 314.1592653589793,
+    "outcome": "LONG",
+    "timestampMs": 1776995183590
+  },
+  {
+    "cellId": "d1p52",
+    "distance": 1.258711105575888,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 305.1832863487228,
+    "omegaMeasured": 314.1592653589793,
     "outcome": "MADE",
-    "timestampMs": 1776904010903
+    "timestampMs": 1776995186715
   },
   {
     "cellId": "d1p52",
-    "distance": 1.2663256934914124,
+    "distance": 1.258615748472416,
     "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 325.37923912179997,
-    "omegaMeasured": 336.59921288462067,
-    "outcome": "LONG",
-    "timestampMs": 1776904017313
-  },
-  {
-    "cellId": "d1p52",
-    "distance": 1.266398778870069,
-    "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 323.13524436923586,
-    "omegaMeasured": 336.59921288462067,
-    "outcome": "LONG",
-    "timestampMs": 1776904023259
-  },
-  {
-    "cellId": "d1p52",
-    "distance": 1.2662924139750413,
-    "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 323.13524436923586,
-    "omegaMeasured": 336.59921288462067,
+    "omegaCommanded": 305.1832863487228,
+    "omegaMeasured": 314.1592653589793,
     "outcome": "MADE",
-    "timestampMs": 1776904028403
+    "timestampMs": 1776995193681
   },
   {
     "cellId": "d1p53",
-    "distance": 1.2661392901758752,
+    "distance": 1.2585144215135988,
     "hoodAngleDeg": 53.0,
     "omegaCommanded": 322.88281099789725,
-    "omegaMeasured": 341.08720238974894,
-    "outcome": "MADE",
-    "timestampMs": 1776904034731
-  },
-  {
-    "cellId": "d1p53",
-    "distance": 1.2660319934963462,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 322.88281099789725,
-    "omegaMeasured": 332.1112233794924,
+    "omegaMeasured": 327.62323387436413,
     "outcome": "LONG",
-    "timestampMs": 1776904039592
+    "timestampMs": 1776995198662
   },
   {
     "cellId": "d1p53",
-    "distance": 1.266067455631562,
+    "distance": 1.2584228388208074,
     "hoodAngleDeg": 53.0,
-    "omegaCommanded": 287.1366658139577,
-    "omegaMeasured": 305.18328634872273,
-    "outcome": "SHORT",
-    "timestampMs": 1776904044225
-  },
-  {
-    "cellId": "d1p53",
-    "distance": 1.2660604866629823,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 318.6472548641076,
-    "omegaMeasured": 336.59921288462067,
+    "omegaCommanded": 284.89267106139357,
+    "omegaMeasured": 291.7193178333379,
     "outcome": "MADE",
-    "timestampMs": 1776904050810
+    "timestampMs": 1776995201999
   },
   {
     "cellId": "d1p53",
-    "distance": 1.2657109870617804,
+    "distance": 1.258492224289695,
     "hoodAngleDeg": 53.0,
-    "omegaCommanded": 318.6472548641076,
-    "omegaMeasured": 332.1112233794924,
+    "omegaCommanded": 284.89267106139357,
+    "omegaMeasured": 291.7193178333379,
     "outcome": "MADE",
-    "timestampMs": 1776904055118
+    "timestampMs": 1776995211389
   },
   {
-    "cellId": "d2p40",
-    "distance": 2.0069474622350283,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 398.58761085754855,
+    "cellId": "d1p53",
+    "distance": 1.25859547322205,
+    "hoodAngleDeg": 53.0,
+    "omegaCommanded": 284.89267106139357,
+    "omegaMeasured": 291.7193178333379,
+    "outcome": "MADE",
+    "timestampMs": 1776995216318
+  },
+  {
+    "cellId": "d2p39",
+    "distance": 1.9954725491154077,
+    "hoodAngleDeg": 39.0,
+    "omegaCommanded": 404.81000375542686,
     "omegaMeasured": 408.4070449666731,
     "outcome": "LONG",
-    "timestampMs": 1776904081415
+    "timestampMs": 1776995235719
   },
   {
-    "cellId": "d2p40",
-    "distance": 2.0085789054012837,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 353.67387655491723,
-    "omegaMeasured": 363.52714991539034,
-    "outcome": "SHORT",
-    "timestampMs": 1776904087067
-  },
-  {
-    "cellId": "d2p40",
-    "distance": 2.0104916631152676,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 385.9670974410317,
-    "omegaMeasured": 399.43106595641655,
+    "cellId": "d2p39",
+    "distance": 1.993845351226559,
+    "hoodAngleDeg": 39.0,
+    "omegaCommanded": 356.0072738916216,
+    "omegaMeasured": 359.03916041026207,
     "outcome": "MADE",
-    "timestampMs": 1776904094538
+    "timestampMs": 1776995239075
+  },
+  {
+    "cellId": "d2p39",
+    "distance": 1.9925529301654752,
+    "hoodAngleDeg": 39.0,
+    "omegaCommanded": 356.0072738916216,
+    "omegaMeasured": 359.03916041026207,
+    "outcome": "MADE",
+    "timestampMs": 1776995241909
+  },
+  {
+    "cellId": "d2p39",
+    "distance": 1.9911475917171644,
+    "hoodAngleDeg": 39.0,
+    "omegaCommanded": 356.0072738916216,
+    "omegaMeasured": 359.03916041026207,
+    "outcome": "MADE",
+    "timestampMs": 1776995245082
   },
   {
     "cellId": "d2p40",
-    "distance": 2.0117201525876576,
+    "distance": 1.9902767905871572,
     "hoodAngleDeg": 40.0,
-    "omegaCommanded": 385.9670974410317,
+    "omegaCommanded": 398.58761085754855,
     "omegaMeasured": 403.9190554615449,
     "outcome": "LONG",
-    "timestampMs": 1776904099625
+    "timestampMs": 1776995247483
   },
   {
     "cellId": "d2p40",
-    "distance": 2.0122064787684155,
+    "distance": 1.988828838386972,
     "hoodAngleDeg": 40.0,
-    "omegaCommanded": 383.72310268846763,
-    "omegaMeasured": 394.9430764512883,
+    "omegaCommanded": 351.4298818023532,
+    "omegaMeasured": 363.52714991539034,
+    "outcome": "MADE",
+    "timestampMs": 1776995250966
+  },
+  {
+    "cellId": "d2p40",
+    "distance": 1.9869431492468974,
+    "hoodAngleDeg": 40.0,
+    "omegaCommanded": 351.4298818023532,
+    "omegaMeasured": 359.03916041026207,
+    "outcome": "MADE",
+    "timestampMs": 1776995255429
+  },
+  {
+    "cellId": "d2p40",
+    "distance": 1.9853577565674372,
+    "hoodAngleDeg": 40.0,
+    "omegaCommanded": 351.4298818023532,
+    "omegaMeasured": 354.5511709051338,
+    "outcome": "MADE",
+    "timestampMs": 1776995259591
+  },
+  {
+    "cellId": "d2p46",
+    "distance": 1.9844460618047384,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 373.89115311191836,
+    "omegaMeasured": 385.96709744103174,
     "outcome": "LONG",
-    "timestampMs": 1776904104538
+    "timestampMs": 1776995262244
   },
   {
-    "cellId": "d2p40",
-    "distance": 2.013090178241419,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 379.2351131833393,
-    "omegaMeasured": 385.96709744103174,
+    "cellId": "d2p46",
+    "distance": 1.983146028475507,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 333.1927311374852,
+    "omegaMeasured": 341.08720238974894,
     "outcome": "MADE",
-    "timestampMs": 1776904109240
+    "timestampMs": 1776995265848
   },
   {
-    "cellId": "d2p40",
-    "distance": 2.0138539794958277,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 379.2351131833393,
-    "omegaMeasured": 385.96709744103174,
+    "cellId": "d2p46",
+    "distance": 1.9827232536061028,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 333.1927311374852,
+    "omegaMeasured": 341.08720238974894,
     "outcome": "MADE",
-    "timestampMs": 1776904113979
+    "timestampMs": 1776995269224
+  },
+  {
+    "cellId": "d2p46",
+    "distance": 1.9818661047528245,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 333.1927311374852,
+    "omegaMeasured": 336.59921288462067,
+    "outcome": "MADE",
+    "timestampMs": 1776995271747
   },
   {
     "cellId": "d2p52",
-    "distance": 2.014855438738419,
+    "distance": 1.9813508421099133,
     "hoodAngleDeg": 51.99999999999999,
     "omegaCommanded": 365.3147765853419,
+    "omegaMeasured": 368.0151394205186,
+    "outcome": "LONG",
+    "timestampMs": 1776995273955
+  },
+  {
+    "cellId": "d2p52",
+    "distance": 1.9803362620780052,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 321.0006109297625,
+    "omegaMeasured": 327.62323387436413,
+    "outcome": "SHORT",
+    "timestampMs": 1776995278459
+  },
+  {
+    "cellId": "d2p52",
+    "distance": 1.9796019694453584,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 347.81918664744137,
+    "omegaMeasured": 350.06318140000553,
+    "outcome": "LONG",
+    "timestampMs": 1776995282469
+  },
+  {
+    "cellId": "d2p52",
+    "distance": 1.9778498932401063,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 338.84320763718483,
+    "omegaMeasured": 341.08720238974894,
+    "outcome": "LONG",
+    "timestampMs": 1776995294143
+  },
+  {
+    "cellId": "d2p52",
+    "distance": 1.9774754049633025,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 334.3552181320565,
+    "omegaMeasured": 341.08720238974894,
+    "outcome": "MADE",
+    "timestampMs": 1776995299387
+  },
+  {
+    "cellId": "d2p52",
+    "distance": 1.9767876742344748,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 334.3552181320565,
+    "omegaMeasured": 341.08720238974894,
+    "outcome": "LONG",
+    "timestampMs": 1776995305294
+  },
+  {
+    "cellId": "d2p52",
+    "distance": 1.9762351080759273,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 334.3552181320565,
+    "omegaMeasured": 336.59921288462067,
+    "outcome": "MADE",
+    "timestampMs": 1776995310367
+  },
+  {
+    "cellId": "d2p52",
+    "distance": 1.975787159119731,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 334.3552181320565,
+    "omegaMeasured": 336.59921288462067,
+    "outcome": "MADE",
+    "timestampMs": 1776995314914
+  },
+  {
+    "cellId": "d2p53",
+    "distance": 1.9756962291108588,
+    "hoodAngleDeg": 53.0,
+    "omegaCommanded": 365.1827646858985,
     "omegaMeasured": 372.5031289256469,
-    "outcome": "MADE",
-    "timestampMs": 1776904120298
-  },
-  {
-    "cellId": "d2p52",
-    "distance": 2.0154912557866558,
-    "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 365.3147765853419,
-    "omegaMeasured": 462.2629190282124,
-    "outcome": "MADE",
-    "timestampMs": 1776904125758
-  },
-  {
-    "cellId": "d2p52",
-    "distance": 2.016404835931708,
-    "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 365.3147765853419,
-    "omegaMeasured": 376.99111843077515,
-    "outcome": "MADE",
-    "timestampMs": 1776904133137
+    "outcome": "LONG",
+    "timestampMs": 1776995317468
   },
   {
     "cellId": "d2p53",
-    "distance": 2.0167972678042982,
+    "distance": 1.975371434433227,
     "hoodAngleDeg": 53.0,
-    "omegaCommanded": 365.1827646858985,
-    "omegaMeasured": 381.47910793590347,
-    "outcome": "MADE",
-    "timestampMs": 1776904137958
+    "omegaCommanded": 323.1951012200354,
+    "omegaMeasured": 327.62323387436413,
+    "outcome": "SHORT",
+    "timestampMs": 1776995321437
   },
   {
     "cellId": "d2p53",
-    "distance": 2.017448631181218,
+    "distance": 1.9752142088001323,
     "hoodAngleDeg": 53.0,
-    "omegaCommanded": 365.1827646858985,
-    "omegaMeasured": 376.99111843077515,
-    "outcome": "MADE",
-    "timestampMs": 1776904143445
+    "omegaCommanded": 350.06318140000553,
+    "omegaMeasured": 354.5511709051338,
+    "outcome": "LONG",
+    "timestampMs": 1776995324529
   },
   {
     "cellId": "d2p53",
-    "distance": 2.018005030866758,
+    "distance": 1.9751169544829794,
     "hoodAngleDeg": 53.0,
-    "omegaCommanded": 365.1827646858985,
-    "omegaMeasured": 376.99111843077515,
+    "omegaCommanded": 341.087202389749,
+    "omegaMeasured": 345.57519189487726,
     "outcome": "MADE",
-    "timestampMs": 1776904147987
+    "timestampMs": 1776995327317
+  },
+  {
+    "cellId": "d2p53",
+    "distance": 1.9750819585146133,
+    "hoodAngleDeg": 53.0,
+    "omegaCommanded": 341.087202389749,
+    "omegaMeasured": 350.06318140000553,
+    "outcome": "MADE",
+    "timestampMs": 1776995329749
+  },
+  {
+    "cellId": "d2p53",
+    "distance": 1.9748102238093532,
+    "hoodAngleDeg": 53.0,
+    "omegaCommanded": 341.087202389749,
+    "omegaMeasured": 359.03916041026207,
+    "outcome": "MADE",
+    "timestampMs": 1776995334602
   },
   {
     "cellId": "d3p39",
-    "distance": 2.989501943138141,
+    "distance": 3.0297142708174354,
     "hoodAngleDeg": 39.0,
     "omegaCommanded": 446.75521691283734,
     "omegaMeasured": 448.7989505128276,
     "outcome": "LONG",
-    "timestampMs": 1776904171073
+    "timestampMs": 1776995364387
   },
   {
     "cellId": "d3p39",
-    "distance": 2.9835545989804766,
+    "distance": 3.0281264972470643,
     "hoodAngleDeg": 39.0,
     "omegaCommanded": 391.9326815987278,
-    "omegaMeasured": 399.43106595641655,
+    "omegaMeasured": 394.9430764512883,
     "outcome": "SHORT",
-    "timestampMs": 1776904176143
+    "timestampMs": 1776995366673
   },
   {
     "cellId": "d3p39",
-    "distance": 2.975478312337224,
+    "distance": 3.0254894115787843,
     "hoodAngleDeg": 39.0,
-    "omegaCommanded": 424.1150082346221,
-    "omegaMeasured": 439.822971502571,
-    "outcome": "SHORT",
-    "timestampMs": 1776904182906
-  },
-  {
-    "cellId": "d3p39",
-    "distance": 2.965129845445631,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 444.31096100769935,
-    "omegaMeasured": 453.2869400179558,
+    "omegaCommanded": 421.87101348205795,
+    "omegaMeasured": 426.3590029871862,
     "outcome": "LONG",
-    "timestampMs": 1776904190635
+    "timestampMs": 1776995371913
   },
   {
     "cellId": "d3p39",
-    "distance": 2.956640117335323,
+    "distance": 3.022836509539412,
     "hoodAngleDeg": 39.0,
-    "omegaCommanded": 444.31096100769935,
-    "omegaMeasured": 448.7989505128276,
-    "outcome": "LONG",
-    "timestampMs": 1776904197141
-  },
-  {
-    "cellId": "d3p39",
-    "distance": 2.944899106615956,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 444.31096100769935,
-    "omegaMeasured": 448.7989505128276,
+    "omegaCommanded": 410.65103971923725,
+    "omegaMeasured": 412.89503447180135,
     "outcome": "MADE",
-    "timestampMs": 1776904206217
+    "timestampMs": 1776995375030
   },
   {
     "cellId": "d3p39",
-    "distance": 2.9394745148538055,
+    "distance": 3.021147709047595,
     "hoodAngleDeg": 39.0,
-    "omegaCommanded": 444.31096100769935,
-    "omegaMeasured": 448.7989505128276,
-    "outcome": "LONG",
-    "timestampMs": 1776904210780
-  },
-  {
-    "cellId": "d3p39",
-    "distance": 2.9331752933135187,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 444.31096100769935,
-    "omegaMeasured": 448.7989505128276,
+    "omegaCommanded": 410.65103971923725,
+    "omegaMeasured": 412.89503447180135,
     "outcome": "MADE",
-    "timestampMs": 1776904217265
+    "timestampMs": 1776995377832
   },
   {
     "cellId": "d3p39",
-    "distance": 2.9207464018983913,
+    "distance": 3.019821928289209,
     "hoodAngleDeg": 39.0,
-    "omegaCommanded": 444.31096100769935,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "LONG",
-    "timestampMs": 1776904229707
-  },
-  {
-    "cellId": "d3p39",
-    "distance": 2.912829503195683,
-    "hoodAngleDeg": 39.0,
-    "omegaCommanded": 442.0669662551352,
-    "omegaMeasured": 448.7989505128276,
+    "omegaCommanded": 410.65103971923725,
+    "omegaMeasured": 412.89503447180135,
     "outcome": "MADE",
-    "timestampMs": 1776904239359
+    "timestampMs": 1776995380355
   },
   {
     "cellId": "d3p40",
-    "distance": 2.908419951178812,
+    "distance": 3.0182240841314116,
     "hoodAngleDeg": 40.0,
     "omegaCommanded": 442.8153726485436,
-    "omegaMeasured": 448.7989505128276,
-    "outcome": "MADE",
-    "timestampMs": 1776904245342
-  },
-  {
-    "cellId": "d3p40",
-    "distance": 2.905185751512229,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 442.8153726485436,
-    "omegaMeasured": 448.7989505128276,
+    "omegaMeasured": 444.3109610076993,
     "outcome": "LONG",
-    "timestampMs": 1776904250195
+    "timestampMs": 1776995382878
   },
   {
     "cellId": "d3p40",
-    "distance": 2.902725746717861,
+    "distance": 3.016633474982451,
     "hoodAngleDeg": 40.0,
-    "omegaCommanded": 390.4552399996177,
-    "omegaMeasured": 399.43106595641655,
+    "omegaCommanded": 388.2112452470535,
+    "omegaMeasured": 394.9430764512883,
     "outcome": "SHORT",
-    "timestampMs": 1776904255140
+    "timestampMs": 1776995385406
   },
   {
     "cellId": "d3p40",
-    "distance": 2.8997030810227336,
+    "distance": 3.0150283093828274,
     "hoodAngleDeg": 40.0,
-    "omegaCommanded": 424.1150082346221,
-    "omegaMeasured": 444.3109610076993,
+    "omegaCommanded": 419.6270187294938,
+    "omegaMeasured": 421.8710134820579,
+    "outcome": "LONG",
+    "timestampMs": 1776995388195
+  },
+  {
+    "cellId": "d3p40",
+    "distance": 3.0132038595576205,
+    "hoodAngleDeg": 40.0,
+    "omegaCommanded": 408.4070449666731,
+    "omegaMeasured": 412.89503447180135,
     "outcome": "MADE",
-    "timestampMs": 1776904259908
+    "timestampMs": 1776995391513
   },
   {
     "cellId": "d3p40",
-    "distance": 2.8959738025533253,
+    "distance": 3.0099641619781985,
     "hoodAngleDeg": 40.0,
-    "omegaCommanded": 424.1150082346221,
+    "omegaCommanded": 408.4070449666731,
+    "omegaMeasured": 412.89503447180135,
+    "outcome": "MADE",
+    "timestampMs": 1776995396962
+  },
+  {
+    "cellId": "d3p40",
+    "distance": 3.0083148982868257,
+    "hoodAngleDeg": 40.0,
+    "omegaCommanded": 408.4070449666731,
+    "omegaMeasured": 412.89503447180135,
+    "outcome": "MADE",
+    "timestampMs": 1776995401359
+  },
+  {
+    "cellId": "d3p46",
+    "distance": 3.006159707994403,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 428.6354210147075,
     "omegaMeasured": 430.8469924923145,
+    "outcome": "LONG",
+    "timestampMs": 1776995404579
+  },
+  {
+    "cellId": "d3p46",
+    "distance": 3.0047156403066273,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 376.1617791266725,
+    "omegaMeasured": 381.47910793590347,
     "outcome": "SHORT",
-    "timestampMs": 1776904266906
-  },
-  {
-    "cellId": "d3p40",
-    "distance": 2.8934072582690917,
-    "hoodAngleDeg": 40.0,
-    "omegaCommanded": 439.822971502571,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "MADE",
-    "timestampMs": 1776904271677
+    "timestampMs": 1776995407322
   },
   {
     "cellId": "d3p46",
-    "distance": 3.0103377301394754,
+    "distance": 3.0031570705112576,
     "hoodAngleDeg": 46.0,
-    "omegaCommanded": 428.6354210147075,
-    "omegaMeasured": 435.3349819974428,
+    "omegaCommanded": 406.163050214109,
+    "omegaMeasured": 412.89503447180135,
     "outcome": "MADE",
-    "timestampMs": 1776904294328
+    "timestampMs": 1776995410339
   },
   {
     "cellId": "d3p46",
-    "distance": 3.012355577882021,
+    "distance": 3.001369258864239,
     "hoodAngleDeg": 46.0,
-    "omegaCommanded": 428.6354210147075,
-    "omegaMeasured": 430.8469924923145,
-    "outcome": "MADE",
-    "timestampMs": 1776904300193
+    "omegaCommanded": 406.163050214109,
+    "omegaMeasured": 417.3830239769297,
+    "outcome": "LONG",
+    "timestampMs": 1776995413906
   },
   {
     "cellId": "d3p46",
-    "distance": 3.0137751813310873,
+    "distance": 2.9999597056575547,
     "hoodAngleDeg": 46.0,
-    "omegaCommanded": 428.6354210147075,
-    "omegaMeasured": 430.8469924923145,
+    "omegaCommanded": 399.43106595641655,
+    "omegaMeasured": 408.4070449666731,
     "outcome": "MADE",
-    "timestampMs": 1776904307834
+    "timestampMs": 1776995416729
+  },
+  {
+    "cellId": "d3p46",
+    "distance": 2.99848030161086,
+    "hoodAngleDeg": 46.0,
+    "omegaCommanded": 399.43106595641655,
+    "omegaMeasured": 403.9190554615449,
+    "outcome": "MADE",
+    "timestampMs": 1776995419717
   },
   {
     "cellId": "d3p52",
-    "distance": 3.01451850052492,
+    "distance": 2.9974576113822717,
     "hoodAngleDeg": 51.99999999999999,
     "omegaCommanded": 428.3728432737878,
-    "omegaMeasured": 435.3349819974428,
-    "outcome": "SHORT",
-    "timestampMs": 1776904316439
-  },
-  {
-    "cellId": "d3p52",
-    "distance": 3.0146700200811796,
-    "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 485.4005180448388,
-    "omegaMeasured": 484.70286655385377,
+    "omegaMeasured": 430.8469924923145,
     "outcome": "LONG",
-    "timestampMs": 1776904322729
+    "timestampMs": 1776995422158
   },
   {
     "cellId": "d3p52",
-    "distance": 3.0150249911669142,
+    "distance": 2.9947050830542024,
     "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 460.01892427564826,
-    "omegaMeasured": 462.2629190282124,
-    "outcome": "MADE",
-    "timestampMs": 1776904327845
+    "omegaCommanded": 376.06331247382764,
+    "omegaMeasured": 381.47910793590347,
+    "outcome": "SHORT",
+    "timestampMs": 1776995428794
   },
   {
     "cellId": "d3p52",
-    "distance": 3.0156081377510993,
+    "distance": 2.993181016083863,
     "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 460.01892427564826,
-    "omegaMeasured": 462.2629190282124,
-    "outcome": "MADE",
-    "timestampMs": 1776904333127
+    "omegaCommanded": 406.163050214109,
+    "omegaMeasured": 408.4070449666731,
+    "outcome": "SHORT",
+    "timestampMs": 1776995432274
   },
   {
     "cellId": "d3p52",
-    "distance": 3.0161201612272657,
+    "distance": 2.99092695204681,
     "hoodAngleDeg": 51.99999999999999,
-    "omegaCommanded": 460.01892427564826,
-    "omegaMeasured": 462.2629190282124,
+    "omegaCommanded": 419.6270187294938,
+    "omegaMeasured": 421.8710134820579,
     "outcome": "MADE",
-    "timestampMs": 1776904338112
+    "timestampMs": 1776995439366
+  },
+  {
+    "cellId": "d3p52",
+    "distance": 2.973542785824875,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 419.6270187294938,
+    "omegaMeasured": 421.8710134820579,
+    "outcome": "MADE",
+    "timestampMs": 1776995447208
+  },
+  {
+    "cellId": "d3p52",
+    "distance": 2.9731351716449375,
+    "hoodAngleDeg": 51.99999999999999,
+    "omegaCommanded": 419.6270187294938,
+    "omegaMeasured": 421.8710134820579,
+    "outcome": "MADE",
+    "timestampMs": 1776995450636
   },
   {
     "cellId": "d3p53",
-    "distance": 3.0163508197076374,
+    "distance": 2.972883031492707,
     "hoodAngleDeg": 53.0,
     "omegaCommanded": 429.60811893851553,
     "omegaMeasured": 430.8469924923145,
-    "outcome": "LONG",
-    "timestampMs": 1776904343495
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.019874792340182,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 376.5265408481006,
-    "omegaMeasured": 390.45508694616,
-    "outcome": "SHORT",
-    "timestampMs": 1776904350394
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 2.9997815701639365,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 410.65103971923725,
-    "omegaMeasured": 421.8710134820579,
-    "outcome": "SHORT",
-    "timestampMs": 1776904388320
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.000643657333822,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 426.35900298718616,
-    "omegaMeasured": 435.3349819974428,
-    "outcome": "SHORT",
-    "timestampMs": 1776904393411
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.001380164310714,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 433.09098724487865,
-    "omegaMeasured": 439.822971502571,
-    "outcome": "SHORT",
-    "timestampMs": 1776904397162
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.000863820609064,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 435.33498199744275,
-    "omegaMeasured": 435.3349819974428,
-    "outcome": "SHORT",
-    "timestampMs": 1776904401207
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.0003586692427953,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 435.33498199744275,
-    "omegaMeasured": 439.822971502571,
-    "outcome": "SHORT",
-    "timestampMs": 1776904404975
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.005243299375254,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 435.33498199744275,
-    "omegaMeasured": 439.822971502571,
-    "outcome": "SHORT",
-    "timestampMs": 1776904414119
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.0073185858913103,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 435.33498199744275,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "SHORT",
-    "timestampMs": 1776904422522
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.0081464907427633,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "SHORT",
-    "timestampMs": 1776904428281
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.0093963458958597,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "SHORT",
-    "timestampMs": 1776904435042
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.0102678309367676,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 444.3109610076993,
     "outcome": "MADE",
-    "timestampMs": 1776904441516
+    "timestampMs": 1776995453767
   },
   {
     "cellId": "d3p53",
-    "distance": 3.011466711252825,
+    "distance": 2.9725712233356223,
     "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "SHORT",
-    "timestampMs": 1776904451442
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.0139368893667378,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "SHORT",
-    "timestampMs": 1776904478236
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.014006759413716,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 444.3109610076993,
+    "omegaCommanded": 429.60811893851553,
+    "omegaMeasured": 439.822971502571,
     "outcome": "MADE",
-    "timestampMs": 1776904484362
+    "timestampMs": 1776995456926
   },
   {
     "cellId": "d3p53",
-    "distance": 3.0083253347074024,
+    "distance": 2.9722374628086548,
     "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "SHORT",
-    "timestampMs": 1776904489163
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.00535400837351,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 444.3109610076993,
-    "outcome": "SHORT",
-    "timestampMs": 1776904494206
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.0008012785779927,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 437.57897675000686,
-    "omegaMeasured": 448.7989505128276,
-    "outcome": "SHORT",
-    "timestampMs": 1776904504401
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 3.000347141002733,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 439.822971502571,
-    "omegaMeasured": 448.7989505128276,
-    "outcome": "SHORT",
-    "timestampMs": 1776904516492
-  },
-  {
-    "cellId": "d3p53",
-    "distance": 2.999763081641793,
-    "hoodAngleDeg": 53.0,
-    "omegaCommanded": 439.822971502571,
-    "omegaMeasured": 444.3109610076993,
+    "omegaCommanded": 429.60811893851553,
+    "omegaMeasured": 430.8469924923145,
     "outcome": "MADE",
-    "timestampMs": 1776904520022
+    "timestampMs": 1776995460503
   }
 ]
