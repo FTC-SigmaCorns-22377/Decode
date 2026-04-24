@@ -172,7 +172,7 @@ class AimingSystem(
             vR = Vector2d(vel.x, vel.y),
         )
 
-        val currentVexit = AimConfig.omegaInv(robot.io.flywheelVelocity(),robot.shooter.hoodAngle)
+        val currentVexit = AimConfig.omegaInv(robot.io.flywheelVelocity(),robot.shooter.hoodAngle).coerceAtLeast(5.0)
         val currentState = Ballistics.ShotState(
             theta = turret.pos + fusedPose.rot,
             phi = shooter.computedHoodAngle,
@@ -181,60 +181,51 @@ class AimingSystem(
 
         val curShotErr = ballistics.shotError(currentState,target)
 
-        if (shotRequested) {
-            if (shotRequestedTime == null) {
-                shotRequestedTime = robot.io.time()
-            }
-
-            val elapsed = robot.io.time() - shotRequestedTime!!
-            val shouldFire = curShotErr < AimConfig.shotTolerance && robot.intakeCoordinator.inShootingZone
-            val keepFiring = robot.intakeCoordinator.inShootingZone &&
-                robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING
-
-            if (shouldFire || keepFiring) {
-                shotRequested = false
-                shotRequestedTime = null
-                robot.intakeTransfer.state = IntakeTransfer.State.TRANSFERRING
-            } else {
-                // Not in zone or waiting for aim — pre-open blocker and stop transfer.
-                robot.intakeTransfer.state = IntakeTransfer.State.READY_TO_SHOOT
-            }
-        }
-
         val isFallback = try {
             val optimal = shotSolver.optimalAdjust(currentState, target, ShotSolverConfig.tolerance)
             primaryShotState = optimal
             false
         } catch (e: Exception) {
-            // No optimal solution found; fix vExit to vMax and find the hood angle closest to goal
-            var bestShot: Ballistics.ShotState? = null
-            var bestError = Double.POSITIVE_INFINITY
+            // No optimal solution found; reset solver state to a nominal forward shot to allow it to recover
+            val nominalState = Ballistics.ShotState(
+                theta = turret.pos + fusedPose.rot,
+                phi = Math.toRadians(45.0).coerceIn(ShooterConfig.minAngleDeg, ShooterConfig.maxAngleDeg),
+                vExit = AimConfig.vMax * 0.5
+            )
+            try {
+                primaryShotState = shotSolver.optimalAdjust(nominalState, target, ShotSolverConfig.tolerance)
+                false
+            } catch (e2: Exception) {
+                // If even the nominal state fails to converge (e.g. wall is physically impossible), use the hardcoded fallback
+                var bestShot: Ballistics.ShotState? = null
+                var bestError = Double.POSITIVE_INFINITY
 
-            // Compute theta that points at the goal
-            val b = (target.dx) / 1.0 - target.vR.x
-            val c = (target.dy) / 1.0 - target.vR.y
-            val theta = Math.atan2(c, b)
+                // Compute theta that points at the goal
+                val b = (target.dx) / 1.0 - target.vR.x
+                val c = (target.dy) / 1.0 - target.vR.y
+                val theta = Math.atan2(c, b)
 
-            val phiSteps = 20
-            for (i in 0..phiSteps) {
-                val phi = ShooterConfig.minAngleDeg + (ShooterConfig.maxAngleDeg - ShooterConfig.minAngleDeg) * i / phiSteps
-                val phiRad = Math.toRadians(phi)
+                val phiSteps = 20
+                for (i in 0..phiSteps) {
+                    val phi = ShooterConfig.minAngleDeg + (ShooterConfig.maxAngleDeg - ShooterConfig.minAngleDeg) * i / phiSteps
+                    val phiRad = Math.toRadians(phi)
 
-                val candidate = Ballistics.ShotState(
-                    theta = theta,
-                    phi = phiRad,
-                    vExit = AimConfig.vMax
-                )
+                    val candidate = Ballistics.ShotState(
+                        theta = theta,
+                        phi = phiRad,
+                        vExit = AimConfig.vMax
+                    )
 
-                val error = ballistics.shotError(candidate, target)
-                if (error < bestError) {
-                    bestError = error
-                    bestShot = candidate
+                    val error = ballistics.shotError(candidate, target)
+                    if (error < bestError) {
+                        bestError = error
+                        bestShot = candidate
+                    }
                 }
-            }
 
-            primaryShotState = bestShot ?: ballistics.solve(target, 1.0)
-            true
+                primaryShotState = bestShot ?: ballistics.solve(target, 1.0)
+                true
+            }
         }
 
         val shotState = primaryShotState ?: return

@@ -216,9 +216,9 @@ class Shooter(
 }
 
 object ShooterConfig {
-    @JvmField var minAngleDeg = 34.0
-    @JvmField var maxAngleDeg = 58.0
+    @JvmField var minAngleDeg = 35.0
+    @JvmField var maxAngleDeg = 63.0
     @JvmField var defaultAngleDeg = 45.0
-    @JvmField var minServo = 0.3242
+    @JvmField var minServo = 0.2083
     @JvmField var maxServo = 1.0
 }

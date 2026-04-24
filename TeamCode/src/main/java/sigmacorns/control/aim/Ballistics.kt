@@ -112,8 +112,13 @@ class Ballistics(
 
         // find travel time, highest root bc lob (since a is negative is - sqrt)
         val T = (-b - sqrt(b*b - 4.0*a*c))/(2.0*a)
-        val xf = target.turret.x + rH*(1.0 - sin(shot.phi))*cos(shot.theta) + T*(shot.vExit*cos(shot.phi)*cos(shot.theta) + target.vR.x)
-        val yf = target.turret.y + rH*(1.0 - sin(shot.phi))*sin(shot.theta) + T*(shot.vExit*cos(shot.phi)*sin(shot.theta) + target.vR.y)
+
+        // Use the theta solve() would compute for this T rather than shot.theta.
+        // This measures only phi/vExit error — theta errors (already bounded by
+        // turret alignment tolerance) do not amplify with distance.
+        val theta = evalTheta(target, T)
+        val xf = target.turret.x + rH*(1.0 - sin(shot.phi))*cos(theta) + T*(shot.vExit*cos(shot.phi)*cos(theta) + target.vR.x)
+        val yf = target.turret.y + rH*(1.0 - sin(shot.phi))*sin(theta) + T*(shot.vExit*cos(shot.phi)*sin(theta) + target.vR.y)
 
         return hypot(xf-target.target.x, yf-target.target.y)
     }

@@ -52,7 +52,10 @@ class NativeAutoAim(
     override var goalPosition: Vector2d = FieldLandmarks.goalPosition(blue)
     override var positionOverride: Double? = null
     override var shotRequested: Boolean = false
+    private var shotRequestedTime: kotlin.time.Duration? = null
     override var readyToShoot: Boolean = false
+        private set
+    override var transferPowerCommand: Float = 1.0f
         private set
     override var targetDistance: Double = 3.0
         private set
@@ -105,8 +108,6 @@ class NativeAutoAim(
         private set
 
     /** Transfer motor power [0.1, 1.0] derived from solver J_12/J_23 each loop. */
-    override var transferPowerCommand: Float = 1.0f
-        private set
 
     // ── Zones (mirrored for alliance) ────────────────────────────────
     private lateinit var goalZone: List<Vector2d>
@@ -354,10 +355,10 @@ class NativeAutoAim(
             turret.fieldTargetAngle = lastTheta.toDouble()
         }
 
-        val prespin = nBalls > 0 && (inZone || shotRequested)
+        val prespin = nBalls > 0 || inZone || shotRequested
         if (robot.aimFlywheel) {
             shooter.hoodAngle = lastPhi.toDouble()
-            if (prespin) shooter.flywheelTarget = lastOmega.toDouble() else shooter.flywheelTarget = 0.0
+            shooter.flywheelTarget = lastOmega.toDouble()
         }
 
         // readyToShoot: forward-simulate from current actuator state
@@ -371,7 +372,9 @@ class NativeAutoAim(
             lastT1, physConfig
         )
 
-        readyToShoot = missDistance < AimConfig.shotTolerance && inZone
+
+
+        readyToShoot = missDistance < AimConfig.shotTolerance
     }
 
     private fun wrapAngle(a: Double): Double {
