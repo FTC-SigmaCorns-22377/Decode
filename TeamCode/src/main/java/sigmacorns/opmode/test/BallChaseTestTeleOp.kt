@@ -4,34 +4,32 @@ import android.util.Size
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName
 import org.firstinspires.ftc.vision.VisionPortal
-import sigmacorns.Robot
 import sigmacorns.io.HardwareIO
-import sigmacorns.logic.BallTrackingSystem
-import sigmacorns.logic.ChaseCoordinator
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
+import sigmacorns.subsystem.Drivetrain
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.vision.BallDetectionProcessor
-import sigmacorns.vision.tracker.TrackerConfig
-import kotlin.time.DurationUnit
+import kotlin.math.abs
 
 /**
- * Minimal teleop for testing auto-chase. One button:
+ * Dumb pixel-based ball chase. No tracker, no pose, no field frame.
  *
- *   RIGHT BUMPER held  →  AUTO CHASE ON (intake running, drive to nearest ball)
- *   release            →  AUTO CHASE OFF, manual drive (gamepad1 sticks)
+ *   RIGHT BUMPER held  ->  AUTO CHASE: steer+drive toward the largest detected ball in the image.
+ *   release            ->  Manual drive (robot-centric).
  *
- * No shoot cycle, no other buttons. If you want the full collect-three-and-shoot
- * behavior, use [sigmacorns.opmode.BallChaseTeleOp] instead.
+ * Steering law:
+ *   yaw   = headingK * (normalizedPixelX)        where normalized x = (bbox.cx - imgCx) / imgCx, in [-1, 1]
+ *   drive = baseSpeed * (1 - |normalizedPixelX|) if ball is in view, else 0
+ *
+ * This is intentionally simple. If this doesn't move the wheels, the problem is
+ * either (a) motor wiring, (b) no detections, or (c) drivetrain config. Telemetry
+ * below surfaces which one.
  */
 @TeleOp(name = "Ball Chase TEST", group = "Test")
 class BallChaseTestTeleOp : SigmaOpMode() {
 
     override fun runOpMode() {
-        val robot = Robot(io, blue = false, useNativeAim = false)
-        robotRef = robot
-        robot.init(Pose2d(), apriltagTracking = false)
-
         val processor = BallDetectionProcessor()
         val portal = VisionPortal.Builder()
             .setCamera(hardwareMap.get(WebcamName::class.java, "Webcam 1"))
@@ -46,67 +44,73 @@ class BallChaseTestTeleOp : SigmaOpMode() {
             processor.detectedBalls to processor.lastCaptureTimeSec
         }
 
-        val config = TrackerConfig.loadDefault()
-        val tracking = BallTrackingSystem(config = config, io = io)
+        val drive = Drivetrain().apply { fieldCentric = false }
 
-        val chase = ChaseCoordinator(
-            drivetrain = robot.drive,
-            tracking = tracking,
-            io = io,
-            maxSpeed = 1.0,
-            stopRadiusM = 0.18,
-            slowDownRadiusM = 0.30,
-            rotateToTarget = true,
-        )
-        chase.enabled = false
+        val imageWidth = 1280
+        val imgCx = imageWidth / 2.0
 
-        val hasPinpoint = hardware?.pinpoint != null
-        telemetry.addLine("Ball Chase TEST — hold right bumper to auto-chase.")
-        telemetry.addData("pinpoint", if (hasPinpoint) "FOUND" else "MISSING (pose stuck at 0)")
+        // Camera is rotated 180 in processFrame. In the rotated (right-side-up)
+        // image, a ball to the robot's LEFT appears at LARGER pixel x, because
+        // ROTATE_180 flips x. We account for that: rotatedX = width - rawX.
+        // But the processor's bbox is in the ROTATED frame already (rotate is
+        // in-place before detection), so bbox.x is already in the right-side-up
+        // frame where LEFT-of-robot = SMALLER x. Standard convention: positive
+        // yaw = CCW = robot turns LEFT. Ball on the left (small x) -> yaw +.
+        // err = (imgCx - bboxCx) / imgCx -> positive when ball is on the left.
+
+        val baseSpeed = 0.8
+        val headingK = 0.9
+        val centerDeadZone = 0.08   // |err| below this counts as centered
+        val pullInForward = 0.5    // when ball is nearly centered, just drive forward at this power
+
+        telemetry.addLine("Ball Chase TEST (dumb pixel chase) — hold RB")
+        telemetry.addData("pinpoint", if (hardware?.pinpoint != null) "FOUND" else "MISSING")
         telemetry.update()
 
         waitForStart()
 
         try {
-            ioLoop { state, _ ->
-                val t = state.timestamp.toDouble(DurationUnit.SECONDS)
+            ioLoop { _, _ ->
+                val chaseOn = gamepad1.right_bumper || gamepad2.right_bumper
 
-                tracking.update(t)
+                val balls = processor.detectedBalls
+                val biggest = balls.maxByOrNull { it.bbox.width * it.bbox.height }
+                val bboxCx = biggest?.let { it.bbox.x + it.bbox.width / 2.0 }
+                val err = bboxCx?.let { (imgCx - it) / imgCx } // +1 full left, -1 full right
 
-                val chaseOn = gamepad1.right_bumper
-                chase.enabled = chaseOn
+                val activeGp = if (
+                    kotlin.math.hypot(gamepad2.left_stick_x.toDouble(), gamepad2.left_stick_y.toDouble()) >
+                    kotlin.math.hypot(gamepad1.left_stick_x.toDouble(), gamepad1.left_stick_y.toDouble())
+                ) gamepad2 else gamepad1
 
-                if (chaseOn) {
-                    chase.update()
+                if (chaseOn && err != null) {
+                    val yaw = headingK * err
+                    val fwd = if (abs(err) < centerDeadZone) baseSpeed else pullInForward * (1.0 - abs(err))
+                    drive.drive(Pose2d(fwd, 0.0, yaw), io)
+                    io.intake = 1.0
+                    io.blocker = IntakeTransfer.BLOCKER_ENGAGED
+                } else if (chaseOn) {
+                    // Chase on but no ball -> gentle search rotation so camera sweeps.
+                    drive.drive(Pose2d(0.0, 0.0, 0.6), io)
                     io.intake = 1.0
                     io.blocker = IntakeTransfer.BLOCKER_ENGAGED
                 } else {
-                    robot.drive.update(gamepad1, io)
+                    drive.update(activeGp, io)
                     io.intake = 0.0
                     io.blocker = IntakeTransfer.BLOCKER_ENGAGED
                 }
                 io.flywheel = 0.0
 
                 telemetry.addData("auto-chase", if (chaseOn) "ON" else "OFF")
-                telemetry.addData("pixel dets", processor.detectedBalls.size)
-                telemetry.addData("tracks", tracking.tracker.tracks.size)
-                val target = tracking.target
-                if (target != null) {
-                    val p = target.positionAt(t)
-                    val pose = io.position()
-                    val dx = p.x - pose.v.x
-                    val dy = p.y - pose.v.y
-                    val d = kotlin.math.hypot(dx, dy)
-                    val c = kotlin.math.cos(-pose.rot)
-                    val s = kotlin.math.sin(-pose.rot)
-                    val rx = c * dx - s * dy
-                    val ry = s * dx + c * dy
-                    telemetry.addData("target", "#${target.id}  d=%.2fm".format(d))
-                    telemetry.addData("ball field", "(%.2f, %.2f) m".format(p.x, p.y))
-                    telemetry.addData("ball rel-bot", "(%.2f, %.2f) m".format(rx, ry))
+                telemetry.addData("pixel dets", balls.size)
+                if (biggest != null) {
+                    telemetry.addData("ball bbox cx", "%.0f px (img cx=%.0f)".format(bboxCx, imgCx))
+                    telemetry.addData("err", "%+.2f  (+ = ball on LEFT, - = ball on RIGHT)".format(err))
                 } else {
-                    telemetry.addLine("no target")
+                    telemetry.addLine("no ball in frame")
                 }
+                telemetry.addData("wheels FL/BL/BR/FR", "%+.2f %+.2f %+.2f %+.2f".format(
+                    io.driveFL, io.driveBL, io.driveBR, io.driveFR))
                 telemetry.update()
 
                 false

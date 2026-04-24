@@ -59,7 +59,11 @@ class BallDetectionProcessor : VisionProcessor {
 
     override fun init(width: Int, height: Int, calibration: CameraCalibration?) {}
 
-    override fun processFrame(frame: Mat, captureTimeNanos: Long): Any? {
+    override fun processFrame(frame: Mat, captureTimeNanos: Long): MutableList<DetectedBall>? {
+        if(frame.empty()) {
+            detectedBalls = emptyList()
+            return mutableListOf()
+        }
         lastCaptureTimeSec = captureTimeNanos / 1e9
         // Camera is physically mounted upside-down. Rotate 180° in-place so the
         // rest of the pipeline (detection, bbox coords, projection with cx/cy
