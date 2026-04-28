@@ -18,8 +18,8 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-@Autonomous(name = "Auto 15 Close Blue", group = "Competition")
-class Auto15CloseBlue : SigmaOpMode() {
+@Autonomous(name = "Auto 18 Close Blue", group = "Competition")
+class Auto18CloseBlue : SigmaOpMode() {
     companion object {
         private val MAX_TRANSFER_DURATION = 600.milliseconds
         private val NORMAL_FORCE_TRANSFER_TIMEOUT = 550.milliseconds
@@ -28,7 +28,7 @@ class Auto15CloseBlue : SigmaOpMode() {
         private val GO_TO_GATE_FULL_BEAMBREAK_HOLD = 200.milliseconds
         private val WAYPOINT_STOP_HOLD = 300.milliseconds
         private val FIRST_SHOT_SPINUP_HOLD = 450.milliseconds
-        private val SHOOT_EMPTY_DEBOUNCE = 100.milliseconds
+        private val SHOOT_EMPTY_DEBOUNCE = 120.milliseconds
         private const val DISABLE_HOLD_DURING_SHOOT = true
     }
 
@@ -50,6 +50,8 @@ class Auto15CloseBlue : SigmaOpMode() {
             add(requireTrajectory("ShootGate1"))
             TrajoptLoader.loadTrajectory(projectFile, "GoToGate2")?.let(::add)
             TrajoptLoader.loadTrajectory(projectFile, "ShootGate2")?.let(::add)
+            TrajoptLoader.loadTrajectory(projectFile, "GoToGate3")?.let(::add)
+            TrajoptLoader.loadTrajectory(projectFile, "ShootGate3")?.let(::add)
         }
 
         val initialSample = trajectories.first().getInitialSample()
