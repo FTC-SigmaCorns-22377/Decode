@@ -108,7 +108,7 @@ class LTVClient private constructor(
      * Converts from trajopt state order [vx, vy, omega, x, y, heading] to
      * native format [t, px, py, theta, vx, vy, omega] per sample.
      */
-    fun loadTrajectory(traj: TrajoptTrajectory) {
+    fun loadTrajectory(traj: TrajoptTrajectory): Int {
         val samples = traj.samples
         val flat = DoubleArray(samples.size * 7)
         for (i in samples.indices) {
@@ -122,7 +122,18 @@ class LTVClient private constructor(
             flat[offset + 5] = s.vy         // vy
             flat[offset + 6] = s.omega      // omega
         }
-        numWindows = MecanumLTVBridge.nativeLoadTrajectory(handle, flat, samples.size, dtSeconds)
+        val trajHandle = MecanumLTVBridge.nativeLoadTrajectory(handle, flat, samples.size, dtSeconds)
+        numWindows = MecanumLTVBridge.nativeNumWindows(handle)
+        numVars = MecanumLTVBridge.nativeNumVars(handle)
+        prevCallElapsed = null
+        return trajHandle
+    }
+
+    /** Set the active trajectory from a previously loaded trajectory handle. */
+    fun setTrajectory(trajHandle: Int) {
+        val success = MecanumLTVBridge.nativeSetTrajectory(handle, trajHandle)
+        require(success) { "Failed to set LTV trajectory with handle $trajHandle" }
+        numWindows = MecanumLTVBridge.nativeNumWindows(handle)
         numVars = MecanumLTVBridge.nativeNumVars(handle)
         prevCallElapsed = null
     }

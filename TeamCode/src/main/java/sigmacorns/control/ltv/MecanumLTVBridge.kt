@@ -2,15 +2,46 @@ package sigmacorns.control.ltv
 
 import dev.frozenmilk.sinister.util.NativeLibraryLoader
 import sigmacorns.opmode.SigmaOpMode.Companion.SIM
+import java.io.File
 
 object MecanumLTVBridge {
+    private fun isAlreadyLoadedError(error: UnsatisfiedLinkError): Boolean {
+        return error.message?.contains("already opened by ClassLoader") == true
+    }
+
     init {
-        if(SIM) System.loadLibrary("mecanum_ltv_jni") else {
-            val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("mecanum_ltv_jni")
-            if (resolvedPath != null) {
-                System.load(resolvedPath)
-            } else {
+        if (SIM) {
+            try {
                 System.loadLibrary("mecanum_ltv_jni")
+            } catch (e: UnsatisfiedLinkError) {
+                if (!isAlreadyLoadedError(e)) throw e
+            }
+        } else {
+            fun resolveAndLoad(): Boolean {
+                val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("mecanum_ltv_jni") ?: return false
+                val libFile = File(resolvedPath)
+                if (!libFile.exists() || libFile.length() == 0L) {
+                    if (libFile.exists()) {
+                        libFile.delete()
+                    }
+                    return false
+                }
+                System.load(resolvedPath)
+                return true
+            }
+
+            val loaded = runCatching { resolveAndLoad() }.getOrDefault(false)
+            if (!loaded) {
+                runCatching {
+                    val resolvedPath = NativeLibraryLoader.resolveLatestHashedLibrary("mecanum_ltv_jni")
+                        ?: throw UnsatisfiedLinkError("Could not resolve mecanum_ltv_jni hashed library")
+                    val libFile = File(resolvedPath)
+                    if (libFile.exists() && libFile.length() == 0L) {
+                        libFile.delete()
+                        throw UnsatisfiedLinkError("Resolved mecanum_ltv_jni library was empty")
+                    }
+                    System.load(resolvedPath)
+                }.getOrElse { throw it }
             }
         }
     }
@@ -36,6 +67,8 @@ object MecanumLTVBridge {
 
     /** Load trajectory as flat array of [t, px, py, theta, vx, vy, omega] per sample. Returns number of windows. */
     @JvmStatic external fun nativeLoadTrajectory(handle: Long, samples: DoubleArray, nSamples: Int, dt: Double): Int
+
+    @JvmStatic external fun nativeSetTrajectory(handle: Long, trajHandle: Int): Boolean
 
     /** Configure cost-based window selection tuning. */
     @JvmStatic external fun nativeSetWindowSelConfig(

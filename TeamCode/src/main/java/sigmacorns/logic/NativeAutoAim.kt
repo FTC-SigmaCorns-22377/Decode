@@ -236,7 +236,7 @@ class NativeAutoAim(
         }
 
         // optimalTCold: throttled to ~1 Hz — full Piyavskii-Shubert is expensive
-        if (diagColdAccumSec >= 1.0) {
+        if (diagColdAccumSec >= 10000000.0) {
             diagColdAccumSec = 0.0
             try {
                 val cold = bridge.optimalTColdH(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,

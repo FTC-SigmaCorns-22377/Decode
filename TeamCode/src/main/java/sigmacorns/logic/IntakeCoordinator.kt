@@ -50,6 +50,8 @@ class IntakeCoordinator(val robot: Robot) {
         val flywheelVel = robot.io.flywheelVelocity()
         val flywheelTarget = robot.shooter.flywheelTarget
 
+        robot.intakeTransfer.shotRequestedHint = robot.aim.shotRequested || overrideShot
+
         inShootingZone = computeInShootingZone()
 
 

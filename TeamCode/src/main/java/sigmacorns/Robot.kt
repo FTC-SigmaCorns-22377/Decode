@@ -40,11 +40,11 @@ class Robot(val io: SigmaIO, val blue: Boolean, useNativeAim: Boolean = false): 
     val aim: AutoAim = if (useNativeAim) NativeAutoAim(this, blue) else AimingSystem(this, blue)
     val intakeCoordinator = IntakeCoordinator(this)
 
-    val ltv = LTVClient(
+    var ltv = LTVClient(
         drivetrainParameters,
-        aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd)*100,
-        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight)*100,
-        aTipTau = 0.2
+        aTipX = max(antiWheelieFilter.axLimitBwd, antiWheelieFilter.axLimitFwd)*2,
+        aTipY = max(antiWheelieFilter.ayLimitLeft, antiWheelieFilter.ayLimitRight)*0.5,
+        aTipTau = 0.3
     )
 
     val dispatcher = PollableDispatcher(io)

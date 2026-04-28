@@ -11,7 +11,12 @@ import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.subsystem.IntakeTransfer
 import kotlin.time.Duration
+import sigmacorns.constants.antiWheelieFilter
+import sigmacorns.constants.drivetrainParameters
+import sigmacorns.control.ltv.LTVClient
+import kotlin.math.max
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @Autonomous(name = "Auto 15 Close Red", group = "Competition")
 class Auto15CloseRed : SigmaOpMode() {
@@ -19,11 +24,12 @@ class Auto15CloseRed : SigmaOpMode() {
         private val MAX_TRANSFER_DURATION = 600.milliseconds
         private val NORMAL_FORCE_TRANSFER_TIMEOUT = 550.milliseconds
         private val FORCE_TRANSFER_TIMEOUT = 600.milliseconds
-        private val GO_TO_GATE_HOLD_DURATION = 900.milliseconds
+        private val GO_TO_GATE_HOLD_DURATION = 2.5.seconds
         private val GO_TO_GATE_FULL_BEAMBREAK_HOLD = 200.milliseconds
-        private val WAYPOINT_STOP_HOLD = 450.milliseconds
-        private val SHOT_AIM_SETTLE_HOLD = 200.milliseconds
+        private val WAYPOINT_STOP_HOLD = 300.milliseconds
         private val FIRST_SHOT_SPINUP_HOLD = 450.milliseconds
+        private val SHOOT_EMPTY_DEBOUNCE = 100.milliseconds
+        private const val DISABLE_HOLD_DURING_SHOOT = true
     }
 
     override fun runOpMode() {
@@ -44,6 +50,8 @@ class Auto15CloseRed : SigmaOpMode() {
             add(requireTrajectory("ShootRow2"))
             TrajoptLoader.loadTrajectory(projectFile, "GoToGate1")?.let(::add)
             add(requireTrajectory("ShootGate1"))
+            TrajoptLoader.loadTrajectory(projectFile, "GoToGate2")?.let(::add)
+            TrajoptLoader.loadTrajectory(projectFile, "ShootGate2")?.let(::add)
         }
 
         val initialSample = trajectories.first().getInitialSample()
@@ -56,25 +64,54 @@ class Auto15CloseRed : SigmaOpMode() {
         robot.aimTurret = true
         robot.aimFlywheel = false
 
+        val loadedTrajectories = trajectories.map { traj ->
+            val solveStart = robot.io.time()
+            val handle = robot.ltv.loadTrajectory(traj)
+            val solveTime = robot.io.time() - solveStart
+            println("Solving path ${traj.name} took: ${solveTime.inWholeMilliseconds} ms")
+            traj to handle
+        }
+
+        telemetry.addData("LTV", "Loaded ${loadedTrajectories.size} trajectory handles")
+        telemetry.update()
+
         waitForStart()
 
         val job = robot.scope.launch {
             robot.aimFlywheel = true
 
-            trajectories.forEachIndexed { i, traj ->
+            loadedTrajectories.forEachIndexed { i, (traj, handle) ->
                 val isPreload = traj.name == "ShootPreload"
-                runTrajectoryWithIntakeShoot(robot, traj, enableIntake = !isPreload)
+                runTrajectoryWithIntakeShoot(robot, traj, handle, enableIntake = !isPreload)
 
                 val holdPose = traj.getFinalSample()!!.pos
-                val hold = robot.scope.launch { holdPosition(robot, holdPose) }
+                var hold = robot.scope.launch { holdPosition(robot, holdPose) }
                 try {
-                    waitDuration(robot, WAYPOINT_STOP_HOLD)
                     if (traj.name.startsWith("GoToGate", ignoreCase = true)) {
                         holdAndIntakeAtGate(robot, GO_TO_GATE_HOLD_DURATION)
                         robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                     } else {
+                        // Settle before shooting, but skip if empty to save time
+                        val settleStart = robot.io.time()
+                        while (robot.io.time() - settleStart < WAYPOINT_STOP_HOLD) {
+                            val hasBalls = robot.beamBreak.slots.any { it } ||
+                                robot.io.beamBreak1() || robot.io.beamBreak2() || robot.io.beamBreak3()
+                            if (!hasBalls) break
+                            yield()
+                        }
+
+                        if (DISABLE_HOLD_DURING_SHOOT) {
+                            hold.cancel()
+                            io.driveFL = 0.0
+                            io.driveBL = 0.0
+                            io.driveBR = 0.0
+                            io.driveFR = 0.0
+                        }
                         println(robot.aim.autoAim.fusedPose)
                         shootUntilEmpty(robot)
+                        if (DISABLE_HOLD_DURING_SHOOT) {
+                            hold = robot.scope.launch { holdPosition(robot, holdPose) }
+                        }
                     }
                 } finally {
                     hold.cancel()
@@ -85,6 +122,13 @@ class Auto15CloseRed : SigmaOpMode() {
         ioLoop { _, _ ->
             robot.update()
             job.isCompleted
+        }
+        
+        // Ensure last shot fully clears before cutting power
+        val endTime = io.time()
+        ioLoop { _, _ ->
+            robot.update()
+            io.time() - endTime > 400.milliseconds
         }
 
         io.driveFL = 0.0
@@ -131,8 +175,7 @@ class Auto15CloseRed : SigmaOpMode() {
 
         while (true) {
             val now = robot.io.time()
-            val allBeamBreaksTriggered = robot.beamBreak.isFull ||
-                (robot.io.beamBreak1() && robot.io.beamBreak2() && robot.io.beamBreak3())
+            val allBeamBreaksTriggered = robot.beamBreak.isFull
             if (allBeamBreaksTriggered) {
                 if (allBeamBreaksSince == null) {
                     allBeamBreaksSince = now
@@ -168,13 +211,6 @@ class Auto15CloseRed : SigmaOpMode() {
         var transferAt: Duration? = null
         val forceTimeout = if (allowForcedTransfer) FORCE_TRANSFER_TIMEOUT else NORMAL_FORCE_TRANSFER_TIMEOUT
 
-        val settleStartedAt = robot.io.time()
-        while (robot.io.time() - settleStartedAt < SHOT_AIM_SETTLE_HOLD) {
-            robot.intakeTransfer.state = IntakeTransfer.State.IDLE
-            robot.aim.shotRequested = false
-            yield()
-        }
-
         val startedAt = robot.io.time()
         while (transferAt == null) {
             robot.aim.shotRequested = true
@@ -193,19 +229,29 @@ class Auto15CloseRed : SigmaOpMode() {
 
         var sawBeamBreakDuringTransfer = robot.beamBreak.slots.any { it } ||
             robot.io.beamBreak1() || robot.io.beamBreak2() || robot.io.beamBreak3()
+        var emptySince: Duration? = null
         while (true) {
+            val now = robot.io.time()
             robot.aim.shotRequested = true
-            val elapsed = robot.io.time() - transferAt
+            val elapsed = now - transferAt
             val beamBreak1 = robot.io.beamBreak1()
             val beamBreak2 = robot.io.beamBreak2()
             val beamBreak3 = robot.io.beamBreak3()
             val anyBeamBreakRaw = beamBreak1 || beamBreak2 || beamBreak3
             if (anyBeamBreakRaw) {
                 sawBeamBreakDuringTransfer = true
+                emptySince = null
             }
             val beamBreaksEmptyRaw = !anyBeamBreakRaw
+            if (beamBreaksEmptyRaw && emptySince == null) {
+                emptySince = now
+            }
+            val beamBreaksEmptyDebounced = emptySince != null && (now - emptySince >= SHOOT_EMPTY_DEBOUNCE)
 
-            if (sawBeamBreakDuringTransfer && beamBreaksEmptyRaw) {
+            if (sawBeamBreakDuringTransfer && beamBreaksEmptyDebounced) {
+                break
+            }
+            if (!sawBeamBreakDuringTransfer && beamBreaksEmptyDebounced && elapsed > 150.milliseconds) {
                 break
             }
             if (elapsed >= duration) {
@@ -222,9 +268,11 @@ class Auto15CloseRed : SigmaOpMode() {
     private suspend fun runTrajectoryWithIntakeShoot(
         robot: Robot,
         traj: TrajoptTrajectory,
+        handle: Int,
         enableIntake: Boolean,
     ) {
-        robot.ltv.loadTrajectory(traj)
+        robot.ltv.setTrajectory(handle)
+
         val isGoToGate = traj.name.startsWith("GoToGate", ignoreCase = true)
         robot.aimFlywheel = !isGoToGate
         robot.aim.shotRequested = false
@@ -236,8 +284,7 @@ class Auto15CloseRed : SigmaOpMode() {
         if (isGoToGate) {
             var intakeEnabled = true
             while (!path.isCompleted) {
-                val full = robot.beamBreak.isFull ||
-                    (robot.io.beamBreak1() && robot.io.beamBreak2() && robot.io.beamBreak3())
+                val full = robot.beamBreak.isFull
                 if (intakeEnabled && full) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                     intakeEnabled = false
@@ -264,6 +311,7 @@ class Auto15CloseRed : SigmaOpMode() {
 
         robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         robot.aimFlywheel = true
+        robot.aim.shotRequested = false // Ensure we don't shoot on the move
 
         path.join()
     }
