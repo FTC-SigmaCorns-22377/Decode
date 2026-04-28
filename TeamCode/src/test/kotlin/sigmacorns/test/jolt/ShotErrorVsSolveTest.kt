@@ -24,21 +24,23 @@ class ShotErrorVsSolveTest {
     @Test
     fun testShotErrorEqualsZeroForSolvedShot() {
         // Test cases: (turretX, turretY, goalX, goalY)
+        data class TestCase(val tX: Double, val tY: Double, val gX: Double, val gY: Double)
         val cases = listOf(
             // Close zone
-            Triple(0.0, 0.0, -1.58, 1.6),
-            Triple(-1.2, 0.5, -1.58, 1.6),
-            // Far zone  
-            Triple(0.0, -1.2, -1.58, 1.6),
-            Triple(0.0, -1.5, -1.58, 1.6),
-            Triple(0.0, -1.8, -1.58, 1.6),
-            Triple(0.5, -1.5, -1.58, 1.6),
+            TestCase(0.0, 0.0, -1.58, 1.6),
+            TestCase(-1.2, 0.5, -1.58, 1.6),
+            // Far zone
+            TestCase(0.0, -1.2, -1.58, 1.6),
+            TestCase(0.0, -1.5, -1.58, 1.6),
+            TestCase(0.0, -1.8, -1.58, 1.6),
+            TestCase(0.5, -1.5, -1.58, 1.6),
         )
 
         println("=== shotError(solve(target, T), target) test ===")
         println("%-40s %8s %8s %12s %12s".format("Case", "dist(m)", "T(s)", "shotError", "phiDeg"))
 
-        for ((tX, tY, gX, gY) in cases) {
+        for (c in cases) {
+            val tX = c.tX; val tY = c.tY; val gX = c.gX; val gY = c.gY
             val dist = hypot(gX - tX, gY - tY)
             val target = Ballistics.Target(
                 target = Vector3d(gX, gY, goalHeight),

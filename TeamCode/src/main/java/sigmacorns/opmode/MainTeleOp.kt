@@ -23,16 +23,16 @@ import kotlin.math.max
  *   Right trigger        - Hold to shoot (flywheel + transfer)
  *
  * GAMEPAD 2 (Operator - all subsystem controls):
- *   Left stick           - Translate (mecanum drive, when GP2 drive enabled)
- *   Right stick X        - Rotate (when GP2 drive enabled) / Manual turret override (when drive disabled)
+ *   Left stick           - Translate (mecanum drive, when GP2 drive enabled) / Manual turret control (when auto-aim off)
+ *   Right stick X        - Rotate (when GP2 drive enabled)
  *   X                    - Toggle GP2 mecanum drive on/off
  *   Left trigger         - Hold to intake (only when GP2 drive enabled)
  *   B                    - Hold to reverse intake (spit balls out)
  *   Right trigger        - Hold to shoot (only when GP2 drive enabled)
  *   Left bumper          - Hold to spin up flywheel (without shooting)
  *   Right bumper         - Toggle flywheel always-on (0.4 power)
- *   A                    - Toggle auto-aim on/off
- *   Right stick Y        - Manual hood angle override
+ *   A                    - Toggle auto-aim on/off (off: turret=manual via left stick X, hood=manual via right stick Y, flywheel=363 rad/s, hood=40°)
+ *   Right stick Y        - Manual hood angle control (when auto-aim off)
  *   Y                    - Toggle auto-shoot (zone-based)
  *   D-pad up             - Toggle hood auto-adjust
  *   D-pad left           - Decrease flywheel target speed (-25 rad/s)
@@ -143,6 +143,18 @@ class   MainTeleOp : SigmaOpMode() {
             // --- Toggle: Auto-aim (A button) ---
             if (gamepad2.a && !lastA2) {
                 autoAimEnabled = !autoAimEnabled
+                if (!autoAimEnabled) {
+                    // Turn off auto-aim: set default values
+                    flywheelTargetSpeed = 363.0
+                    robot.shooter.flywheelTarget = flywheelTargetSpeed
+                    robot.shooter.autoAdjust = false
+                    robot.shooter.manualHoodAngle = Math.toRadians(40.0)
+                    robot.aimTurret = false
+                } else {
+                    // Turn on auto-aim: let auto-aim system take over
+                    robot.aimTurret = true
+                    robot.shooter.autoAdjust = true
+                }
             }
             lastA2 = gamepad2.a
 
@@ -159,28 +171,28 @@ class   MainTeleOp : SigmaOpMode() {
             }
             lastDpadUp2 = gamepad2.dpad_up
 
-            // --- Turret control (only when GP2 drive is disabled) ---
-            if (!gp2DriveEnabled) {
-                val manualTurretInput = gamepad2.right_stick_x.toDouble()
+            // --- Turret control (when auto-aim is disabled, uses left stick X) ---
+            if (!autoAimEnabled) {
+                val manualTurretInput = gamepad2.left_stick_x.toDouble()
                 if (abs(manualTurretInput) > 0.05) {
                     robot.aimTurret = false
                     robot.turret.fieldRelativeMode = false
                     robot.turret.targetAngle += manualTurretInput * 2.0 * dt.inWholeMilliseconds / 1000.0
                     robot.turret.targetAngle = robot.turret.targetAngle.coerceIn(-PI, PI)
-                } else if (autoAimEnabled) {
-                    robot.aimTurret = true
                 }
             }
 
-            // --- Hood manual override (right stick Y) ---
-            val manualHoodInput = -gamepad2.right_stick_y.toDouble()
-            if (abs(manualHoodInput) > 0.05) {
-                robot.shooter.autoAdjust = false
-                robot.shooter.manualHoodAngle += manualHoodInput * Math.toRadians(30.0) * dt.inWholeMilliseconds / 1000.0
-                robot.shooter.manualHoodAngle = robot.shooter.manualHoodAngle.coerceIn(
-                    Math.toRadians(ShooterConfig.minAngleDeg),
-                    Math.toRadians(ShooterConfig.maxAngleDeg)
-                )
+            // --- Hood manual control (right stick Y, when auto-aim is disabled) ---
+            if (!autoAimEnabled) {
+                val manualHoodInput = -gamepad2.right_stick_y.toDouble()
+                if (abs(manualHoodInput) > 0.05) {
+                    robot.shooter.autoAdjust = false
+                    robot.shooter.manualHoodAngle += manualHoodInput * Math.toRadians(30.0) * dt.inWholeMilliseconds / 1000.0
+                    robot.shooter.manualHoodAngle = robot.shooter.manualHoodAngle.coerceIn(
+                        Math.toRadians(ShooterConfig.minAngleDeg),
+                        Math.toRadians(ShooterConfig.maxAngleDeg)
+                    )
+                }
             }
 
             // --- Shooting (right trigger) or flywheel spin-up (left bumper) ---
@@ -199,15 +211,19 @@ class   MainTeleOp : SigmaOpMode() {
                 robot.aimFlywheel = false
                 robot.aim.shotRequested = false
             } else {
-                robot.aimFlywheel = false
+                if (autoAimEnabled) {
+                    robot.aimFlywheel = true
+                    if (!flywheelAlwaysOn) {
+                        robot.shooter.flywheelTarget = 0.0
+                    }
+                } else {
+                    robot.aimFlywheel = false
+                    robot.shooter.flywheelTarget = 363.0
+                }
                 robot.aim.shotRequested = false
                 if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 }
-                if (!flywheelAlwaysOn) {
-                    robot.shooter.flywheelTarget = 0.0
-                }
-                // flywheelAlwaysOn: leave flywheelTarget at whatever NativeAutoAim last set
             }
 
             // ============================================================

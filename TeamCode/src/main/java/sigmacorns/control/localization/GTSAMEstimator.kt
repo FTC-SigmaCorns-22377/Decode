@@ -380,7 +380,6 @@ class GTSAMEstimator(
                     return
                 }
 
-                // Array structure: [pos_x, pos_y, pos_z, right_x, right_y, right_z, up_x, up_y, up_z, fwd_x, fwd_y, fwd_z]
                 val posX = vectors[0]
                 val posY = vectors[1]
                 val posZ = vectors[2]
@@ -413,6 +412,8 @@ class GTSAMEstimator(
             logger.log(LogLevel.ERROR, "Error during camera vector logging: ${e.message}")
         }
     }
+
+    fun getGraphData(): FusionWorker.FactorGraphData? = fusionWorker.getGraphData()
 
     // ===== Cleanup =====
 

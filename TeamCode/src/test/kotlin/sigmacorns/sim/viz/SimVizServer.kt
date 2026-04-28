@@ -11,6 +11,7 @@ import sigmacorns.constants.ballExitRadius
 import sigmacorns.constants.turretPos
 import sigmacorns.control.aim.Ballistics
 import sigmacorns.control.aim.Ballistics.ShotState
+import sigmacorns.control.localization.FusionWorker
 import sigmacorns.io.JoltSimIO
 import sigmacorns.logic.AimConfig
 import sigmacorns.subsystem.ShooterConfig
@@ -28,20 +29,11 @@ data class WasdState(
     val space: Boolean = false, val shift: Boolean = false,
 )
 
-/**
- * Browser-side gamepad snapshot (HTML5 Gamepad API in "standard" layout).
- *
- * Sticks and triggers are already in [-1, 1] / [0, 1]; the server does not
- * apply deadzone so opmodes can use their own tuning.
- */
 data class BrowserGamepadState(
     val connected: Boolean = false,
-    val leftStickX: Float = 0f,
-    val leftStickY: Float = 0f,
-    val rightStickX: Float = 0f,
-    val rightStickY: Float = 0f,
-    val leftTrigger: Float = 0f,
-    val rightTrigger: Float = 0f,
+    val leftStickX: Float = 0f, val leftStickY: Float = 0f,
+    val rightStickX: Float = 0f, val rightStickY: Float = 0f,
+    val leftTrigger: Float = 0f, val rightTrigger: Float = 0f,
     val a: Boolean = false, val b: Boolean = false,
     val x: Boolean = false, val y: Boolean = false,
     val leftBumper: Boolean = false, val rightBumper: Boolean = false,
@@ -71,6 +63,7 @@ class SimVizServer(
     private val firstClientLatch = CountDownLatch(1)
 
     @Volatile private var robot: Robot? = null
+    @Volatile private var gtsamData: FusionWorker.FactorGraphData? = null
 
     private val vizBallistics = Ballistics(
         rH = ballExitRadius,
@@ -90,6 +83,11 @@ class SimVizServer(
     /** Attach a [Robot] so [broadcastState] can publish shot trajectories. */
     fun setRobot(robot: Robot) {
         this.robot = robot
+    }
+
+    /** Attach GTSAM graph data for factor graph visualization. */
+    fun setGTSAMData(data: FusionWorker.FactorGraphData?) {
+        this.gtsamData = data
     }
 
     /**

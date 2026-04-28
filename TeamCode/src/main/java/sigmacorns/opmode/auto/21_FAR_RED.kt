@@ -15,15 +15,15 @@ import java.lang.IllegalStateException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-@Autonomous(name =  "21_FAR_RED", group = "Competition")
+@Autonomous(name =  "21-red-far", group = "Competition")
 class FAR21RED : SigmaOpMode() {
     override fun runOpMode() {
         val robotDir = TrajoptLoader.robotTrajoptDir()
         val projectFile = TrajoptLoader.findProjectFiles(robotDir)
-            .find {it.nameWithoutExtension == "21_FAR_RED"}
-            ?: throw IllegalStateException("21_FAR_RED was not found in $robotDir")
+            .find {it.nameWithoutExtension == "21-far-red"}
+            ?: throw IllegalStateException("21-far-red was not found in $robotDir")
 
-        val trajectories= listOf("shoot+intake1", "intake2", "descore1", "descore_2", "descore_3", "descore_4", "leave")
+        val trajectories= listOf("shoot+intake_1", "intake_2", "GoToGate_1", "ShootGate_1", "GoToGate_2", "ShootGate_2", "GoToGate_3", "ShootGate_3", "GoToGate_4", "ShootGate_4", "leave")
             .map {TrajoptLoader.loadTrajectory(projectFile,it)!!}
 
         val initialSample = trajectories.first().getInitialSample()

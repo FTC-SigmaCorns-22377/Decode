@@ -1,4 +1,4 @@
-import { updateRobot, updateBalls, updateGoals, updateShotViz } from './scene.js';
+import { updateRobot, updateBalls, updateGoals, updateShotViz, updateGTSAMViz, updateInfo } from './scene.js';
 
 const frames = [];
 let isLive = true;
@@ -49,6 +49,8 @@ function applyFrame(state) {
     updateBalls(state.balls || []);
     updateGoals(state.goals);
     updateShotViz(state.shotViz);
+    updateGTSAMViz(state.gtsamViz);
+    updateInfo(state.gtsamViz, state.robot);
     timeDisplay.textContent = state.t.toFixed(3) + 's';
     const held = state.heldBalls ? state.heldBalls.length : 0;
     posDisplay.innerHTML = `X: ${(-state.robot.x).toFixed(3)}<br>Y: ${state.robot.y.toFixed(3)}<br>Flywheel: ${Math.round(state.robot.flywheelRPM)} RPM<br>Held: ${held}/3`;

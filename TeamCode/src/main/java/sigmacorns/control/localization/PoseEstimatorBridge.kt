@@ -104,4 +104,21 @@ object PoseEstimatorBridge {
     @JvmStatic external fun nativeConfigureVisualization(handle: Long, stream: Boolean, urlOrPath: String, appId: String)
     @JvmStatic external fun nativeFlushVisualization(handle: Long)
     @JvmStatic external fun nativeGetPredictedCorners(handle: Long, tagId: Int): DoubleArray
+
+    // Factor graph introspection
+    enum class FactorType {
+        PRIOR,
+        ODOMETRY,
+        TAG_PROJECTION,
+        CHEIRALITY,
+        UNKNOWN
+    }
+
+    @JvmStatic external fun nativeGetGraphFactorTypes(handle: Long): IntArray
+
+    @JvmStatic external fun nativeGetGraphFactorKeys(handle: Long): IntArray
+
+    @JvmStatic external fun nativeGetGraphPoseValues(handle: Long): DoubleArray
+
+    @JvmStatic external fun nativeGetCurrentTrajectory(handle: Long): DoubleArray
 }

@@ -179,8 +179,8 @@ class JoltSimTest {
     @Test
     fun testTurretRotation() {
         // Servo turret: 0..1 maps to -π..+π target position
-        // Setting turret=1.0 targets +π (full right)
-        sim.turret = 1.0
+        // Setting turretRight=1.0 targets +π (full right)
+        sim.turretRight = 1.0
         repeat(100) { sim.update() } // 500ms
 
         val angle = sim.turretPosition()
@@ -228,9 +228,9 @@ class JoltSimTest {
     fun testShooterTurretDirection() {
         // Rotate turret 90° left, shoot, verify ball goes in +y direction
         // servo=0.75 targets +π/2 (90° left)
-        sim.turret = 0.75
+        sim.turretRight = 0.75
         repeat(200) { sim.update() } // let turret settle
-        sim.turret = 0.75 // hold position
+        sim.turretRight = 0.75 // hold position
 
         val turretAngle = sim.turretPosition()
         println("Turret angle: ${Math.toDegrees(turretAngle)}°")
@@ -348,18 +348,78 @@ class JoltSimTest {
         val simGamepad = SimGamepad(gamepad)
         val drivetrain = Drivetrain()
 
+        // Start in ROBOT-CENTRIC mode (like the real robot)
+        drivetrain.fieldCentric = false
+
+        var lastRB = false
+        var lastLB = false
+        var lastX = false
+
         println("Visualizer running at http://localhost:8080")
-        println("Use a connected gamepad to drive. Press Ctrl+C to stop.")
+        println("Controls (GAMEPAD 1):")
+        println("  Left Stick       - Drive forward/strafe")
+        println("  Right Stick X   - Rotate")
+        println("  D-pad Up/Down  - Full/Precision speed")
+        println("  X              - Toggle field-centric")
+        println("  Left Trigger   - Intake")
+        println("  Right Trigger  - Shoot")
+        println("  B              - Reverse intake (spit)")
+        println("  Right Bumper   - Shoot far zone")
+        println("  Left Bumper   - Shoot goal zone")
+        println("Press Ctrl+C to stop.")
 
         var frameCount = 0
         while (true) {
             simGamepad.tick()
+
+            // Drive from gamepad
             drivetrain.update(gamepad, sim)
 
-            // Right trigger = intake, left bumper = flywheel, right bumper = shoot
-            sim.intake = gamepad.right_trigger.toDouble()
-            sim.flywheel = if (gamepad.left_bumper) 1.0 else 0.0
-            if (gamepad.right_bumper) sim.shootBall()
+            // Speed mode toggle (dpad up/down)
+            if (gamepad.dpad_up) {
+                // Full speed - handled in Drivetrain
+            } else if (gamepad.dpad_down) {
+                // Precision mode - handled in Drivetrain
+            }
+
+            // Toggle field-centric (X button)
+            if (gamepad.x && !lastX) {
+                drivetrain.fieldCentric = !drivetrain.fieldCentric
+                println("Field-centric: ${drivetrain.fieldCentric}")
+            }
+            lastX = gamepad.x
+
+            // Intake (left trigger)
+            sim.intake = gamepad.left_trigger.toDouble()
+
+            // Reverse intake (B button)
+            if (gamepad.b) {
+                sim.intake = -1.0
+            }
+
+            // Shoot (right trigger = shoot with flywheel)
+            val rightTriggerActive = gamepad.right_trigger > 0.1f
+            if (rightTriggerActive && sim.heldBalls.isNotEmpty()) {
+                sim.flywheel = 1.0
+                if (!lastRB && gamepad.right_bumper) {
+                    // Shoot far zone (just trigger, don't shoot here)
+                    lastRB = true
+                } else if (!lastLB && gamepad.left_bumper) {
+                    // Shoot goal zone (just trigger, don't shoot here)
+                    lastLB = true
+                } else {
+                    sim.shootBall()
+                }
+            }
+            lastRB = gamepad.right_bumper
+            lastLB = gamepad.left_bumper
+
+            // Flywheel spin-up only (left bumper held without right trigger)
+            if (gamepad.left_bumper && !rightTriggerActive) {
+                sim.flywheel = 1.0
+            } else if (!rightTriggerActive) {
+                sim.flywheel = 0.0
+            }
 
             sim.update()
             frameCount++

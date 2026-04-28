@@ -52,6 +52,13 @@ class FusionWorker(
         val lastHorizonResetPoseIndex: Long
     )
 
+    data class FactorGraphData(
+        val factorTypes: List<PoseEstimatorBridge.FactorType>,
+        val factorKeys: List<List<Int>>,
+        val poseValues: List<Pose2d>,
+        val trajectory: List<Pose2d>
+    )
+
     private object Tick
 
     private val odomQueue = LinkedBlockingQueue<OdometryMeasurement>()
@@ -136,6 +143,58 @@ class FusionWorker(
     fun pollError(): String? = lastError.getAndSet(null)
 
     fun getEstimatorHandle(): Long = gtsamHandle
+
+    fun getGraphData(): FactorGraphData? {
+        val handle = gtsamHandle
+        if (handle == 0L) return null
+        try {
+            val factorTypes = PoseEstimatorBridge.nativeGetGraphFactorTypes(handle)
+            val factorKeys = PoseEstimatorBridge.nativeGetGraphFactorKeys(handle)
+            val poseValues = PoseEstimatorBridge.nativeGetGraphPoseValues(handle)
+            val trajectory = PoseEstimatorBridge.nativeGetCurrentTrajectory(handle)
+
+            if (factorTypes == null || factorKeys == null || poseValues == null || trajectory == null) {
+                return null
+            }
+
+            // Parse factor types
+            val types = factorTypes.map { typeOrdinal ->
+                PoseEstimatorBridge.FactorType.entries.getOrElse(typeOrdinal) {
+                    PoseEstimatorBridge.FactorType.UNKNOWN
+                }
+            }
+
+            // Parse factor keys: [num_factors, factor0_num_keys, factor0_key0, factor0_key1, ...]
+            val keys = mutableListOf<List<Int>>()
+            var idx = 0
+            val numFactors = factorKeys[idx++]
+            for (i in 0 until numFactors) {
+                val numKeys = factorKeys[idx++]
+                val keyList = (0 until numKeys).map { factorKeys[idx++] }
+                keys.add(keyList)
+            }
+
+            // Parse pose values: [num_poses, pose0_x, pose0_y, pose0_theta, ...]
+            val poses = mutableListOf<Pose2d>()
+            idx = 0
+            val numPoses = poseValues[idx++].toInt()
+            for (i in 0 until numPoses) {
+                poses.add(Pose2d(poseValues[idx++], poseValues[idx++], poseValues[idx++]))
+            }
+
+            // Parse trajectory: [num_poses, pose0_x, pose0_y, pose0_theta, ...]
+            val traj = mutableListOf<Pose2d>()
+            idx = 0
+            val numTrajPoses = trajectory[idx++].toInt()
+            for (i in 0 until numTrajPoses) {
+                traj.add(Pose2d(trajectory[idx++], trajectory[idx++], trajectory[idx++]))
+            }
+
+            return FactorGraphData(types, keys, poses, traj)
+        } catch (e: Exception) {
+            return null
+        }
+    }
 
     override fun close() {
         running.set(false)

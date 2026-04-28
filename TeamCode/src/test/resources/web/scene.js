@@ -543,4 +543,132 @@ function updateGoals(goals) {
     updateScoreSprite(blueGoal, 'RED', goals.blueScore || 0, 'rgba(180,40,40,0.8)');
 }
 
-export { updateRobot, updateBalls, updateGoals, updateShotViz };
+// ============================================================================
+// GTSAM Factor Graph Visualization
+// ============================================================================
+
+// Prior factor nodes (magenta)
+const priorNodeGeo = new THREE.SphereGeometry(0.03, 8, 6);
+const priorNodeMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+const priorNodesGroup = new THREE.Group();
+scene.add(priorNodesGroup);
+
+// Odometry factor nodes (cyan)
+const odomNodeGeo = new THREE.SphereGeometry(0.02, 8, 6);
+const odomNodeMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+const odomNodesGroup = new THREE.Group();
+scene.add(odomNodesGroup);
+
+// Tag projection factor nodes (yellow)
+const tagNodeGeo = new THREE.SphereGeometry(0.02, 8, 6);
+const tagNodeMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+const tagNodesGroup = new THREE.Group();
+scene.add(tagNodesGroup);
+
+// Factor edges
+const priorEdgeMat = new THREE.LineBasicMaterial({ color: 0xff00ff, opacity: 0.8 });
+const odomEdgeMat = new THREE.LineBasicMaterial({ color: 0x00ffff, opacity: 0.8 });
+const tagEdgeMat = new THREE.LineBasicMaterial({ color: 0xffff00, opacity: 0.8 });
+const edgeGroup = new THREE.Group();
+scene.add(edgeGroup);
+
+// Fused trajectory line (blue)
+const fusedTrajMat = new THREE.LineBasicMaterial({ color: 0x0088ff, opacity: 0.9 });
+let fusedTrajLine = null;
+
+// Ground truth trajectory (green)
+const gtTrajMat = new THREE.LineBasicMaterial({ color: 0x00ff00, opacity: 0.5, dashSize: 0.05, gapSize: 0.05 });
+let gtTrajLine = null;
+
+function updateGTSAMViz(gtsamViz) {
+    // Clear previous
+    priorNodesGroup.clear();
+    odomNodesGroup.clear();
+    tagNodesGroup.clear();
+    while (edgeGroup.children.length > 0) {
+        edgeGroup.remove(edgeGroup.children[0]);
+    }
+    if (fusedTrajLine) { scene.remove(fusedTrajLine); fusedTrajLine = null; }
+    if (gtTrajLine) { scene.remove(gtTrajLine); gtTrajLine = null; }
+
+    if (!gtsamViz) return;
+
+    // Draw nodes by type
+    const priorNodes = gtsamViz.priorNodes || [];
+    const odomNodes = gtsamViz.odomNodes || [];
+    const tagNodes = gtsamViz.tagNodes || [];
+
+    // Prior nodes (magenta)
+    for (const pt of priorNodes) {
+        if (pt.length < 3) continue;
+        const mesh = new THREE.Mesh(priorNodeGeo, priorNodeMat);
+        mesh.position.set(pt[0], pt[1], pt[2]);
+        priorNodesGroup.add(mesh);
+    }
+
+    // Odometry nodes (cyan)
+    for (const pt of odomNodes) {
+        if (pt.length < 3) continue;
+        const mesh = new THREE.Mesh(odomNodeGeo, odomNodeMat);
+        mesh.position.set(pt[0], pt[1], pt[2]);
+        odomNodesGroup.add(mesh);
+    }
+
+    // Tag nodes (yellow)
+    for (const pt of tagNodes) {
+        if (pt.length < 3) continue;
+        const mesh = new THREE.Mesh(tagNodeGeo, tagNodeMat);
+        mesh.position.set(pt[0], pt[1], pt[2]);
+        tagNodesGroup.add(mesh);
+    }
+
+    // Draw edges
+    const allEdges = [
+        { edges: gtsamViz.priorEdges || [], material: priorEdgeMat },
+        { edges: gtsamViz.odomEdges || [], material: odomEdgeMat },
+        { edges: gtsamViz.tagEdges || [], material: tagEdgeMat },
+    ];
+
+    for (const { edges, material } of allEdges) {
+        for (const edge of edges) {
+            if (edge.length < 2) continue;
+            const pts = edge.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+            const geo = new THREE.BufferGeometry().setFromPoints(pts);
+            const line = new THREE.Line(geo, material);
+            edgeGroup.add(line);
+        }
+    }
+
+    // Draw fused trajectory
+    const traj = gtsamViz.trajectory || [];
+    if (traj.length > 1) {
+        const pts = traj.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        fusedTrajLine = new THREE.Line(geo, fusedTrajMat);
+        fusedTrajLine.frustumCulled = false;
+        scene.add(fusedTrajLine);
+    }
+
+    // Log stats
+    console.log(`GTSAM: ${gtsamViz.numPoses} poses, ${gtsamViz.numFactors} factors`);
+}
+
+// Add info display
+const infoDiv = document.createElement('div');
+infoDiv.style.cssText = 'position:absolute;top:10px;right:10px;color:white;font-family:monospace;font-size:14px;background:rgba(0,0,0,0.7);padding:10px;border-radius:5px;';
+document.body.appendChild(infoDiv);
+
+// Update info display
+function updateInfo(gtsamViz, robot) {
+    let html = '<strong>GTSAM Viz</strong><br/>';
+    if (gtsamViz) {
+        html += `Poses: ${gtsamViz.numPoses}<br/>`;
+        html += `Factors: ${gtsamViz.numFactors}<br/>`;
+    }
+    if (robot) {
+        // Get robot data from earlier if available
+    }
+    infoDiv.innerHTML = html;
+}
+
+export { updateRobot, updateBalls, updateGoals, updateShotViz, updateGTSAMViz, updateInfo };
