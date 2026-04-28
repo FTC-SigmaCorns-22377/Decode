@@ -5,26 +5,26 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 import sigmacorns.Robot
+import sigmacorns.constants.antiWheelieFilter
+import sigmacorns.constants.drivetrainParameters
+import sigmacorns.control.ltv.LTVClient
 import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.control.trajopt.TrajoptTrajectory
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.subsystem.IntakeTransfer
-import kotlin.time.Duration
-import sigmacorns.constants.antiWheelieFilter
-import sigmacorns.constants.drivetrainParameters
-import sigmacorns.control.ltv.LTVClient
 import kotlin.math.max
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-@Autonomous(name = "Auto 15 Close Red", group = "Competition")
-class Auto15CloseRed : SigmaOpMode() {
+@Autonomous(name = "Auto 15 Close Blue", group = "Competition")
+class Auto15CloseBlue : SigmaOpMode() {
     companion object {
         private val MAX_TRANSFER_DURATION = 600.milliseconds
         private val NORMAL_FORCE_TRANSFER_TIMEOUT = 550.milliseconds
         private val FORCE_TRANSFER_TIMEOUT = 600.milliseconds
-        private val GO_TO_GATE_HOLD_DURATION = 2.5.seconds
+        private val GO_TO_GATE_HOLD_DURATION = 4.seconds
         private val GO_TO_GATE_FULL_BEAMBREAK_HOLD = 200.milliseconds
         private val WAYPOINT_STOP_HOLD = 300.milliseconds
         private val FIRST_SHOT_SPINUP_HOLD = 450.milliseconds
@@ -35,8 +35,8 @@ class Auto15CloseRed : SigmaOpMode() {
     override fun runOpMode() {
         val robotDir = TrajoptLoader.robotTrajoptDir()
         val projectFile = TrajoptLoader.findProjectFiles(robotDir)
-            .find { it.nameWithoutExtension == "15closeredbetter" }
-            ?: throw IllegalStateException("15closeredbetter.json not found in $robotDir")
+            .find { it.nameWithoutExtension == "15closeredbetter_mirrored" }
+            ?: throw IllegalStateException("15closeredbetter_mirrored.json not found in $robotDir")
 
         fun requireTrajectory(name: String) =
             TrajoptLoader.loadTrajectory(projectFile, name)
@@ -57,7 +57,7 @@ class Auto15CloseRed : SigmaOpMode() {
 
         io.setPosition(initialSample.pos)
 
-        val robot = Robot(io, blue = false, useNativeAim = true)
+        val robot = Robot(io, blue = true, useNativeAim = true)
         robot.init(initialSample.pos, apriltagTracking = false)
         robot.aimTurret = true
         robot.aimFlywheel = false
@@ -89,7 +89,6 @@ class Auto15CloseRed : SigmaOpMode() {
                         holdAndIntakeAtGate(robot, GO_TO_GATE_HOLD_DURATION)
                         robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                     } else {
-                        // Settle before shooting, but skip if empty to save time
                         val settleStart = robot.io.time()
                         while (robot.io.time() - settleStart < WAYPOINT_STOP_HOLD) {
                             val hasBalls = robot.beamBreak.slots.any { it } ||
@@ -121,8 +120,7 @@ class Auto15CloseRed : SigmaOpMode() {
             robot.update()
             job.isCompleted
         }
-        
-        // Ensure last shot fully clears before cutting power
+
         val endTime = io.time()
         ioLoop { _, _ ->
             robot.update()
@@ -309,7 +307,7 @@ class Auto15CloseRed : SigmaOpMode() {
 
         robot.intakeTransfer.state = IntakeTransfer.State.IDLE
         robot.aimFlywheel = true
-        robot.aim.shotRequested = false // Ensure we don't shoot on the move
+        robot.aim.shotRequested = false
 
         path.join()
     }
