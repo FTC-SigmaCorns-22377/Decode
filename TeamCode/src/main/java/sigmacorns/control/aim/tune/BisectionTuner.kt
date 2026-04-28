@@ -143,9 +143,8 @@ class BisectionTuner(
         store.putCell(cell)
         // Remove all samples for this cell
         val remaining = store.getSamples().filter { it.cellId != cell.cellId }
-        store.clear()
+        store.clearSamples()
         remaining.forEach { store.addSample(it) }
-        // Re-init all other cells from remaining
         store.save()
     }
 

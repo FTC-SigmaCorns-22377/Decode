@@ -60,6 +60,7 @@ class BisectionStore(
     }
 
     @Synchronized fun clear() { cells.clear(); samples.clear() }
+    @Synchronized fun clearSamples() { samples.clear() }
 
     @Synchronized fun removeLastSample() {
         if (samples.isNotEmpty()) samples.removeAt(samples.size - 1)

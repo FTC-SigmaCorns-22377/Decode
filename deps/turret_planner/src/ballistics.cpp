@@ -451,17 +451,23 @@ LipschitzBounds ballistics_lipschitz(
         C_min = std::min(C_min, std::abs(C_t));
     }
 
-    // C'(t) = dC/dT bounds via sampling
+    // C'(t) = dC/dT bounds via analytical formula (same as ballistics_solve_with_derivs).
+    // No drag: dC/dT = -dz/T^2 + g/2
+    // With drag: dC/dT = (g/k)*alpha + (dz + g*T/k)*dalpha_dT
     float C_prime_max = 0.f;
     for (int i = 0; i <= 16; ++i) {
         float t = t_lo + (t_hi - t_lo) * float(i) / 16.f;
-        // Finite difference approximation of dC/dT
-        float dt_fd = (t_hi - t_lo) * 1e-4f;
-        if (dt_fd < 1e-8f) dt_fd = 1e-8f;
-        float t_p = std::min(t + dt_fd, t_hi);
-        float t_m = std::max(t - dt_fd, t_lo);
-        float Cp = (compute_C(t_p) - compute_C(t_m)) / (t_p - t_m);
-        C_prime_max = std::max(C_prime_max, std::abs(Cp));
+        if (t <= 0.f) continue;
+        float dC_dt;
+        if (cfg.drag_k > 1e-6f) {
+            float alpha = compute_alpha(t);
+            float da    = compute_dalpha_dT(t);
+            dC_dt = (cfg.g / cfg.drag_k) * alpha + (dz + cfg.g * t / cfg.drag_k) * da;
+        } else {
+            float inv_T2 = 1.f / (t * t);
+            dC_dt = -dz * inv_T2 + 0.5f * cfg.g;
+        }
+        C_prime_max = std::max(C_prime_max, std::abs(dC_dt));
     }
 
     // v² = B²+C²-a²; lower-bound v.

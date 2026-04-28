@@ -37,7 +37,7 @@ import kotlin.math.abs
  *   Y                 skip current cell
  *   Back              undo last shot result
  *   D-pad L/R         navigate cells manually
- *   Start             refit omega coefficients from all MADE samples
+ *   Start             reset current cell (clears samples, restores seed bracket)
  *
  * Web UI: robot-ip:8083
  */
@@ -215,15 +215,12 @@ class OmegaTunerOpMode : SigmaOpMode() {
                 cellIndex = (cellIndex + 1).coerceAtMost((tuner.cells().size - 1).coerceAtLeast(0))
             lastDpadR = gamepad1.dpad_right
 
-            // ── Refit coefficients (Start) ────────────────────────────
-            if (gamepad1.start && !lastStart) {
-                val pts = tuner.madeSpeedPoints()
-                if (pts.size >= 6) {
-                    currentCoeffs = OmegaCoefFitter.fitFromMakes(store.madeSamples())
-                    dataStore.clear()
-                    for (p in pts) dataStore.addPoint(p)
-                    dataStore.save()
-                }
+            // ── Reset current cell (Start) ────────────────────────────
+            if (gamepad1.start && !lastStart && cell != null) {
+                tuner.resetCell(cell)
+                awaitingOutcome = false
+                shotActive = false
+                robot.intakeTransfer.state = IntakeTransfer.State.IDLE
             }
             lastStart = gamepad1.start
 
@@ -277,7 +274,7 @@ class OmegaTunerOpMode : SigmaOpMode() {
             telemetry.addData("FW", "%.0f rad/s (target %.0f)".format(actualOmega, cell?.omegaMid ?: 0.0))
             telemetry.addData("Pending", tuner.pendingCells().size)
             telemetry.addData("Made samples", store.madeSamples().size)
-            telemetry.addLine("Y=skip  Back=undo  Dpad=navigate  Start=refit")
+            telemetry.addLine("Y=skip  Back=undo  Dpad=navigate  Start=reset cell")
             telemetry.update()
 
             false
