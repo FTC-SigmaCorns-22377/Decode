@@ -3,6 +3,7 @@
 #include <cassert>
 #include <array>
 #include "turret_planner/ballistics.h"
+#include "turret_planner/flywheel_model.h"
 
 // Utility: check two floats are close
 static void check(const char* name, float got, float expected, float tol = 1e-3f) {
@@ -71,8 +72,14 @@ void test_dtheta_dT() {
 void test_derivs_fd() {
     printf("\n=== test_derivs_fd ===\n");
     PhysicsConfig cfg{9.81f, 0.15f};
+    // Set up a small IDW omega map: omega = 30*v - 10*phi + 500 (approx) via 3 points.
     OmegaMapParams om{};
-    om.c[1] = 30.f; om.c[2] = -10.f; om.c[0] = 500.f;
+    om.n = 3;
+    om.phi[0] = 0.4f; om.v_exit[0] = 6.f; om.omega[0] = 500.f + 30.f*6.f - 10.f*0.4f;
+    om.phi[1] = 0.6f; om.v_exit[1] = 8.f; om.omega[1] = 500.f + 30.f*8.f - 10.f*0.6f;
+    om.phi[2] = 0.5f; om.v_exit[2] = 7.f; om.omega[2] = 500.f + 30.f*7.f - 10.f*0.5f;
+    om.phi_scale = 1.f / (0.6f - 0.4f);
+    om.v_scale   = 1.f / (8.f - 6.f);
 
     float tx=0,ty=0,tz=0, gx=2.5f,gy=1.f,gz=0.8f, vRx=0.2f,vRy=-0.1f;
     float T = 0.45f;
@@ -81,7 +88,7 @@ void test_derivs_fd() {
     ShotDerivatives derivs;
     ballistics_solve_with_derivs(tx,ty,tz, gx,gy,gz, vRx,vRy, T, cfg, om, &derivs);
 
-    // Compute FD in double via direct formula replication
+    // Compute FD in double via direct formula replication (IDW omega at each perturbed T)
     auto eval_d = [&](double t) -> std::array<double,4> {
         double dx = gx-tx, dy = gy-ty, dz = gz-tz;
         double inv_t = 1.0/t;
@@ -94,7 +101,7 @@ void test_derivs_fd() {
         double vsq = B*B + C*C - a*a;
         double v = (vsq>0) ? std::sqrt(vsq) : 0.0;
         double phi = std::atan2(C*v+B*a, B*v-C*a);
-        double om_val = om.c[0]+om.c[1]*v+om.c[2]*phi+om.c[3]*v*v+om.c[4]*phi*v+om.c[5]*phi*phi;
+        double om_val = omega_map_eval(om, float(phi), float(v));
         return {theta, phi, v, om_val};
     };
     auto p_p = eval_d(T+eps), p_m = eval_d(T-eps);
@@ -131,7 +138,7 @@ void test_feasible_interval() {
     float T_mid = 0.5f * (iv.t_lo + iv.t_hi);
     OmegaMapParams om{};
     ShotParams p = ballistics_solve(0,0,0, 3,0,1, 0,0, T_mid, cfg, om);
-    bool feas = ballistics_is_feasible(p, T_mid, bounds, cfg);
+    bool feas = ballistics_is_feasible(p, T_mid, bounds, cfg, om);
     printf("%s is_feasible at midpoint (T=%.4f)\n", feas ? "PASS" : "FAIL", T_mid);
 }
 

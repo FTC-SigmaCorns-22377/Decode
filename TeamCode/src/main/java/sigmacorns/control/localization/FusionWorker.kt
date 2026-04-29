@@ -363,7 +363,7 @@ class FusionWorker(
             config.robustTagLoss,
             config.robustTagLossK,
             config.enableTagGating,
-            config.minTagAreaPx,
+            config.minTagAreaPct,
             config.maxTagViewAngleDeg,
             config.enableCheiralityCheck,
             config.cheiralitySigma,

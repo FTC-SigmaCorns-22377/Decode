@@ -60,6 +60,8 @@ JoltWorld::JoltWorld() {
     physicsSystem_ = new JPH::PhysicsSystem();
     physicsSystem_->Init(maxBodies, numBodyMutexes, maxBodyPairs, maxContactConstraints,
                          bpLayerInterface_, objectVsBroadPhase_, objectLayerPair_);
+    // Align gravity with turret_planner's PhysicsConfig (9.81 m/s² downwards).
+    physicsSystem_->SetGravity(JPH::Vec3(0, -9.81f, 0));
 
     buildField();
     buildGoals();
@@ -665,10 +667,12 @@ int JoltWorld::spawnBall(float x, float y, float z, float vx, float vy, float vz
         Layers::MOVING
     );
 
-    bodySettings.mFriction = BALL_FRICTION;
-    bodySettings.mRestitution = 0.5f;
-    bodySettings.mLinearDamping = 0.5f;   // ground friction slows balls down
-    bodySettings.mAngularDamping = 0.3f;  // rolling friction
+    // The turret planner assumes no surface interaction after launch.
+    // Set friction, restitution and damping to zero so the ball follows a pure ballistic trajectory.
+    bodySettings.mFriction = 0.0f;
+    bodySettings.mRestitution = 0.0f;
+    bodySettings.mLinearDamping = 0.0f;   // no artificial ground friction
+    bodySettings.mAngularDamping = 0.0f;  // no rolling friction
     bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     bodySettings.mMassPropertiesOverride.mMass = BALL_MASS;
 
@@ -683,14 +687,13 @@ int JoltWorld::spawnBall(float x, float y, float z, float vx, float vy, float vz
 int JoltWorld::spawnShotBall(float x, float y, float z, float vx, float vy, float vz, int color) {
     int idx = spawnBall(x, y, z, vx, vy, vz, color);
     if (idx >= 0) {
-        // Shot balls are in free flight — scale down the ground-rolling damping
-        // that spawnBall sets so they follow near-ballistic trajectories while
-        // retaining a small amount of air drag.
+        // Match turret_planner's drag model: drag_k = 0.65 (first-order linear damping).
+        // Jolt mLinearDamping applies as v *= (1 - k*dt), equivalent to v(t) = v0*exp(-k*t).
         JPH::BodyLockWrite lock(physicsSystem_->GetBodyLockInterface(), balls_[idx].bodyId);
         if (lock.Succeeded()) {
             auto* mp = lock.GetBody().GetMotionProperties();
-            mp->SetLinearDamping(mp->GetLinearDamping() * 0.3f);
-            mp->SetAngularDamping(mp->GetAngularDamping() * 0.3f);
+            mp->SetLinearDamping(0.65f);
+            mp->SetAngularDamping(0.0f);
         }
         shotImmunity_.push_back({balls_[idx].bodyId, 0.5f}); // 0.5s immunity
     }

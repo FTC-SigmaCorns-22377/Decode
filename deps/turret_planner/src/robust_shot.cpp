@@ -184,8 +184,8 @@ RobustShotResult flight_time_robust(
                               target2_x, target2_y, target2_z,
                               robot_vx, robot_vy, bestT2, cfg, omega);
     out.J = bestJ;
-    out.feasible = ballistics_is_feasible(out.s1, bestT1, bounds, cfg)
-                && ballistics_is_feasible(out.s2, bestT2, bounds, cfg);
+    out.feasible = ballistics_is_feasible(out.s1, bestT1, bounds, cfg, omega)
+                && ballistics_is_feasible(out.s2, bestT2, bounds, cfg, omega);
     return out;
 }
 
@@ -356,6 +356,45 @@ RobustShotResult flight_time_robust_adjust(
         }
     }
 
+    // --- Height-feasibility post-processing ---
+    // The B&B minimizes A + B but doesn't enforce that shot 2 is achievable with the
+    // post-drop omega from shot 1. If s2.omega > s1.omega*(1-drop), the ball won't
+    // reach target height. Scan T2 over the feasible interval to find the best T2
+    // that satisfies the constraint, keeping T1 fixed.
+    {
+        ShotParams s1_bbest = ballistics_solve(turret_x, turret_y, turret_z,
+                                               target1_x, target1_y, target1_z,
+                                               robot_vx, robot_vy, bestT1, cfg, omega);
+        float om_after_drop = s1_bbest.omega_flywheel * (1.f - drop_fraction);
+        ShotParams s2_bbest = ballistics_solve(turret_x, turret_y, turret_z,
+                                               target2_x, target2_y, target2_z,
+                                               robot_vx, robot_vy, bestT2, cfg, omega);
+
+        if (s2_bbest.omega_flywheel > om_after_drop) {
+            // B&B result violates height constraint. Scan T2 for the best feasible T2.
+            float best_adj_T2 = bestT2;
+            float best_adj_B  = 1e30f;
+            const int N_SCAN = 64;
+            for (int i = 0; i <= N_SCAN; ++i) {
+                float t2c = iv2.t_lo + (iv2.t_hi - iv2.t_lo) * float(i) / float(N_SCAN);
+                ShotParams s2c = ballistics_solve(turret_x, turret_y, turret_z,
+                                                  target2_x, target2_y, target2_z,
+                                                  robot_vx, robot_vy, t2c, cfg, omega);
+                if (!ballistics_is_feasible(s2c, t2c, bounds, cfg, omega)) continue;
+                if (s2c.omega_flywheel > om_after_drop) continue;
+                float b_d_omega = om_after_drop - s2c.omega_flywheel;
+                float b_d_phi   = std::abs(s1_bbest.phi   - s2c.phi);
+                float b_d_theta = std::abs(s1_bbest.theta - s2c.theta);
+                float B = std::max({weights.w_omega * b_d_omega,
+                                    weights.w_phi   * b_d_phi,
+                                    weights.w_theta * b_d_theta});
+                if (B < best_adj_B) { best_adj_B = B; best_adj_T2 = t2c; }
+            }
+            bestT2 = best_adj_T2;
+            bestJ  = J(bestT1, bestT2);
+        }
+    }
+
     RobustShotResult out;
     out.T1 = bestT1;
     out.T2 = bestT2;
@@ -366,7 +405,11 @@ RobustShotResult flight_time_robust_adjust(
                               target2_x, target2_y, target2_z,
                               robot_vx, robot_vy, bestT2, cfg, omega);
     out.J = bestJ;
-    out.feasible = ballistics_is_feasible(out.s1, bestT1, bounds, cfg)
-                && ballistics_is_feasible(out.s2, bestT2, bounds, cfg);
+    // Feasible only if both shots pass ballistics constraints AND shot 2's required
+    // omega does not exceed the post-drop omega available from shot 1.
+    bool height_ok = out.s2.omega_flywheel <= out.s1.omega_flywheel * (1.f - drop_fraction);
+    out.feasible = height_ok
+                && ballistics_is_feasible(out.s1, bestT1, bounds, cfg, omega)
+                && ballistics_is_feasible(out.s2, bestT2, bounds, cfg, omega);
     return out;
 }

@@ -9,7 +9,18 @@
 // Use a non-trivial omega map so the flywheel-drop arm actually matters:
 //   omega = 800 + 40*v + 50*phi
 static PhysicsConfig  cfg{9.81f, 0.1f, 0.f};
-static OmegaMapParams om{{800.f, 40.f, 50.f, 0.f, 0.f, 0.f}};
+static OmegaMapParams make_om3() {
+    OmegaMapParams m{};
+    m.n = 4;
+    m.phi[0] = 0.3f; m.v_exit[0] = 5.f; m.omega[0] = 800.f + 40.f*5.f + 50.f*0.3f;
+    m.phi[1] = 0.3f; m.v_exit[1] = 9.f; m.omega[1] = 800.f + 40.f*9.f + 50.f*0.3f;
+    m.phi[2] = 1.2f; m.v_exit[2] = 5.f; m.omega[2] = 800.f + 40.f*5.f + 50.f*1.2f;
+    m.phi[3] = 1.2f; m.v_exit[3] = 9.f; m.omega[3] = 800.f + 40.f*9.f + 50.f*1.2f;
+    m.phi_scale = 1.f / (1.2f - 0.3f);
+    m.v_scale   = 1.f / (9.f  - 5.f);
+    return m;
+}
+static OmegaMapParams om = make_om3();
 static TurretBounds   bounds{-3.14f, 3.14f, 0.f, 1.4f, 15.f, 2000.f};
 static TurretWeights  weights{0.05f, 0.08f, 0.0005f};
 

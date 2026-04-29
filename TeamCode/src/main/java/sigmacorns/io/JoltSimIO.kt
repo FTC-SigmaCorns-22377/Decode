@@ -344,7 +344,7 @@ class JoltSimIO(
 
         /** Time between auto-shot attempts when transfer motor is running (seconds). */
         const val AUTO_SHOOT_INTERVAL = 0.2
-        const val LAUNCH_EFFICIENCY = 0.195
+        val LAUNCH_EFFICIENCY get() = sigmacorns.logic.AimConfig.launchEfficiency
         const val FLYWHEEL_SHOT_LOSS = 0.1
 
         const val SERVO_TIME_CONSTANT = 0.05

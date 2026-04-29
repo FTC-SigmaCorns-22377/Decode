@@ -78,6 +78,7 @@ bool ballistics_is_feasible(
     float T,
     const TurretBounds& bounds,
     const PhysicsConfig& cfg,
+    const OmegaMapParams& omega,
     float robot_heading = 0.f
 );
 

@@ -11,7 +11,8 @@ data class VisionObservation(
     val tagId: Int,
     val corners: DoubleArray,
     val txDeg: Double,
-    val tyDeg: Double
+    val tyDeg: Double,
+    val areaPct: Double = 0.0
 )
 
 data class VisionFrame(
@@ -83,7 +84,8 @@ class VisionTracker(
                     tagId = tagId,
                     corners = cornersArray,
                     txDeg = fiducial.targetXDegrees,
-                    tyDeg = fiducial.targetYDegrees
+                    tyDeg = fiducial.targetYDegrees,
+                    areaPct = fiducial.targetArea
                 )
             )
         }

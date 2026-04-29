@@ -23,6 +23,7 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import sigmacorns.control.localization.EstimatorConfig
 
 /**
  * Aiming system: vision + sensor fusion + turret targeting + shooter coordination.
@@ -66,6 +67,11 @@ class AimingSystem(
     override var shotRequested: Boolean = false
 
     private var shotRequestedTime: Duration? = null
+
+    private var lastTurretPos: Double? = null
+    private var lastVisionUpdateTimeMs: Long = 0
+    var turretAngularVelocity: Double = 0.0
+        private set
 
     /**
      * True when turret, hood, and flywheel are all within tolerance of the current solver target.
@@ -121,7 +127,23 @@ class AimingSystem(
     fun updateVision() {
         val visionResult = visionTracker?.read()
         val turretInRange = robot.turret.pos in robot.turret.angleLimits
-        autoAim.update(robot.io.position(), robot.io.velocity(), robot.io.turretPosition(), if (turretInRange) visionResult else null)
+
+        val nowMs = System.currentTimeMillis()
+        val dtMs = nowMs - lastVisionUpdateTimeMs
+        if (dtMs > 0 && lastTurretPos != null) {
+            turretAngularVelocity = abs(robot.turret.pos - lastTurretPos!!) / (dtMs / 1000.0)
+        }
+        lastTurretPos = robot.turret.pos
+        lastVisionUpdateTimeMs = nowMs
+
+        val robotOmega = abs(robot.io.velocity().rot)
+        val maxRobotOmega = EstimatorConfig.maxRobotAngularVelForVision
+        val maxTurretOmega = EstimatorConfig.maxTurretAngularVelForVision
+        val tooFast = (maxRobotOmega > 0 && robotOmega > maxRobotOmega) ||
+                      (maxTurretOmega > 0 && turretAngularVelocity > maxTurretOmega)
+
+        val gatedVision = if (turretInRange && !tooFast) visionResult else null
+        autoAim.update(robot.io.position(), robot.io.velocity(), robot.io.turretPosition(), gatedVision)
 
         val fusedPose = autoAim.fusedPose
         targetDistance = hypot(goalPosition.x - fusedPose.v.x, goalPosition.y - fusedPose.v.y)
@@ -269,12 +291,12 @@ object AimConfig {
     @JvmField var g = 9.81
 
     /** Linear air drag coefficient (1/s). 0 = no drag. Tune empirically (~0.3-0.8 for wiffle balls). */
-    @JvmField var dragK = 0.4
+    @JvmField var dragK = 0.65
 
     /** Time (seconds) from when shot is requested until ball leaves shooter */
-    @JvmField var transferDelay = 0.20
+    @JvmField var transferDelay = 0.15
 
-    @JvmField var launchEfficiency = 0.225
+    @JvmField var launchEfficiency = 0.3
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
             vExit / (flywheelRadius * launchEfficiency)
@@ -290,14 +312,14 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.15 // m
+    @JvmField var shotTolerance = 0.01 // m
 
     // Proportional flywheel speed loss per shot. After firing, the flywheel
     // retains (1 - dropFraction) of its speed. When > 0, NativeAutoAim uses
     // the robust shot planner so the first shot's parameters leave the flywheel
     // at a speed compatible with the next shot after this proportional loss.
     // Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var dropFraction = 0.05
+    @JvmField var dropFraction = 0.2
 
     /** Flywheel spins up when estimated time to a launch zone is below this (seconds). */
     @JvmField var spinupLeadTime = 1.5
@@ -313,7 +335,7 @@ object AimConfig {
 }
 
 object ShotSolverConfig {
-    @JvmField var wOmega = 0.005   // s per rad/s flywheel change
+    @JvmField var wOmega = 0.0035   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
     @JvmField var wPhi = 0.03      // s per rad hood change
     @JvmField var tolerance = 0.05

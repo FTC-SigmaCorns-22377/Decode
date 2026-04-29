@@ -1,7 +1,8 @@
 #include "turret_planner/flight_time.h"
 #include <cmath>
 #include <algorithm>
-#include <map>
+#include <vector>
+#include <utility>
 
 // ---------------------------------------------------------------------------
 // flight_time_tau: τ(T) = max(w_θ|Δθ|, w_φ|Δφ|, w_ω|Δω|)
@@ -90,15 +91,24 @@ FlightTimeResult flight_time_cold(
         return flight_time_tau(p, current, weights, omega);
     };
 
-    // Piyavskii-Shubert: maintain sorted sample map, pick next T from
-    // the interval with the lowest lower-bound sawtooth midpoint.
-    std::map<float, float> samples;
-    auto insert = [&](float T) { samples[T] = eval(T); };
-    insert(t_lo);
-    insert(t_hi);
+    // Piyavskii-Shubert: sorted vector of (T, tau) pairs.
+    // Contiguous storage avoids tree-pointer overhead of std::map.
+    std::vector<std::pair<float,float>> samples;
+    samples.reserve(maxIter + 4);
 
-    float best_T    = (samples[t_lo] <= samples[t_hi]) ? t_lo : t_hi;
-    float best_cost = samples[best_T];
+    auto insert_sample = [&](float T) {
+        float v = eval(T);
+        auto pos = std::lower_bound(samples.begin(), samples.end(),
+                                    std::make_pair(T, -1e30f));
+        samples.insert(pos, {T, v});
+        return v;
+    };
+
+    float f_lo = insert_sample(t_lo);
+    float f_hi = insert_sample(t_hi);
+
+    float best_T    = (f_lo <= f_hi) ? t_lo : t_hi;
+    float best_cost = std::min(f_lo, f_hi);
     float lb_global = -1e30f;
 
     float lip_lo = t_lo, lip_hi = t_hi;
@@ -108,11 +118,9 @@ FlightTimeResult flight_time_cold(
         float next_T     = 0.5f * (t_lo + t_hi);
         float active_lo  = 1e30f, active_hi = -1e30f;
 
-        auto it = samples.begin();
-        auto nx = std::next(it);
-        for (; nx != samples.end(); it = nx, ++nx) {
-            float ta = it->first,  fa = it->second;
-            float tb = nx->first,  fb = nx->second;
+        for (int j = 0; j + 1 < (int)samples.size(); ++j) {
+            float ta = samples[j].first,   fa = samples[j].second;
+            float tb = samples[j+1].first, fb = samples[j+1].second;
             float lb = 0.5f * (fa + fb) - 0.5f * L * (tb - ta);
             if (lb < best_cost) {
                 active_lo = std::min(active_lo, ta);
@@ -131,10 +139,9 @@ FlightTimeResult flight_time_cold(
             lip_lo = active_lo; lip_hi = active_hi;
             // Recompute lb_global with tighter L
             lb_global = 1e30f;
-            it = samples.begin(); nx = std::next(it);
-            for (; nx != samples.end(); it = nx, ++nx) {
-                float ta = it->first, fa = it->second;
-                float tb = nx->first, fb = nx->second;
+            for (int j = 0; j + 1 < (int)samples.size(); ++j) {
+                float ta = samples[j].first,   fa = samples[j].second;
+                float tb = samples[j+1].first, fb = samples[j+1].second;
                 if (ta >= active_lo && tb <= active_hi) {
                     float lb = 0.5f * (fa + fb) - 0.5f * L * (tb - ta);
                     lb_global = std::min(lb_global, lb);
@@ -145,8 +152,7 @@ FlightTimeResult flight_time_cold(
             continue;
         }
 
-        float cost = eval(next_T);
-        samples[next_T] = cost;
+        float cost = insert_sample(next_T);
         if (cost < best_cost) { best_cost = cost; best_T = next_T; }
     }
 
@@ -157,7 +163,8 @@ FlightTimeResult flight_time_cold(
     r.T_star   = best_T;
     r.params   = best_p;
     r.tau      = best_cost;
-    r.feasible = ballistics_is_feasible(best_p, best_T, bounds, cfg);
+    r.feasible = ballistics_is_feasible(best_p, best_T, bounds, cfg, omega);
+    r.iv       = iv;
     return r;
 }
 
@@ -165,11 +172,13 @@ FlightTimeResult flight_time_cold(
 // Warm-started Newton refinement
 // ---------------------------------------------------------------------------
 
-FlightTimeResult flight_time_warm(
+// Inner implementation: Newton refinement given a pre-computed feasible interval.
+static FlightTimeResult flight_time_warm_iv(
     float turret_x, float turret_y, float turret_z,
     float target_x, float target_y, float target_z,
     float robot_vx, float robot_vy,
     float T_init,
+    TInterval iv,
     const TurretState& current,
     const TurretWeights& weights,
     const TurretBounds& bounds,
@@ -177,20 +186,6 @@ FlightTimeResult flight_time_warm(
     const OmegaMapParams& omega,
     int maxIter)
 {
-    float dx = target_x - turret_x;
-    float dy = target_y - turret_y;
-    float dz = target_z - turret_z;
-
-    TInterval iv = ballistics_feasible_interval(dx, dy, dz, robot_vx, robot_vy,
-                                                bounds, cfg, 1e-4f);
-    if (iv.t_lo >= iv.t_hi) {
-        FlightTimeResult r{};
-        r.feasible = false;
-        r.T_star   = T_init;
-        r.tau      = 1e9f;
-        return r;
-    }
-
     float T = std::clamp(T_init, iv.t_lo, iv.t_hi);
 
     for (int iter = 0; iter < maxIter; ++iter) {
@@ -267,6 +262,67 @@ FlightTimeResult flight_time_warm(
     r.T_star   = T;
     r.params   = p_final;
     r.tau      = flight_time_tau(p_final, current, weights, omega);
-    r.feasible = ballistics_is_feasible(p_final, T, bounds, cfg);
+    r.feasible = ballistics_is_feasible(p_final, T, bounds, cfg, omega);
+    r.iv       = iv;
     return r;
+}
+
+// Public overload: pre-computed interval — skips 64-point feasibility sweep.
+FlightTimeResult flight_time_warm(
+    float turret_x, float turret_y, float turret_z,
+    float target_x, float target_y, float target_z,
+    float robot_vx, float robot_vy,
+    float T_init,
+    TInterval iv,
+    const TurretState& current,
+    const TurretWeights& weights,
+    const TurretBounds& bounds,
+    const PhysicsConfig& cfg,
+    const OmegaMapParams& omega,
+    int maxIter)
+{
+    if (iv.t_lo >= iv.t_hi) {
+        FlightTimeResult r{};
+        r.feasible = false;
+        r.T_star   = T_init;
+        r.tau      = 1e9f;
+        r.iv       = iv;
+        return r;
+    }
+    return flight_time_warm_iv(turret_x, turret_y, turret_z,
+                               target_x, target_y, target_z,
+                               robot_vx, robot_vy, T_init, iv,
+                               current, weights, bounds, cfg, omega, maxIter);
+}
+
+// Public overload: no interval — computes feasible interval first (original behaviour).
+FlightTimeResult flight_time_warm(
+    float turret_x, float turret_y, float turret_z,
+    float target_x, float target_y, float target_z,
+    float robot_vx, float robot_vy,
+    float T_init,
+    const TurretState& current,
+    const TurretWeights& weights,
+    const TurretBounds& bounds,
+    const PhysicsConfig& cfg,
+    const OmegaMapParams& omega,
+    int maxIter)
+{
+    float dx = target_x - turret_x;
+    float dy = target_y - turret_y;
+    float dz = target_z - turret_z;
+    TInterval iv = ballistics_feasible_interval(dx, dy, dz, robot_vx, robot_vy,
+                                                bounds, cfg, 1e-4f);
+    if (iv.t_lo >= iv.t_hi) {
+        FlightTimeResult r{};
+        r.feasible = false;
+        r.T_star   = T_init;
+        r.tau      = 1e9f;
+        r.iv       = iv;
+        return r;
+    }
+    return flight_time_warm_iv(turret_x, turret_y, turret_z,
+                               target_x, target_y, target_z,
+                               robot_vx, robot_vy, T_init, iv,
+                               current, weights, bounds, cfg, omega, maxIter);
 }

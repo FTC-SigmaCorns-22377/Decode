@@ -5,6 +5,17 @@
 
 static PhysicsConfig  cfg{9.81f, 0.1f};
 static OmegaMapParams om{};
+static OmegaMapParams make_om3() {
+    OmegaMapParams m{};
+    m.n = 4;
+    m.phi[0] = 0.3f; m.v_exit[0] = 5.f; m.omega[0] = 800.f + 40.f*5.f + 50.f*0.3f;
+    m.phi[1] = 0.3f; m.v_exit[1] = 9.f; m.omega[1] = 800.f + 40.f*9.f + 50.f*0.3f;
+    m.phi[2] = 1.2f; m.v_exit[2] = 5.f; m.omega[2] = 800.f + 40.f*5.f + 50.f*1.2f;
+    m.phi[3] = 1.2f; m.v_exit[3] = 9.f; m.omega[3] = 800.f + 40.f*9.f + 50.f*1.2f;
+    m.phi_scale = 1.f / (1.2f - 0.3f);
+    m.v_scale   = 1.f / (9.f  - 5.f);
+    return m;
+}
 static TurretBounds   bounds{-3.14f, 3.14f, 0.f, 1.4f, 15.f, 1200.f};
 static TurretWeights  weights{0.05f, 0.08f, 0.0005f};
 
@@ -164,7 +175,7 @@ void test_no_feasible_samples() {
 // -------------------------------------------------------------------------
 void test_robust_feasibility() {
     printf("\n=== test_robust_feasibility ===\n");
-    OmegaMapParams om_rich{{800.f, 40.f, 50.f, 0.f, 0.f, 0.f}};
+    OmegaMapParams om_rich = make_om3();
 
     const int K = 4;
     PathSample path[K];
@@ -206,7 +217,7 @@ void test_robust_feasibility() {
 // -------------------------------------------------------------------------
 void test_robust_drop_shifts_target() {
     printf("\n=== test_robust_drop_shifts_target ===\n");
-    OmegaMapParams om_rich{{800.f, 40.f, 50.f, 0.f, 0.f, 0.f}};
+    OmegaMapParams om_rich = make_om3();
 
     const int K = 4;
     PathSample path[K];

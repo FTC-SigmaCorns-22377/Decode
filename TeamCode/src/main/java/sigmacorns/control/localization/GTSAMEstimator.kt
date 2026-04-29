@@ -13,6 +13,7 @@ import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
 import sigmacorns.math.normalizeAngle
 import java.util.concurrent.atomic.AtomicLong
+import java.util.TreeMap
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -87,6 +88,10 @@ class GTSAMEstimator(
     private var lastRobotPose: Pose2d? = null
     private var lastUpdateTimeMs: Long = 0
     private var lastDiagLogMs: Long = 0
+
+    // Ring buffer: timestampSeconds -> turretYawRad, for matching vision frame timestamps
+    private val turretHistory = TreeMap<Double, Double>()
+    private val turretHistoryMaxEntries = 60
     
     // ===== Debug Logging =====
     private var debugLogger: GTSAMDebugLogger? = null
@@ -146,6 +151,13 @@ class GTSAMEstimator(
         }
 
         debugLogger?.logRawOdometry(robotPose, velocity, currentTime / 1000.0)
+
+        // Record turret angle for vision-frame timestamp lookup
+        val nowSeconds = currentTime / 1000.0
+        turretHistory[nowSeconds] = turretAngle
+        if (turretHistory.size > turretHistoryMaxEntries) {
+            turretHistory.pollFirstEntry()
+        }
 
         if (lastRobotPose != null) {
             processOdometryDelta(curPose)
@@ -260,18 +272,41 @@ class GTSAMEstimator(
             return
         }
 
+        // Look up turret angle closest to the frame's capture timestamp
+        val frameTurretAngle = interpolateTurretAngle(frame.timestampSeconds) ?: turretAngle
+
         for (observation in frame.observations) {
+            if (EstimatorConfig.enableTagGating &&
+                observation.areaPct < EstimatorConfig.minTagAreaPct) {
+                continue
+            }
+
             fusionWorker.enqueueVision(
                 tagId = observation.tagId,
                 corners = observation.corners,
                 pixelSigma = EstimatorConfig.defaultPixelSigma,
                 timestampSeconds = frame.timestampSeconds,
-                turretYawRad = turretAngle
+                turretYawRad = frameTurretAngle
             )
             enqueuedVisionCount.incrementAndGet()
 
             val corners = observation.corners.toList().chunked(2).map { Vector2d(it[0],it[1]) }
-            debugLogger?.logTagDetection(observation.tagId, corners, turretAngle)
+            debugLogger?.logTagDetection(observation.tagId, corners, frameTurretAngle)
+        }
+    }
+
+    private fun interpolateTurretAngle(timestampSeconds: Double): Double? {
+        if (turretHistory.isEmpty()) return null
+        val lo = turretHistory.floorEntry(timestampSeconds)
+        val hi = turretHistory.ceilingEntry(timestampSeconds)
+        return when {
+            lo == null -> hi?.value
+            hi == null -> lo.value
+            lo.key == hi.key -> lo.value
+            else -> {
+                val t = (timestampSeconds - lo.key) / (hi.key - lo.key)
+                lo.value + t * (hi.value - lo.value)
+            }
         }
     }
 

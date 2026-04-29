@@ -25,8 +25,10 @@ EarliestShotResult path_scan_earliest(
     while (start < n_samples && path[start].t < t_now) ++start;
     if (start >= n_samples) return result;
 
-    // Warm start T* from cold solve on the first usable sample
+    // Warm start T* and feasible interval from cold solve on the first usable sample.
+    // Passing the cached interval to flight_time_warm skips the 64-point sweep.
     float T_warm = -1.f;
+    TInterval iv_warm = {0.f, 0.f};
 
     bool prev_feasible = false;
     int  prev_idx      = -1;
@@ -42,14 +44,15 @@ EarliestShotResult path_scan_earliest(
                                    robot_vx, robot_vy,
                                    current, weights, bounds, cfg, omega);
         } else {
-            // Warm start from previous T*
+            // Warm start: reuse prior interval to skip feasibility sweep
             res = flight_time_warm(turret_x, turret_y, turret_z,
                                    s.x, s.y, target_z,
                                    robot_vx, robot_vy,
-                                   T_warm, current, weights, bounds, cfg, omega);
+                                   T_warm, iv_warm,
+                                   current, weights, bounds, cfg, omega);
         }
 
-        if (res.feasible) T_warm = res.T_star;
+        if (res.feasible) { T_warm = res.T_star; iv_warm = res.iv; }
 
         if (!prev_feasible && res.feasible) {
             // Feasibility transition: bisect [prev_idx, i] for sub-sample precision
@@ -70,7 +73,8 @@ EarliestShotResult path_scan_earliest(
                         turret_x, turret_y, turret_z,
                         mid_x, mid_y, target_z,
                         robot_vx, robot_vy,
-                        res.T_star, current, weights, bounds, cfg, omega);
+                        res.T_star, iv_warm,
+                        current, weights, bounds, cfg, omega);
 
                     if (mid_res.feasible) {
                         hi_t = mid_t;
@@ -91,7 +95,8 @@ EarliestShotResult path_scan_earliest(
                     turret_x, turret_y, turret_z,
                     final_x, final_y, target_z,
                     robot_vx, robot_vy,
-                    res.T_star, current, weights, bounds, cfg, omega);
+                    res.T_star, iv_warm,
+                    current, weights, bounds, cfg, omega);
 
                 result.T_star       = final_res.T_star;
                 result.params       = final_res.params;
@@ -123,7 +128,8 @@ EarliestShotResult path_scan_earliest(
         FlightTimeResult res = (T_warm >= 0.f)
             ? flight_time_warm(turret_x, turret_y, turret_z,
                                s.x, s.y, target_z, robot_vx, robot_vy,
-                               T_warm, current, weights, bounds, cfg, omega)
+                               T_warm, iv_warm,
+                               current, weights, bounds, cfg, omega)
             : flight_time_cold(turret_x, turret_y, turret_z,
                                s.x, s.y, target_z, robot_vx, robot_vy,
                                current, weights, bounds, cfg, omega);

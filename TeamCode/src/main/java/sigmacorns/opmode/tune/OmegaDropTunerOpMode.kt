@@ -6,6 +6,7 @@ import sigmacorns.Robot
 import sigmacorns.math.Pose2d
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.subsystem.IntakeTransfer
+import sigmacorns.subsystem.ShooterConfig
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -33,10 +34,12 @@ class OmegaDropTunerOpMode : SigmaOpMode() {
         const val OMEGA_STEP = 20.0
         const val OMEGA_MIN = 100.0
         const val OMEGA_MAX = 700.0
+        const val HOOD_STEP = 5.0
     }
 
     data class DropSample(
         val targetOmega: Double,
+        val hoodAngleDeg: Double,
         val preOmega: Double,
         val postOmega: Double,
         val dropFraction: Double
@@ -52,15 +55,16 @@ class OmegaDropTunerOpMode : SigmaOpMode() {
         robot.init(Pose2d(), apriltagTracking = false)
         robot.aimFlywheel = false
         robot.shooter.autoAdjust = false
-        robot.shooter.manualHoodAngle = Math.toRadians(45.0)
 
         var targetOmega = 400.0
+        var hoodAngleDeg = ShooterConfig.minAngleDeg
         var phase = Phase.IDLE
         var settleTimer = 0.0
         var preOmega = 0.0
         var postLoops = 0
 
         var lastX = false; var lastY = false; var lastB = false; var lastA = false
+        var lastLB = false; var lastRB = false
 
         telemetry.addLine("Omega Drop Tuner — waiting for start")
         telemetry.update()
@@ -74,6 +78,10 @@ class OmegaDropTunerOpMode : SigmaOpMode() {
             if (gamepad1.y && !lastY) targetOmega = (targetOmega + OMEGA_STEP).coerceAtMost(OMEGA_MAX)
             if (gamepad1.b && !lastB) targetOmega = (targetOmega - OMEGA_STEP).coerceAtLeast(OMEGA_MIN)
             lastY = gamepad1.y; lastB = gamepad1.b
+            if (gamepad1.right_bumper && !lastRB) hoodAngleDeg = (hoodAngleDeg + HOOD_STEP).coerceAtMost(ShooterConfig.maxAngleDeg)
+            if (gamepad1.left_bumper && !lastLB)  hoodAngleDeg = (hoodAngleDeg - HOOD_STEP).coerceAtLeast(ShooterConfig.minAngleDeg)
+            lastRB = gamepad1.right_bumper; lastLB = gamepad1.left_bumper
+            robot.shooter.manualHoodAngle = Math.toRadians(hoodAngleDeg)
 
             // ── Save ───────────────────────────────────────────────────
             if (gamepad1.a && !lastA && samples.isNotEmpty()) {
@@ -129,7 +137,7 @@ class OmegaDropTunerOpMode : SigmaOpMode() {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                     val postOmega = curOmega
                     val drop = if (preOmega > 1.0) (preOmega - postOmega) / preOmega else 0.0
-                    samples.add(DropSample(targetOmega, preOmega, postOmega, drop))
+                    samples.add(DropSample(targetOmega, hoodAngleDeg, preOmega, postOmega, drop))
                     phase = Phase.IDLE
                     robot.shooter.flywheelTarget = 0.0
                 }
@@ -142,6 +150,7 @@ class OmegaDropTunerOpMode : SigmaOpMode() {
             // ── Telemetry ──────────────────────────────────────────────
             telemetry.addData("Phase", phase)
             telemetry.addData("Target omega (Y+/B-)", "${targetOmega.roundToInt()} rad/s")
+            telemetry.addData("Hood angle (LB-/RB+)", "%.1f°".format(hoodAngleDeg))
             telemetry.addData("Actual omega", "${curOmega.roundToInt()} rad/s")
             telemetry.addData("Settle error", "%.1f rad/s".format(abs(curOmega - targetOmega)))
             if (samples.isNotEmpty()) {
@@ -156,7 +165,7 @@ class OmegaDropTunerOpMode : SigmaOpMode() {
                 telemetry.addData("Avg drop (last 5)", "%.3f".format(avgDrop))
             }
             telemetry.addData("Samples", samples.size)
-            telemetry.addLine("[X] shoot  [Y/B] omega  [A] save")
+            telemetry.addLine("[X] shoot  [Y/B] omega  [LB/RB] hood  [A] save")
             telemetry.update()
 
             false

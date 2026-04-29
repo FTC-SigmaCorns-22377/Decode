@@ -41,7 +41,7 @@ class JoltTeleOpVisualizerTest {
         sim.spawnFieldBalls()
         SigmaOpMode.simIO = sim
 
-        val server = SimVizServer(sim)
+        val server = SimVizServer(sim,port = 8088)
         server.start()
         println("Visualizer at http://localhost:8080")
         println("Waiting for a browser client to connect...")

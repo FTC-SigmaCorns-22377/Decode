@@ -14,6 +14,7 @@ import sigmacorns.control.aim.Ballistics.ShotState
 import sigmacorns.control.localization.FusionWorker
 import sigmacorns.io.JoltSimIO
 import sigmacorns.logic.AimConfig
+import sigmacorns.logic.NativeAutoAim
 import sigmacorns.subsystem.ShooterConfig
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -158,6 +159,7 @@ class SimVizServer(
         val goalState = simIO.getGoalState()
 
         val shotViz = buildShotViz()
+        val solverDiag = buildSolverDiag()
 
         val state = mapOf(
             "t" to simIO.time().inWholeMilliseconds / 1000.0,
@@ -184,6 +186,7 @@ class SimVizServer(
                 "blueLeverAngle" to goalState.blueLeverAngle
             ),
             "shotViz" to shotViz,
+            "solverDiag" to solverDiag,
         )
 
         val json = gson.toJson(state)
@@ -241,7 +244,7 @@ class SimVizServer(
         trajectories.add(trajToMap(
             kind = "current",
             dashed = false,
-            points = vizBallistics.sampleTrajectory(pivot, vField, currentShot, stopZ),
+            points = vizBallistics.sampleTrajectory(pivot, vField, currentShot, stopZ, dragK = AimConfig.dragK),
         ))
 
         // 2. Solver-target trajectory.
@@ -250,7 +253,7 @@ class SimVizServer(
             trajectories.add(trajToMap(
                 kind = "target",
                 dashed = false,
-                points = vizBallistics.sampleTrajectory(pivot, vField, target, stopZ),
+                points = vizBallistics.sampleTrajectory(pivot, vField, target, stopZ, dragK = AimConfig.dragK),
             ))
         }
 
@@ -261,7 +264,7 @@ class SimVizServer(
                 trajectories.add(trajToMap(
                     kind = "secondary",
                     dashed = false,
-                    points = vizBallistics.sampleTrajectory(pivot, vField, s2, stopZ),
+                    points = vizBallistics.sampleTrajectory(pivot, vField, s2, stopZ, dragK = AimConfig.dragK),
                 ))
             }
 
@@ -271,7 +274,7 @@ class SimVizServer(
                 trajectories.add(trajToMap(
                     kind = "tertiary",
                     dashed = false,
-                    points = vizBallistics.sampleTrajectory(pivot, vField, s3, stopZ),
+                    points = vizBallistics.sampleTrajectory(pivot, vField, s3, stopZ, dragK = AimConfig.dragK),
                 ))
             }
         }
@@ -285,6 +288,31 @@ class SimVizServer(
         return mapOf(
             "goal" to goal,
             "trajectories" to trajectories,
+        )
+    }
+
+    private fun buildSolverDiag(): Map<String, Any>? {
+        val aim = robot?.aim as? NativeAutoAim ?: return null
+        val d = aim.lastSolverDiag ?: return null
+        return mapOf(
+            "feasible"      to d.feasible,
+            "heightOk"      to d.heightOk,
+            "bestPossible"  to (!d.feasible && d.exception == "none"),
+            "T1"            to d.T1,
+            "T2"            to d.T2,
+            "J"             to d.J,
+            "J12"           to d.J12,
+            "J23"           to d.J23,
+            "s1Theta"       to Math.toDegrees(d.s1Theta.toDouble()),
+            "s1PhiDeg"      to Math.toDegrees(d.s1Phi.toDouble()),
+            "s1OmegaRpm"    to d.s1Omega * 60.0 / (2.0 * Math.PI),
+            "s2Theta"       to Math.toDegrees(d.s2Theta.toDouble()),
+            "s2PhiDeg"      to Math.toDegrees(d.s2Phi.toDouble()),
+            "s2OmegaRpm"    to d.s2Omega * 60.0 / (2.0 * Math.PI),
+            "omAfterDropRpm" to d.omAfterDrop * 60.0 / (2.0 * Math.PI),
+            "missDistance"  to d.missDistance,
+            "readyToShoot"  to aim.readyToShoot,
+            "exception"     to d.exception,
         )
     }
 

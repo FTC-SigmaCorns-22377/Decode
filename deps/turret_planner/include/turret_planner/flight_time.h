@@ -20,6 +20,7 @@ struct FlightTimeResult {
     ShotParams params;  // shot params at T*
     float tau;          // readiness time τ(T*)
     bool feasible;      // params within TurretBounds
+    TInterval iv;       // feasible interval used; pass to flight_time_warm to skip recompute
 };
 
 // Cold-start Piyavskii-Shubert 1D Lipschitz minimization.
@@ -46,6 +47,23 @@ FlightTimeResult flight_time_warm(
     float target_x, float target_y, float target_z,
     float robot_vx, float robot_vy,
     float T_init,
+    const TurretState& current,
+    const TurretWeights& weights,
+    const TurretBounds& bounds,
+    const PhysicsConfig& cfg,
+    const OmegaMapParams& omega,
+    int maxIter = 4
+);
+
+// Warm-started Newton refinement with a pre-computed feasible interval.
+// Skips the 64-point feasibility sweep.  Pass iv from a prior FlightTimeResult
+// (cold or warm) when the target has moved only slightly between calls.
+FlightTimeResult flight_time_warm(
+    float turret_x, float turret_y, float turret_z,
+    float target_x, float target_y, float target_z,
+    float robot_vx, float robot_vy,
+    float T_init,
+    TInterval iv,
     const TurretState& current,
     const TurretWeights& weights,
     const TurretBounds& bounds,

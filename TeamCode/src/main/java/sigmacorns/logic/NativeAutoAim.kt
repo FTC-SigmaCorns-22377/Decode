@@ -19,13 +19,16 @@ import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.rotate
 import sigmacorns.math.Pose2d
+import sigmacorns.opmode.SigmaOpMode.Companion.SIM
 import sigmacorns.subsystem.IntakeTransfer
 import sigmacorns.subsystem.ShooterConfig
 import sigmacorns.subsystem.TurretServoConfig
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.absoluteValue
 import kotlin.math.hypot
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
 /**
@@ -98,6 +101,28 @@ class NativeAutoAim(
     var solved = false
     private set
 
+    /** Snapshot of last robust-solve output for telemetry/visualizer. Null until first solve attempt. */
+    data class SolverDiag(
+        val feasible: Boolean,
+        val heightOk: Boolean,
+        val T1: Float,
+        val T2: Float,
+        val J: Float,
+        val J12: Float,
+        val J23: Float,
+        val s1Theta: Float,
+        val s1Phi: Float,
+        val s1Omega: Float,
+        val s2Theta: Float,
+        val s2Phi: Float,
+        val s2Omega: Float,
+        val omAfterDrop: Float,
+        val missDistance: Float,
+        val exception: String,
+    )
+    var lastSolverDiag: SolverDiag? = null
+        private set
+
     override var primaryShotState: Ballistics.ShotState? = null
         private set
     override var secondaryShotState: Ballistics.ShotState? = null
@@ -155,8 +180,7 @@ class NativeAutoAim(
             AimConfig.interShotAlpha.toFloat()
         )
 
-        val tuningStore = BisectionStore().also { it.load() }
-        val makes = tuningStore.madeSamples()
+        val makes = if (SIM) emptyList() else BisectionStore().also { it.load() }.madeSamples()
         omegaDataPoints = makes.size
         omegaCoeffs = buildOmegaData(makes)
 
@@ -203,17 +227,34 @@ class NativeAutoAim(
         robot.turret.robotAngularVelocity = robot.io.velocity().rot
     }
 
+    var burstStart = 0.seconds
+    var burst = false
+
     private fun setShooterInputs(aimTurret: Boolean) {
         val shooter = robot.shooter
         val turret  = robot.turret
         val fusedPose = autoAim.fusedPose
-        val nBalls = robot.beamBreak.ballCount.coerceAtLeast(if (shotRequested) 1 else 0)
+
+        val nBalls = robot.beamBreak.ballCount.coerceAtLeast(if (shotRequested) {
+            val tBurst = robot.io.time() - burstStart
+            if(!burst || tBurst < AimConfig.transferDelay.seconds*0.5) 3
+            else if( tBurst < AimConfig.transferDelay.seconds*1.5) 2
+            else if( tBurst < AimConfig.transferDelay.seconds*2.5) 1
+            else {
+                burst = false
+                1
+            }
+        } else 0)
 
         val odoVel = Vector2d(robot.io.velocity().v)
         val vel = odoVel.rotate(fusedPose.rot - robot.io.position().rot)
 
-        val tX = fusedPose.v.x.toFloat()
-        val tY = fusedPose.v.y.toFloat()
+        // Turret pivot in field frame: robot center + chassis offset along robot heading.
+        // JoltSimIO.shootBall launches from this same point (RobotModelConstants.turretPos.x).
+        val cosRot = kotlin.math.cos(fusedPose.rot)
+        val sinRot = kotlin.math.sin(fusedPose.rot)
+        val tX = (fusedPose.v.x + turretPos.x * cosRot).toFloat()
+        val tY = (fusedPose.v.y + turretPos.x * sinRot).toFloat()
         val tZ = turretPos.z.toFloat()
         val goal = FieldLandmarks.goalPosition3d(blue, AimConfig.goalHeight)
         val gX = goal.x.toFloat(); val gY = goal.y.toFloat(); val gZ = goal.z.toFloat()
@@ -293,6 +334,29 @@ class NativeAutoAim(
             lastSolveFeasible = r[Robust3ShotPlanIdx.FEASIBLE]
             lastSolveException = "none"
 
+            val s1Om = r[Robust3ShotPlanIdx.S1_OMEGA]
+            val omAfterDrop = s1Om * (1f - AimConfig.dropFraction.toFloat())
+            val s2Om = r[Robust3ShotPlanIdx.S2_OMEGA]
+            val heightOk = s2Om <= omAfterDrop || solveNBalls < 2
+            lastSolverDiag = SolverDiag(
+                feasible  = r[Robust3ShotPlanIdx.FEASIBLE] > 0.5f,
+                heightOk  = heightOk,
+                T1        = r[Robust3ShotPlanIdx.T1],
+                T2        = r[Robust3ShotPlanIdx.T2],
+                J         = r[Robust3ShotPlanIdx.J],
+                J12       = r[Robust3ShotPlanIdx.J_12],
+                J23       = r[Robust3ShotPlanIdx.J_23],
+                s1Theta   = r[Robust3ShotPlanIdx.S1_THETA],
+                s1Phi     = r[Robust3ShotPlanIdx.S1_PHI],
+                s1Omega   = s1Om,
+                s2Theta   = r[Robust3ShotPlanIdx.S2_THETA],
+                s2Phi     = r[Robust3ShotPlanIdx.S2_PHI],
+                s2Omega   = s2Om,
+                omAfterDrop = omAfterDrop,
+                missDistance = missDistance,
+                exception = "none",
+            )
+
             if (r[Robust3ShotPlanIdx.FEASIBLE] > 0.5f) {
                 var solverTheta = r[Robust3ShotPlanIdx.S1_THETA].toDouble()
                 val relAngle = wrapAngle(solverTheta - fusedPose.rot)
@@ -334,6 +398,14 @@ class NativeAutoAim(
             }
         } catch (e: Exception) {
             lastSolveException = e.javaClass.simpleName + ": " + (e.message ?: "")
+            lastSolverDiag = SolverDiag(
+                feasible = false, heightOk = false,
+                T1 = 0f, T2 = 0f, J = Float.NaN, J12 = Float.NaN, J23 = Float.NaN,
+                s1Theta = 0f, s1Phi = 0f, s1Omega = 0f,
+                s2Theta = 0f, s2Phi = 0f, s2Omega = 0f,
+                omAfterDrop = 0f, missDistance = Float.NaN,
+                exception = lastSolveException,
+            )
         }
 
         if (!solved) {
@@ -372,9 +444,14 @@ class NativeAutoAim(
             lastT1, physConfig
         )
 
+        lastSolverDiag = lastSolverDiag?.copy(missDistance = missDistance)
 
+        readyToShoot = solved && (actualTheta - lastTheta).absoluteValue < 0.1 && (actualPhi - lastPhi).absoluteValue < 0.05 && (actualOmega-lastOmega).absoluteValue < 8
 
-        readyToShoot = missDistance < AimConfig.shotTolerance
+        if(readyToShoot &&nBalls > 3) {
+            burst = true
+            burstStart = robot.io.time()
+        }
     }
 
     private fun wrapAngle(a: Double): Double {
@@ -411,18 +488,31 @@ class NativeAutoAim(
             return arr
         }
 
-        // No real data yet: physics-model anchor points omega = v / (radius * launchEfficiency).
-        // Three points spanning the hood and speed range so IDW interpolates (not just constant).
+        // No real data yet: lay down a dense 2D grid of physics-model anchors.
+        // Every anchor satisfies the true SIM relation omega = v / (radius * launchEfficiency).
+        // A *diagonal* (3 colinear points) is degenerate for IDW — queries off the diagonal
+        // get pulled to the nearest anchor's omega instead of the physical value, which
+        // makes close shots overshoot (high-phi/low-v query snaps to high-omega anchor)
+        // and far shots undershoot (low-phi/high-v query snaps to low-omega anchor).
         val omegaMax = flywheelMotor.freeSpeed.toFloat()
         val vMaxF = (omegaMax * flywheelRadius * AimConfig.launchEfficiency).toFloat()
         val phiLo = Math.toRadians(ShooterConfig.minAngleDeg).toFloat()
         val phiHi = Math.toRadians(ShooterConfig.maxAngleDeg).toFloat()
-        val phiMid = (phiLo + phiHi) / 2f
-        return floatArrayOf(
-            3f,
-            phiLo, vMaxF * 0.4f, omegaMax * 0.4f,
-            phiMid, vMaxF * 0.7f, omegaMax * 0.7f,
-            phiHi, vMaxF * 0.95f, omegaMax * 0.95f,
-        )
+        val nPhi = 8
+        val nV = 8
+        val arr = FloatArray(1 + nPhi * nV * 3)
+        arr[0] = (nPhi * nV).toFloat()
+        var idx = 1
+        for (i in 0 until nPhi) {
+            val phi = phiLo + (phiHi - phiLo) * i / (nPhi - 1)
+            for (j in 0 until nV) {
+                val v = vMaxF * (0.05f + 0.9f * j / (nV - 1))
+                val om = v / (flywheelRadius.toFloat() * AimConfig.launchEfficiency.toFloat())
+                arr[idx++] = phi
+                arr[idx++] = v
+                arr[idx++] = om
+            }
+        }
+        return arr
     }
 }

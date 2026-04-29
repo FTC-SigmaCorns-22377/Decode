@@ -70,6 +70,7 @@ class Ballistics(
         stopZ: Double,
         dt: Double = 0.02,
         maxT: Double = 2.5,
+        dragK: Double = 0.0,
     ): List<Vector3d> {
         val theta = shot.theta
         val phi = shot.phi
@@ -90,13 +91,28 @@ class Ballistics(
         val points = ArrayList<Vector3d>()
         points.add(Vector3d(x0, y0, z0))
         var t = dt
+        // With linear drag k>0:
+        //   x(t) = x0 + vx0/k * (1 - exp(-kt))
+        //   z(t) = z0 + (vz0 + g/k)/k * (1 - exp(-kt)) - g*t/k
+        //   vz(t) = (vz0 + g/k) * exp(-kt) - g/k
+        // Matches deps/turret_planner/src/ballistics.cpp and Jolt linear damping.
+        val k = dragK
         while (t <= maxT) {
-            val x = x0 + vx * t
-            val y = y0 + vy * t
-            val z = z0 + vz * t - 0.5 * g * t * t
+            val x: Double; val y: Double; val z: Double; val vzNow: Double
+            if (k > 1e-6) {
+                val decay = (1.0 - exp(-k * t)) / k
+                x = x0 + vx * decay
+                y = y0 + vy * decay
+                z = z0 + (vz + g / k) * decay - g * t / k
+                vzNow = (vz + g / k) * exp(-k * t) - g / k
+            } else {
+                x = x0 + vx * t
+                y = y0 + vy * t
+                z = z0 + vz * t - 0.5 * g * t * t
+                vzNow = vz - g * t
+            }
             points.add(Vector3d(x, y, z))
-            // Stop after we pass stopZ on the way down.
-            if (z < stopZ && (vz - g * t) < 0.0) break
+            if (z < stopZ && vzNow < 0.0) break
             t += dt
         }
         return points

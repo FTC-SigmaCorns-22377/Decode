@@ -7,6 +7,7 @@ let isPaused = false;
 const scrubber = document.getElementById('scrubber');
 const timeDisplay = document.getElementById('time-display');
 const posDisplay = document.getElementById('pos-display');
+const solverDiagEl = document.getElementById('solver-diag');
 const playPauseBtn = document.getElementById('play-pause');
 const liveBtn = document.getElementById('live-btn');
 
@@ -49,8 +50,7 @@ function applyFrame(state) {
     updateBalls(state.balls || []);
     updateGoals(state.goals);
     updateShotViz(state.shotViz);
-    updateGTSAMViz(state.gtsamViz);
-    updateInfo(state.gtsamViz, state.robot);
+    updateSolverDiag(state.solverDiag);
     timeDisplay.textContent = state.t.toFixed(3) + 's';
     const held = state.heldBalls ? state.heldBalls.length : 0;
     posDisplay.innerHTML = `X: ${(-state.robot.x).toFixed(3)}<br>Y: ${state.robot.y.toFixed(3)}<br>Flywheel: ${Math.round(state.robot.flywheelRPM)} RPM<br>Held: ${held}/3`;
@@ -297,5 +297,42 @@ document.addEventListener('keyup', (e) => {
 // for button edge detection; we still need this interval to push stick and
 // trigger values (which are continuous, not event-driven) to the server.
 setInterval(sendInput, 16);
+
+function updateSolverDiag(d) {
+    if (!d) { solverDiagEl.innerHTML = '<span class="label">solver: —</span>'; return; }
+
+    const fmt1 = v => (typeof v === 'number' && isFinite(v)) ? v.toFixed(1) : '—';
+    const fmt3 = v => (typeof v === 'number' && isFinite(v)) ? v.toFixed(3) : '—';
+
+    let statusCls, statusTxt;
+    if (d.feasible && d.heightOk) {
+        statusCls = 'feasible'; statusTxt = 'FEASIBLE';
+    } else if (d.bestPossible) {
+        statusCls = 'best-possible'; statusTxt = 'BEST (height constrained)';
+    } else {
+        statusCls = 'infeasible'; statusTxt = d.exception !== 'none' ? 'ERROR' : 'INFEASIBLE';
+    }
+
+    const ready = d.readyToShoot
+        ? '<span class="feasible">READY</span>'
+        : '<span class="infeasible">NOT READY</span>';
+
+    const heightRow = d.feasible || d.bestPossible ? `
+<span class="label">s1ω drop→</span> ${fmt1(d.omAfterDropRpm)} rpm &nbsp;
+<span class="label">s2ω:</span> ${fmt1(d.s2OmegaRpm)} rpm
+<span class="${d.heightOk ? 'feasible' : 'infeasible'}">${d.heightOk ? '✓' : '✗'} height</span><br>` : '';
+
+    const errRow = d.exception !== 'none'
+        ? `<span class="infeasible">${d.exception}</span><br>` : '';
+
+    solverDiagEl.innerHTML = `
+<b>SOLVER</b> &nbsp;<span class="${statusCls}">${statusTxt}</span> &nbsp;${ready}<br>
+<span class="label">T1:</span> ${fmt3(d.T1)}s &nbsp;<span class="label">T2:</span> ${fmt3(d.T2)}s<br>
+<span class="label">J:</span> ${fmt3(d.J)} &nbsp;<span class="label">J12:</span> ${fmt3(d.J12)} &nbsp;<span class="label">J23:</span> ${fmt3(d.J23)}<br>
+<span class="label">s1</span> θ=${fmt1(d.s1Theta)}° φ=${fmt1(d.s1PhiDeg)}° ω=${fmt1(d.s1OmegaRpm)}rpm<br>
+<span class="label">s2</span> θ=${fmt1(d.s2Theta)}° φ=${fmt1(d.s2PhiDeg)}° ω=${fmt1(d.s2OmegaRpm)}rpm<br>
+${heightRow}<span class="label">miss:</span> ${fmt3(d.missDistance)}m<br>
+${errRow}`.trim();
+}
 
 connect();
