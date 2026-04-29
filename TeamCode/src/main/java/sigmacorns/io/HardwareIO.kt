@@ -211,9 +211,10 @@ class HardwareIO(hardwareMap: HardwareMap): SigmaIO {
             turretRightServo?.position = turretRight
             lastTurretRight = turretRight
         }
-        if (shouldUpdate(hood, lastHood)) {
+        if (shouldUpdate(hood, lastHood) && hood > ShooterConfig.minServo && hood < ShooterConfig.maxServo) {
             hoodServo?.position = hood
             lastHood = hood
+            println("Hood servo value: " + hood);
         }
         if (shouldUpdate(blocker, lastBlocker)) {
             blockerServo?.position = blocker

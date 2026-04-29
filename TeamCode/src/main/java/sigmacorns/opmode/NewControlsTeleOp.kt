@@ -275,6 +275,7 @@ class NewControlsTeleOp : SigmaOpMode() {
                 robot.aimFlywheel = false
                 robot.aim.shotRequested = false
             } else {
+                val autoZoneShotActive = autoAimEnabled && robot.intakeCoordinator.autoShootEnabled
                 if (autoAimEnabled) {
                     robot.aimFlywheel = true
                     robot.shooter.flywheelTarget = if (flywheelAlwaysOn) 240.0 else 0.0
@@ -282,8 +283,10 @@ class NewControlsTeleOp : SigmaOpMode() {
                     robot.aimFlywheel = false
                     robot.shooter.flywheelTarget = 363.0
                 }
-                robot.aim.shotRequested = false
-                if (robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
+                if (!autoZoneShotActive) {
+                    robot.aim.shotRequested = false
+                }
+                if (!autoZoneShotActive && robot.intakeTransfer.state == IntakeTransfer.State.TRANSFERRING) {
                     robot.intakeTransfer.state = IntakeTransfer.State.IDLE
                 }
             }

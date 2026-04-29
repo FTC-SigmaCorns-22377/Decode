@@ -196,7 +196,9 @@ class Shooter(
         val angle = (base + manualOffset).coerceIn(minRad, maxRad)
         computedHoodAngle = angle
         hoodServoPosition = hoodAngleToServo(angle)
-        robot.io.hood = hoodServoPosition
+        if (hoodServoPosition.isFinite() && hoodServoPosition >= ShooterConfig.minServo && hoodServoPosition <= ShooterConfig.maxServo) {
+            robot.io.hood = hoodServoPosition
+        }
     }
 
     private fun hoodAngleToServo(angle: Double): Double {
@@ -216,9 +218,9 @@ class Shooter(
 }
 
 object ShooterConfig {
-    @JvmField var minAngleDeg = 35.0
+    @JvmField var minAngleDeg = 39.0
     @JvmField var maxAngleDeg = 60.0
     @JvmField var defaultAngleDeg = 45.0
-    @JvmField var minServo = 0.2083
-    @JvmField var maxServo = 1.0
+    @JvmField var minServo = 0.0//0.2083
+    @JvmField var maxServo = 0.35//1.0
 }

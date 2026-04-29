@@ -17,7 +17,7 @@ object EstimatorConfig {
     @JvmField var enableRobustTagLoss = true
     @JvmField var robustTagLoss = 0
     @JvmField var robustTagLossK = 1.5
-    @JvmField var enableTagGating = true
+    @JvmField var enableTagGating = false
     /** Minimum tag area as % of image (Limelight ta value, 0-100). Tags below this are discarded. */
     @JvmField var minTagAreaPct = 0.1
     @JvmField var maxTagViewAngleDeg = 60.0
