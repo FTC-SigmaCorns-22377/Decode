@@ -234,8 +234,12 @@ class NativeAutoAim(
         val odoVel = Vector2d(robot.io.velocity().v)
         val vel = odoVel.rotate(fusedPose.rot - robot.io.position().rot)
 
-        val tX = fusedPose.v.x.toFloat()
-        val tY = fusedPose.v.y.toFloat()
+        // Turret pivot in field frame: robot center + chassis offset along robot heading.
+        // JoltSimIO.shootBall launches from this same point (RobotModelConstants.turretPos.x).
+        val cosRot = kotlin.math.cos(fusedPose.rot)
+        val sinRot = kotlin.math.sin(fusedPose.rot)
+        val tX = (fusedPose.v.x + turretPos.x * cosRot).toFloat()
+        val tY = (fusedPose.v.y + turretPos.x * sinRot).toFloat()
         val tZ = turretPos.z.toFloat()
         val goal = FieldLandmarks.goalPosition3d(blue, AimConfig.goalHeight)
         val gX = goal.x.toFloat(); val gY = goal.y.toFloat(); val gZ = goal.z.toFloat()
