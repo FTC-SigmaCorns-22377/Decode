@@ -25,9 +25,20 @@
             padding: 8px 14px; font-size: 14px; line-height: 1.6;
             pointer-events: none; z-index: 10;
         }
+        #solver-diag {
+            position: fixed; top: 12px; left: 12px;
+            background: rgba(15, 52, 96, 0.85); border: 1px solid #555;
+            padding: 8px 14px; font-size: 12px; line-height: 1.7;
+            pointer-events: none; z-index: 10; min-width: 220px;
+        }
+        #solver-diag .feasible   { color: #4caf50; }
+        #solver-diag .infeasible { color: #f44336; }
+        #solver-diag .best-possible { color: #ff9800; }
+        #solver-diag .label { color: #aaa; }
     </style>
 </head>
 <body>
+    <div id="solver-diag">solver: —</div>
     <div id="pos-display">X: 0.000<br>Y: 0.000</div>
     <div id="canvas-container"></div>
     <div id="controls">

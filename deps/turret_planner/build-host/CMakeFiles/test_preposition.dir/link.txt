@@ -1,1 +1,0 @@
-/usr/bin/c++  -O2 -march=native -ffast-math -fno-exceptions -fno-rtti -O3 -DNDEBUG -flto=auto -fno-fat-lto-objects -Wl,--dependency-file=CMakeFiles/test_preposition.dir/link.d CMakeFiles/test_preposition.dir/tests/test_preposition.cpp.o -o test_preposition  libturret_planner.a

@@ -92,7 +92,7 @@ static inline OmegaMapParams unpack_omega(const jfloat* p) {
                 if (v_k > om.v_hi[nl-1]) om.v_hi[nl-1] = v_k;
             }
         }
-        om.n_levels = nl;
+        om.n_levels = 0; // region limits disabled — IDW interpolates freely outside tuned data
     }
 
     return om;

@@ -151,7 +151,8 @@ void test_adjust_matches_grid() {
     TInterval iv2 = ballistics_feasible_interval(t2x, t2y, t2z, 0,0, bounds, cfg, 1e-4f);
     assert(iv1.t_lo < iv1.t_hi && iv2.t_lo < iv2.t_hi);
 
-    // Brute-force 21x21 grid.
+    // Brute-force 21x21 grid — apply the same height-feasibility constraint as the solver:
+    // shot 2 must be achievable with the post-drop omega from shot 1.
     const int N = 20;
     float best_grid_cost = 1e30f;
     float best_T1 = iv1.t_lo, best_T2 = iv2.t_lo;
@@ -159,10 +160,13 @@ void test_adjust_matches_grid() {
         float T1 = iv1.t_lo + (iv1.t_hi - iv1.t_lo) * float(i) / float(N);
         ShotParams s1 = ballistics_solve(0,0,0, t1x, t1y, t1z, 0, 0, T1, cfg, om);
         if (!ballistics_is_feasible(s1, T1, bounds, cfg, om)) continue;
+        float om_after_drop = s1.omega_flywheel * (1.f - drop_fraction);
         for (int j = 0; j <= N; ++j) {
             float T2 = iv2.t_lo + (iv2.t_hi - iv2.t_lo) * float(j) / float(N);
             ShotParams s2 = ballistics_solve(0,0,0, t2x, t2y, t2z, 0, 0, T2, cfg, om);
             if (!ballistics_is_feasible(s2, T2, bounds, cfg, om)) continue;
+            // Height constraint: shot 2 must reach target height with post-drop omega.
+            if (s2.omega_flywheel > om_after_drop) continue;
             float cost = adjust_cost(s1, s2, cur, drop_fraction);
             if (cost < best_grid_cost) {
                 best_grid_cost = cost;

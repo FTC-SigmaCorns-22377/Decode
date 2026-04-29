@@ -312,7 +312,7 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.15 // m
+    @JvmField var shotTolerance = 0.001 // m
 
     // Proportional flywheel speed loss per shot. After firing, the flywheel
     // retains (1 - dropFraction) of its speed. When > 0, NativeAutoAim uses
@@ -335,7 +335,7 @@ object AimConfig {
 }
 
 object ShotSolverConfig {
-    @JvmField var wOmega = 0.001   // s per rad/s flywheel change
+    @JvmField var wOmega = 0.005   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
     @JvmField var wPhi = 0.03      // s per rad hood change
     @JvmField var tolerance = 0.05

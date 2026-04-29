@@ -1,1 +1,0 @@
-/usr/bin/c++  -O2 -march=native -ffast-math -fno-exceptions -fno-rtti -O3 -DNDEBUG -flto=auto -fno-fat-lto-objects -Wl,--dependency-file=CMakeFiles/test_robust_shot.dir/link.d CMakeFiles/test_robust_shot.dir/tests/test_robust_shot.cpp.o -o test_robust_shot  libturret_planner.a
