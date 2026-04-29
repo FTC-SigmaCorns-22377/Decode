@@ -8,6 +8,7 @@ import sigmacorns.Robot
 import sigmacorns.control.trajopt.TrajoptLoader
 import sigmacorns.control.trajopt.TrajoptTrajectory
 import sigmacorns.math.Pose2d
+import sigmacorns.opmode.PosePersistence
 import sigmacorns.opmode.SigmaOpMode
 import sigmacorns.subsystem.IntakeTransfer
 import kotlin.time.Duration
@@ -130,6 +131,8 @@ class Auto18CloseRed : SigmaOpMode() {
             robot.update()
             io.time() - endTime > 400.milliseconds
         }
+
+        PosePersistence.save(storageDir(), io.position())
 
         io.driveFL = 0.0
         io.driveBL = 0.0
