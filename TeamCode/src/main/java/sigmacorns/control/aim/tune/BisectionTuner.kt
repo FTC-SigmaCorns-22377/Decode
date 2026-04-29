@@ -20,8 +20,7 @@ import sigmacorns.subsystem.ShooterConfig
  * recorded (d, phi, omega) tuple to the (phi, v) basis the solver queries at runtime.
  */
 class BisectionTuner(
-    private val store: BisectionStore,
-    private val getCurrentOmegaCoeffs: () -> FloatArray
+    private val store: BisectionStore
 ) {
     companion object {
         val DISTANCES = listOf(1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5)
@@ -32,10 +31,10 @@ class BisectionTuner(
             (ShooterConfig.minAngleDeg + ShooterConfig.maxAngleDeg*3.0) / 4.0,
             ShooterConfig.maxAngleDeg - 5.0
         )
+        private const val OMEGA_MIN = 0.0
         private const val OMEGA_MAX = 628.0    // ~6000 rpm
         private const val CONVERGE_WIDTH = 15.0 // rad/s bracket width → bisect done
         const val N_MAKES_TARGET = 3           // makes required per cell before advancing
-        private const val SEED_MARGIN = 0.25   // ±25% bracket around seeded omega
 
         fun cellId(d: Double, phi: Double) = "d${d.toInt()}p${phi.toInt()}"
     }
@@ -46,25 +45,15 @@ class BisectionTuner(
         for (d in DISTANCES) for (phi in HOOD_DEGS) {
             val id = cellId(d, phi)
             if (store.getCell(id) == null) {
-                val seed = seedOmega(d, phi)
                 store.putCell(CellState(
                     cellId = id,
                     targetDistance = d,
                     targetHoodDeg = phi,
-                    omegaLo = (seed * (1.0 - SEED_MARGIN)).coerceAtLeast(0.0),
-                    omegaHi = (seed * (1.0 + SEED_MARGIN)).coerceAtMost(OMEGA_MAX)
+                    omegaLo = OMEGA_MIN,
+                    omegaHi = OMEGA_MAX
                 ))
             }
         }
-    }
-
-    private fun seedOmega(d: Double, hoodDeg: Double): Double {
-        val phi = Math.toRadians(hoodDeg)
-        val v = OmegaCoefFitter.distanceHoodToVExit(d, phi)
-            ?: return d * 80.0
-        val c = getCurrentOmegaCoeffs()
-        val omega = c[0] + c[1]*v + c[2]*phi + c[3]*v*v + c[4]*phi*v + c[5]*phi*phi
-        return omega.toDouble().coerceIn(100.0, OMEGA_MAX)
     }
 
     fun cells(): List<CellState> = store.getCells()
@@ -132,9 +121,8 @@ class BisectionTuner(
     }
 
     fun resetCell(cell: CellState) {
-        val seed = seedOmega(cell.targetDistance, cell.targetHoodDeg)
-        cell.omegaLo = (seed * (1.0 - SEED_MARGIN)).coerceAtLeast(0.0)
-        cell.omegaHi = (seed * (1.0 + SEED_MARGIN)).coerceAtMost(OMEGA_MAX)
+        cell.omegaLo = OMEGA_MIN
+        cell.omegaHi = OMEGA_MAX
         cell.nShots = 0
         cell.nMades = 0
         cell.converged = false
@@ -151,9 +139,8 @@ class BisectionTuner(
     fun undoLastSample(cell: CellState) {
         store.removeLastSample()
         // Recompute bracket from remaining samples for this cell
-        val seed = seedOmega(cell.targetDistance, cell.targetHoodDeg)
-        cell.omegaLo = (seed * (1.0 - SEED_MARGIN)).coerceAtLeast(0.0)
-        cell.omegaHi = (seed * (1.0 + SEED_MARGIN)).coerceAtMost(OMEGA_MAX)
+        cell.omegaLo = OMEGA_MIN
+        cell.omegaHi = OMEGA_MAX
         cell.converged = false
         cell.skipped = false
         cell.lastOmegaMade = null

@@ -25,8 +25,10 @@ import sigmacorns.subsystem.ShooterConfig
 import sigmacorns.subsystem.TurretServoConfig
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.absoluteValue
 import kotlin.math.hypot
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
 /**
@@ -225,11 +227,24 @@ class NativeAutoAim(
         robot.turret.robotAngularVelocity = robot.io.velocity().rot
     }
 
+    var burstStart = 0.seconds
+    var burst = false
+
     private fun setShooterInputs(aimTurret: Boolean) {
         val shooter = robot.shooter
         val turret  = robot.turret
         val fusedPose = autoAim.fusedPose
-        val nBalls = robot.beamBreak.ballCount.coerceAtLeast(if (shotRequested) 1 else 0)
+
+        val nBalls = robot.beamBreak.ballCount.coerceAtLeast(if (shotRequested) {
+            val tBurst = robot.io.time() - burstStart
+            if(!burst || tBurst < AimConfig.transferDelay.seconds*0.5) 3
+            else if( tBurst < AimConfig.transferDelay.seconds*1.5) 2
+            else if( tBurst < AimConfig.transferDelay.seconds*2.5) 1
+            else {
+                burst = false
+                1
+            }
+        } else 0)
 
         val odoVel = Vector2d(robot.io.velocity().v)
         val vel = odoVel.rotate(fusedPose.rot - robot.io.position().rot)
@@ -431,7 +446,12 @@ class NativeAutoAim(
 
         lastSolverDiag = lastSolverDiag?.copy(missDistance = missDistance)
 
-        readyToShoot = (missDistance < AimConfig.shotTolerance) && solved
+        readyToShoot = solved && (actualTheta - lastTheta).absoluteValue < 0.1 && (actualPhi - lastPhi).absoluteValue < 0.05 && (actualOmega-lastOmega).absoluteValue < 8
+
+        if(readyToShoot &&nBalls > 3) {
+            burst = true
+            burstStart = robot.io.time()
+        }
     }
 
     private fun wrapAngle(a: Double): Double {

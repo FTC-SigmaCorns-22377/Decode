@@ -66,7 +66,7 @@ class OmegaTunerOpMode : SigmaOpMode() {
         dataStore.load()
         var currentCoeffs = OmegaCoefFitter.fit(dataStore.getPoints())
 
-        val tuner = BisectionTuner(store, getCurrentOmegaCoeffs = { currentCoeffs })
+        val tuner = BisectionTuner(store)
 
         val webServer = OmegaTunerWebServer(
             port = 8083,

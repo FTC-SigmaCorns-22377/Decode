@@ -294,7 +294,7 @@ object AimConfig {
     @JvmField var dragK = 0.65
 
     /** Time (seconds) from when shot is requested until ball leaves shooter */
-    @JvmField var transferDelay = 0.20
+    @JvmField var transferDelay = 0.15
 
     @JvmField var launchEfficiency = 0.3
     val omegaMap = object : OmegaMap {
@@ -312,14 +312,14 @@ object AimConfig {
     @JvmField var vMax = flywheelMotor.freeSpeed * launchEfficiency * flywheelRadius
 
     // shots area allowed when the ball will pass < shotTolerance distance from the target when the ball is at the same height as the target
-    @JvmField var shotTolerance = 0.001 // m
+    @JvmField var shotTolerance = 0.01 // m
 
     // Proportional flywheel speed loss per shot. After firing, the flywheel
     // retains (1 - dropFraction) of its speed. When > 0, NativeAutoAim uses
     // the robust shot planner so the first shot's parameters leave the flywheel
     // at a speed compatible with the next shot after this proportional loss.
     // Set to 0 to fall back to single-shot optimal aim.
-    @JvmField var dropFraction = 0.05
+    @JvmField var dropFraction = 0.2
 
     /** Flywheel spins up when estimated time to a launch zone is below this (seconds). */
     @JvmField var spinupLeadTime = 1.5
@@ -335,7 +335,7 @@ object AimConfig {
 }
 
 object ShotSolverConfig {
-    @JvmField var wOmega = 0.005   // s per rad/s flywheel change
+    @JvmField var wOmega = 0.0035   // s per rad/s flywheel change
     @JvmField var wTheta = 0.1    // s per rad turret change
     @JvmField var wPhi = 0.03      // s per rad hood change
     @JvmField var tolerance = 0.05
