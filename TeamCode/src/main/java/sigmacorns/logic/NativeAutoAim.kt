@@ -279,7 +279,7 @@ class NativeAutoAim(
             else if( tBurst < AimConfig.transferDelay.seconds*2.5) 1
             else {
                 burst = false
-                1
+                3
             }
         } else 0)
 
@@ -483,7 +483,7 @@ class NativeAutoAim(
 
         lastSolverDiag = lastSolverDiag?.copy(missDistance = missDistance)
 
-        readyToShoot = solved && (actualTheta - lastTheta).absoluteValue < 0.1 && (actualPhi - lastPhi).absoluteValue < 0.05 && (actualOmega-lastOmega).absoluteValue < 8
+        readyToShoot = shotRequested && solved && (actualTheta - lastTheta).absoluteValue < 0.1 && (actualPhi - lastPhi).absoluteValue < 0.05 && (actualOmega-lastOmega).absoluteValue < 8
 
         if(readyToShoot &&nBalls > 3) {
             burst = true
