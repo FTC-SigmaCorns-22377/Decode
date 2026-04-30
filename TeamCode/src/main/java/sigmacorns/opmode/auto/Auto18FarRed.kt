@@ -27,7 +27,7 @@ class Auto18FarRed : SigmaOpMode() {
         private val FORCE_TRANSFER_TIMEOUT = 600.milliseconds
         private val WAYPOINT_STOP_HOLD = 300.milliseconds
         private val SHOOT_EMPTY_DEBOUNCE = 120.milliseconds
-        private const val DISABLE_HOLD_DURING_SHOOT = true
+        private const val DISABLE_HOLD_DURING_SHOOT = false
     }
 
     override fun runOpMode() {

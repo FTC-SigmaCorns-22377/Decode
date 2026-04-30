@@ -50,7 +50,7 @@ class Turret(val io: SigmaIO) {
     var localizationTrusted: Boolean = false
 
     /** Slew rate limiter for untrusted localization (90 deg/s) */
-    private val angleSlewLimiter = SlewRateLimiter(PI/2)
+    private val angleSlewLimiter = SlewRateLimiter(PI*2)
 
     // Current turret angle in radians from sensor feedback
     var pos = 0.0
