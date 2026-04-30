@@ -15,6 +15,7 @@ import sigmacorns.control.aim.tune.BisectionSample
 import sigmacorns.control.aim.tune.BisectionStore
 import sigmacorns.control.aim.tune.OmegaCoefFitter
 import sigmacorns.control.localization.GTSAMEstimator
+import sigmacorns.control.localization.EstimatorConfig
 import sigmacorns.control.localization.VisionTracker
 import sigmacorns.io.HardwareIO
 import sigmacorns.io.rotate
@@ -47,6 +48,10 @@ class NativeAutoAim(
     private val robot: Robot,
     private val blue: Boolean,
 ) : AutoAim {
+    companion object {
+        private val VISION_TURRET_TARGET_WINDOW_RAD = Math.toRadians(40.0)
+    }
+
 
     override lateinit var autoAim: GTSAMEstimator
         private set
@@ -70,6 +75,10 @@ class NativeAutoAim(
 
     // Accumulates time since last optimalTColdH diagnostic call (throttled to ~1 Hz).
     private var diagColdAccumSec: Double = 10.0
+
+    private var lastTurretPos: Double? = null
+    private var lastVisionUpdateTimeMs: Long = 0
+    private var turretAngularVelocity: Double = 0.0
 
     private var lastTheta: Float = 0f
     private var lastPhi:   Float = 0f
@@ -217,9 +226,37 @@ class NativeAutoAim(
 
     private fun updateVision() {
         val visionResult = visionTracker?.read()
-        autoAim.update(robot.io.position(), robot.io.velocity(), robot.io.turretPosition(), visionResult)
+
+        val nowMs = System.currentTimeMillis()
+        val dtMs = nowMs - lastVisionUpdateTimeMs
+        if (dtMs > 0 && lastTurretPos != null) {
+            turretAngularVelocity = abs(robot.turret.pos - lastTurretPos!!) / (dtMs / 1000.0)
+        }
+        lastTurretPos = robot.turret.pos
+        lastVisionUpdateTimeMs = nowMs
+
+        val robotOmega = abs(robot.io.velocity().rot)
+        val maxRobotOmega = EstimatorConfig.maxRobotAngularVelForVision
+        val maxTurretOmega = EstimatorConfig.maxTurretAngularVelForVision
+        val tooFast = (maxRobotOmega > 0 && robotOmega > maxRobotOmega) ||
+            (maxTurretOmega > 0 && turretAngularVelocity > maxTurretOmega)
+
+        val turretInRange = turretInTargetRange(autoAim.fusedPose)
+        val gatedVision = if (turretInRange && !tooFast) visionResult else null
+
+        autoAim.update(robot.io.position(), robot.io.velocity(), robot.io.turretPosition(), gatedVision)
         val fusedPose = autoAim.fusedPose
         targetDistance = hypot(goalPosition.x - fusedPose.v.x, goalPosition.y - fusedPose.v.y)
+    }
+
+    private fun turretInTargetRange(fusedPose: Pose2d): Boolean {
+        val goalHeadingField = kotlin.math.atan2(
+            goalPosition.y - fusedPose.v.y,
+            goalPosition.x - fusedPose.v.x,
+        )
+        val desiredTurretRobot = wrapAngle(goalHeadingField - fusedPose.rot)
+        val turretErr = abs(wrapAngle(desiredTurretRobot - robot.turret.pos))
+        return turretErr <= VISION_TURRET_TARGET_WINDOW_RAD
     }
 
     private fun setTurretInputs() {

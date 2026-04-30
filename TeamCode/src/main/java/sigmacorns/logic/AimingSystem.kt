@@ -43,6 +43,10 @@ class AimingSystem(
     private val robot: Robot,
     private val blue: Boolean,
 ) : AutoAim {
+    companion object {
+        private val VISION_TURRET_TARGET_WINDOW_RAD = Math.toRadians(40.0)
+    }
+
     val turret get() = robot.turret
     override lateinit var autoAim: GTSAMEstimator
         private set
@@ -126,7 +130,7 @@ class AimingSystem(
      */
     fun updateVision() {
         val visionResult = visionTracker?.read()
-        val turretInRange = robot.turret.pos in robot.turret.angleLimits
+        val turretInRange = turretInTargetRange(autoAim.fusedPose)
 
         val nowMs = System.currentTimeMillis()
         val dtMs = nowMs - lastVisionUpdateTimeMs
@@ -149,7 +153,24 @@ class AimingSystem(
         targetDistance = hypot(goalPosition.x - fusedPose.v.x, goalPosition.y - fusedPose.v.y)
 
         // Set localization trusted flag (e.g., if vision is tracking or estimator is confident)
-        robot.turret.localizationTrusted = visionResult != null || autoAim.enabled
+        robot.turret.localizationTrusted = gatedVision != null || autoAim.enabled
+    }
+
+    private fun turretInTargetRange(fusedPose: Pose2d): Boolean {
+        val goalHeadingField = kotlin.math.atan2(
+            goalPosition.y - fusedPose.v.y,
+            goalPosition.x - fusedPose.v.x,
+        )
+        val desiredTurretRobot = wrapAngle(goalHeadingField - fusedPose.rot)
+        val turretErr = abs(wrapAngle(desiredTurretRobot - robot.turret.pos))
+        return turretErr <= VISION_TURRET_TARGET_WINDOW_RAD
+    }
+
+    private fun wrapAngle(a: Double): Double {
+        var r = a % (2 * Math.PI)
+        if (r > Math.PI) r -= 2 * Math.PI
+        if (r < -Math.PI) r += 2 * Math.PI
+        return r
     }
 
     /**
