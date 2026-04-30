@@ -293,7 +293,8 @@ class NativeAutoAim(
         val tX = (fusedPose.v.x + turretPos.x * cosRot).toFloat()
         val tY = (fusedPose.v.y + turretPos.x * sinRot).toFloat()
         val tZ = turretPos.z.toFloat()
-        val goal = FieldLandmarks.goalPosition3d(blue, AimConfig.goalHeight)
+        val goal = FieldLandmarks.goalPosition3d(blue,
+            if (targetDistance > 2.0) { AimConfig.goalHeight - 0.05 } else { AimConfig.goalHeight + 0.10 } )
         val gX = goal.x.toFloat(); val gY = goal.y.toFloat(); val gZ = goal.z.toFloat()
         val curTheta = (turret.pos + fusedPose.rot).toFloat()
         val curPhi   = shooter.computedHoodAngle.toFloat()
