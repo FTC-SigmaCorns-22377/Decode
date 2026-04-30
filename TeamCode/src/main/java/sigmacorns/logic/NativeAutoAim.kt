@@ -274,12 +274,12 @@ class NativeAutoAim(
 
         val nBalls = robot.beamBreak.ballCount.coerceAtLeast(if (shotRequested) {
             val tBurst = robot.io.time() - burstStart
-            if(!burst || tBurst < AimConfig.transferDelay.seconds*0.5) 3
-            else if( tBurst < AimConfig.transferDelay.seconds*1.5) 2
-            else if( tBurst < AimConfig.transferDelay.seconds*2.5) 1
+            if(!burst || tBurst < AimConfig.transferDelay.seconds*1.5) 3
+            else if( tBurst < AimConfig.transferDelay.seconds*2.25) 2
+            else if( tBurst < AimConfig.transferDelay.seconds*3.0) 1
             else {
                 burst = false
-                1
+                3
             }
         } else 0)
 
@@ -294,7 +294,7 @@ class NativeAutoAim(
         val tY = (fusedPose.v.y + turretPos.x * sinRot).toFloat()
         val tZ = turretPos.z.toFloat()
         val goal = FieldLandmarks.goalPosition3d(blue,
-            if (targetDistance > 2.0) { AimConfig.goalHeight - 0.05 } else { AimConfig.goalHeight + 0.10 } )
+            if (targetDistance > 2.0) { AimConfig.goalHeight } else { AimConfig.goalHeight } )
         val gX = goal.x.toFloat(); val gY = goal.y.toFloat(); val gZ = goal.z.toFloat()
         val curTheta = (turret.pos + fusedPose.rot).toFloat()
         val curPhi   = shooter.computedHoodAngle.toFloat()

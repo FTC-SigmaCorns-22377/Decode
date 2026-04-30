@@ -277,7 +277,7 @@ class FusionWorker(
                         val startNs = System.nanoTime()
                         PoseEstimatorBridge.nativeUpdate(localHandle)
                         lastSolveTimeMs = (System.nanoTime() - startNs) / 1_000_000.0
-                        val estimate = PoseEstimatorBridge.nativeGetCurrentEstimate(localHandle)
+                        val estimate = PoseEstimatorBridge.nativeGetPostProcessedEstimate(localHandle)
                         if (estimate.size >= 3) {
                             fusedPose = Pose2d(estimate[0], estimate[1], estimate[2])
                         }
@@ -301,6 +301,7 @@ class FusionWorker(
 
     init {
         workerThread = Thread(workerLoop, "GTSAM-Worker")
+        workerThread.priority = Thread.NORM_PRIORITY - 2
         workerThread.start()
     }
 
@@ -372,6 +373,7 @@ class FusionWorker(
             config.postProcessVisionGapS,
             config.postProcessSettleS,
             config.postProcessSettleUpdates,
+            config.postGapExtraIsam2Updates,
             config.fx,
             config.fy,
             config.cx,
@@ -397,7 +399,14 @@ class FusionWorker(
             config.enableMultiHypothesisInit,
             config.multiHypothesisThetaThreshold,
             config.enableHeadingFlipRecovery,
-            config.headingFlipMinTags
+            config.headingFlipMinTags,
+            config.headingFlipConsecutiveFrames,
+            config.enableReprojectionGate,
+            config.maxReprojectionErrorPx,
+            config.enablePoseJumpGuard,
+            config.poseJumpMaxM,
+            config.poseJumpMaxRad,
+            config.multiHypothesisMinTags
         )
     }
 

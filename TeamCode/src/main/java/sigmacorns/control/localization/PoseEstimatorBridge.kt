@@ -25,6 +25,7 @@ object PoseEstimatorBridge {
         postProcessVisionGapS: Double,
         postProcessSettleS: Double,
         postProcessSettleUpdates: Int,
+        postGapExtraIsam2Updates: Int,
         fx: Double,
         fy: Double,
         cx: Double,
@@ -50,7 +51,14 @@ object PoseEstimatorBridge {
         enableMultiHypothesisInit: Boolean,
         multiHypothesisThetaThreshold: Double,
         enableHeadingFlipRecovery: Boolean,
-        headingFlipMinTags: Int
+        headingFlipMinTags: Int,
+        headingFlipConsecutiveFrames: Int,
+        enableReprojectionGate: Boolean,
+        maxReprojectionErrorPx: Double,
+        enablePoseJumpGuard: Boolean,
+        poseJumpMaxM: Double,
+        poseJumpMaxRad: Double,
+        multiHypothesisMinTags: Int
     ): Long
 
     @JvmStatic external fun nativeDestroy(handle: Long)
@@ -89,6 +97,7 @@ object PoseEstimatorBridge {
 
     @JvmStatic external fun nativeUpdate(handle: Long)
     @JvmStatic external fun nativeGetCurrentEstimate(handle: Long): DoubleArray
+    @JvmStatic external fun nativeGetPostProcessedEstimate(handle: Long): DoubleArray
     @JvmStatic external fun nativeGetCurrentEstimateWithCovariance(handle: Long): DoubleArray
     @JvmStatic external fun nativeIsInitialized(handle: Long): Boolean
     @JvmStatic external fun nativeGetLastSolveTimeMs(handle: Long): Double
