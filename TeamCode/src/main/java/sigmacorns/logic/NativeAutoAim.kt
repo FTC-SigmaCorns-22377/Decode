@@ -48,6 +48,8 @@ class NativeAutoAim(
     private val robot: Robot,
     private val blue: Boolean,
 ) : AutoAim {
+
+    private var filteredFlywheelOmega: Double? = null
     companion object {
         private val VISION_TURRET_TARGET_WINDOW_RAD = Math.toRadians(40.0)
     }
@@ -298,15 +300,33 @@ class NativeAutoAim(
         val gX = goal.x.toFloat(); val gY = goal.y.toFloat(); val gZ = goal.z.toFloat()
         val curTheta = (turret.pos + fusedPose.rot).toFloat()
         val curPhi   = shooter.computedHoodAngle.toFloat()
-        val curOmega = robot.io.flywheelVelocity().toFloat()
+        val curOmega = lowPassFlywheelOmega(robot.io.flywheelVelocity()).toFloat()
         val robotVx = vel.x.toFloat()
         val robotVy = vel.y.toFloat()
 
-        diagGoalDist = hypot((gX - tX).toDouble(), (gY - tY).toDouble()).toFloat()
+        val rawGoalDist = hypot((gX - tX).toDouble(), (gY - tY).toDouble()).toFloat()
+
+        // Close-to-goal shot shaping: subtract effective goal distance for close shots,
+        // tapering to zero by closeGoalNoAdjustDistanceM (e.g. 3.5m => no change).
+        val noAdjustDist = AimConfig.closeGoalNoAdjustDistanceM.toFloat()
+        val fullAdjustDist = AimConfig.closeGoalFullAdjustDistanceM.toFloat()
+        val requestedDecrease = AimConfig.closeGoalDistanceDecreaseM.toFloat().coerceAtLeast(0f)
+        val ramp = when {
+            noAdjustDist <= fullAdjustDist -> if (rawGoalDist <= fullAdjustDist) 1f else 0f
+            rawGoalDist <= fullAdjustDist -> 1f
+            rawGoalDist >= noAdjustDist -> 0f
+            else -> (noAdjustDist - rawGoalDist) / (noAdjustDist - fullAdjustDist)
+        }
+        val distanceDecrease = requestedDecrease * ramp
+        val biasedGoalDist = (rawGoalDist - distanceDecrease).coerceAtLeast(0.15f)
+        val solveScale = if (rawGoalDist > 1e-3f) biasedGoalDist / rawGoalDist else 1.0f
+        val solveGX = tX + (gX - tX) * solveScale
+        val solveGY = tY + (gY - tY) * solveScale
+        diagGoalDist = biasedGoalDist
 
         // Direct ballistics probe at T=0.5s (diagnostics only — uses cached handle)
         try {
-            val probe = bridge.solveH(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy, 0.5f, physConfig, omegaHandle)
+            val probe = bridge.solveH(tX, tY, tZ, solveGX, solveGY, gZ, robotVx, robotVy, 0.5f, physConfig, omegaHandle)
             diagPhi05   = Math.toDegrees(probe[1].toDouble()).toFloat()
             diagVexit05 = probe[2]
         } catch (e: Exception) {
@@ -318,7 +338,7 @@ class NativeAutoAim(
         if (diagColdAccumSec >= 10000000.0) {
             diagColdAccumSec = 0.0
             try {
-                val cold = bridge.optimalTColdH(tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
+                val cold = bridge.optimalTColdH(tX, tY, tZ, solveGX, solveGY, gZ, robotVx, robotVy,
                     curTheta, curPhi, curOmega, weights, bounds, physConfig, omegaHandle)
                 diagColdFeasible = cold[TurretPlannerBridge.OptimalTIdx.FEASIBLE]
                 diagColdTstar    = cold[TurretPlannerBridge.OptimalTIdx.T_STAR]
@@ -360,7 +380,7 @@ class NativeAutoAim(
         try {
             val r = bridge.robust3ShotPlanH(
                 traj, solveNBalls, tZ,
-                gX, gY, gZ,
+                solveGX, solveGY, gZ,
                 curTheta, curPhi, curOmega,
                 solveNBalls,
                 0f,
@@ -477,7 +497,7 @@ class NativeAutoAim(
         val actualOmega = robot.io.flywheelVelocity().toFloat()
         val actualVexit = bridge.vExitFromOmegaH(actualPhi, actualOmega, AimConfig.vMax.toFloat(), omegaHandle)
         missDistance = bridge.shotError(
-            tX, tY, tZ, gX, gY, gZ, robotVx, robotVy,
+            tX, tY, tZ, solveGX, solveGY, gZ, robotVx, robotVy,
             actualTheta, actualPhi, actualVexit, actualOmega,
             lastT1, physConfig
         )
@@ -497,6 +517,14 @@ class NativeAutoAim(
         if (r > PI)  r -= 2 * PI
         if (r < -PI) r += 2 * PI
         return r
+    }
+
+    private fun lowPassFlywheelOmega(rawOmega: Double): Double {
+        val alpha = AimConfig.flywheelOmegaLpfAlpha.coerceIn(0.0, 1.0)
+        val prev = filteredFlywheelOmega
+        val filtered = if (prev == null || alpha >= 1.0) rawOmega else prev + alpha * (rawOmega - prev)
+        filteredFlywheelOmega = filtered
+        return filtered
     }
 
     /**

@@ -29,7 +29,7 @@ class Auto18CloseBlue : SigmaOpMode() {
         private val GO_TO_GATE_FULL_BEAMBREAK_HOLD = 200.milliseconds
         private val WAYPOINT_STOP_HOLD = 300.milliseconds
         private val FIRST_SHOT_SPINUP_HOLD = 450.milliseconds
-        private val SHOOT_EMPTY_DEBOUNCE = 120.milliseconds
+        private val SHOOT_EMPTY_DEBOUNCE = 130.milliseconds
         private const val DISABLE_HOLD_DURING_SHOOT = false
     }
 

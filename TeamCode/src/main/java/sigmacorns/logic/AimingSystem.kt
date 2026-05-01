@@ -1,5 +1,6 @@
 package sigmacorns.logic
 
+import com.bylazar.configurables.annotations.Configurable
 import org.joml.Vector2d
 import org.joml.Vector3d
 import sigmacorns.Robot
@@ -43,6 +44,8 @@ class AimingSystem(
     private val robot: Robot,
     private val blue: Boolean,
 ) : AutoAim {
+
+    private var filteredFlywheelOmega: Double? = null
     companion object {
         private val VISION_TURRET_TARGET_WINDOW_RAD = Math.toRadians(40.0)
     }
@@ -215,7 +218,8 @@ class AimingSystem(
             vR = Vector2d(vel.x, vel.y),
         )
 
-        val currentVexit = AimConfig.omegaInv(robot.io.flywheelVelocity(),robot.shooter.hoodAngle).coerceAtLeast(5.0)
+        val filteredOmega = lowPassFlywheelOmega(robot.io.flywheelVelocity())
+        val currentVexit = AimConfig.omegaInv(filteredOmega, robot.shooter.hoodAngle).coerceAtLeast(5.0)
         val currentState = Ballistics.ShotState(
             theta = turret.pos + fusedPose.rot,
             phi = shooter.computedHoodAngle,
@@ -287,6 +291,14 @@ class AimingSystem(
         readyToShoot = !isFallback && curShotErr < AimConfig.shotTolerance
     }
 
+    private fun lowPassFlywheelOmega(rawOmega: Double): Double {
+        val alpha = AimConfig.flywheelOmegaLpfAlpha.coerceIn(0.0, 1.0)
+        val prev = filteredFlywheelOmega
+        val filtered = if (prev == null || alpha >= 1.0) rawOmega else prev + alpha * (rawOmega - prev)
+        filteredFlywheelOmega = filtered
+        return filtered
+    }
+
     /**
      * Convenience: full pipeline update (vision -> turret inputs -> solver targets).
      * positionOverride is applied last and always wins over solver output.
@@ -307,6 +319,7 @@ class AimingSystem(
     }
 }
 
+@Configurable
 object AimConfig {
     @JvmField var goalHeight = 1.14
     @JvmField var g = 9.81
@@ -318,6 +331,13 @@ object AimConfig {
     @JvmField var transferDelay = 0.15
 
     @JvmField var launchEfficiency = 0.3
+    @JvmField var flywheelOmegaLpfAlpha = 0.8
+    /** Goal distance where close-shot shaping fully tapers out (no adjustment at/above this). */
+    @JvmField var closeGoalNoAdjustDistanceM = 2.5
+    /** Goal distance where full close-shot adjustment is applied. */
+    @JvmField var closeGoalFullAdjustDistanceM = 0.5
+    /** How much goal distance to subtract at full close-shot adjustment (meters). */
+    @JvmField var closeGoalDistanceDecreaseM = 1.0
     val omegaMap = object : OmegaMap {
         override fun omega(hood: Double, vExit: Double) =
             vExit / (flywheelRadius * launchEfficiency)
