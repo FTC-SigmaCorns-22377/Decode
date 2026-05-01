@@ -332,6 +332,8 @@ object AimConfig {
 
     @JvmField var launchEfficiency = 0.3
     @JvmField var flywheelOmegaLpfAlpha = 0.8
+    /** Time constant (s) for first-order hood position model fed to solver. 0 = instantaneous. */
+    @JvmField var hoodModelTauSec = 0.15
     /** Goal distance where close-shot shaping fully tapers out (no adjustment at/above this). */
     @JvmField var closeGoalNoAdjustDistanceM = 2.5
     /** Goal distance where full close-shot adjustment is applied. */

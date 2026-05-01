@@ -27,6 +27,7 @@ import sigmacorns.subsystem.TurretServoConfig
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.absoluteValue
+import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -50,6 +51,7 @@ class NativeAutoAim(
 ) : AutoAim {
 
     private var filteredFlywheelOmega: Double? = null
+    private var estimatedHoodAngleRad: Double? = null
     companion object {
         private val VISION_TURRET_TARGET_WINDOW_RAD = Math.toRadians(40.0)
     }
@@ -209,7 +211,7 @@ class NativeAutoAim(
         diagColdAccumSec += dt.toDouble(DurationUnit.SECONDS)
         updateVision()
         setTurretInputs()
-        setShooterInputs(aimTurret)
+        setShooterInputs(aimTurret, dt)
         positionOverride?.let {
             if (robot.turret.fieldRelativeMode) robot.turret.fieldTargetAngle = it
             else robot.turret.targetAngle = it
@@ -269,7 +271,7 @@ class NativeAutoAim(
     var burstStart = 0.seconds
     var burst = false
 
-    private fun setShooterInputs(aimTurret: Boolean) {
+    private fun setShooterInputs(aimTurret: Boolean, dt: Duration) {
         val shooter = robot.shooter
         val turret  = robot.turret
         val fusedPose = autoAim.fusedPose
@@ -299,8 +301,14 @@ class NativeAutoAim(
             if (targetDistance > 2.0) { AimConfig.goalHeight } else { AimConfig.goalHeight } )
         val gX = goal.x.toFloat(); val gY = goal.y.toFloat(); val gZ = goal.z.toFloat()
         val curTheta = (turret.pos + fusedPose.rot).toFloat()
-        val curPhi   = shooter.computedHoodAngle.toFloat()
-        val curOmega = lowPassFlywheelOmega(robot.io.flywheelVelocity()).toFloat()
+        val dtSec = dt.toDouble(DurationUnit.SECONDS)
+        val hoodSetpoint = shooter.computedHoodAngle
+        val prevHoodEst = estimatedHoodAngleRad ?: hoodSetpoint
+        val hoodAlpha = if (AimConfig.hoodModelTauSec <= 0.0) 1.0
+                        else 1.0 - exp(-dtSec / AimConfig.hoodModelTauSec)
+        estimatedHoodAngleRad = prevHoodEst + hoodAlpha * (hoodSetpoint - prevHoodEst)
+        val curPhi   = estimatedHoodAngleRad!!.toFloat()
+        val curOmega = robot.io.flywheelVelocity().toFloat()
         val robotVx = vel.x.toFloat()
         val robotVy = vel.y.toFloat()
 
