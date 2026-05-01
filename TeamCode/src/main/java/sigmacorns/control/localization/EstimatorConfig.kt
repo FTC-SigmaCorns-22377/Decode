@@ -7,8 +7,8 @@ import kotlin.math.PI
 object EstimatorConfig {
     @JvmField var priorSigmaXY = 5.0
     @JvmField var priorSigmaTheta = 5.0
-    @JvmField var odomSigmaXY = 0.0002
-    @JvmField var odomSigmaTheta = 0.0002
+    @JvmField var odomSigmaXY = 0.003
+    @JvmField var odomSigmaTheta = 0.005
     @JvmField var defaultPixelSigma = 2.0
     @JvmField var relinearizeThreshold = 0.01
     @JvmField var relinearizeSkip = 1
@@ -17,7 +17,7 @@ object EstimatorConfig {
     @JvmField var enableRobustTagLoss = true
     @JvmField var robustTagLoss = 0
     @JvmField var robustTagLossK = 1.5
-    @JvmField var enableTagGating = false
+    @JvmField var enableTagGating = true
     /** Minimum tag area as % of image (Limelight ta value, 0-100). Tags below this are discarded. */
     @JvmField var minTagAreaPct = 0.1
     @JvmField var maxTagViewAngleDeg = 60.0
@@ -28,6 +28,7 @@ object EstimatorConfig {
     @JvmField var postProcessVisionGapS = 0.4
     @JvmField var postProcessSettleS = 1.0
     @JvmField var postProcessSettleUpdates = 3
+    @JvmField var postGapExtraIsam2Updates = 2
     @JvmField var fx = 1221.445
     @JvmField var fy = 1223.398
     @JvmField var cx = 637.226
@@ -60,4 +61,12 @@ object EstimatorConfig {
     @JvmField var maxRobotAngularVelForVision = 1.5
     /** Max turret angular velocity (rad/s) before vision updates are suppressed. 0 = disabled. */
     @JvmField var maxTurretAngularVelForVision = 2.0
+
+    @JvmField var headingFlipConsecutiveFrames = 2
+    @JvmField var enableReprojectionGate = true
+    @JvmField var maxReprojectionErrorPx = 50.0
+    @JvmField var enablePoseJumpGuard = true
+    @JvmField var poseJumpMaxM = 0.5
+    @JvmField var poseJumpMaxRad = 0.5
+    @JvmField var multiHypothesisMinTags = 2
 }
